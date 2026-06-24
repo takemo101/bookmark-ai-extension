@@ -1,0 +1,133 @@
+# Publication and OAuth Plan
+
+Date: 2026-06-24
+
+## Goal
+
+Design Bookmark AI Extension so it can move from local MVP development to public Chrome Web Store release without reworking OAuth, permissions, or privacy posture.
+
+## Key Principle
+
+Chrome extension OAuth clients are tied to Chrome extension IDs.
+
+Development unpacked extensions and Chrome Web Store published extensions can have different IDs, so use separate OAuth clients for development and production.
+
+## OAuth Clients
+
+Use two Google OAuth client IDs:
+
+| Environment | Purpose | Extension ID source |
+|---|---|---|
+| Development | Local unpacked testing | Local unpacked extension ID, or a stable dev ID if using a manifest key. |
+| Production | Chrome Web Store release | Chrome Web Store item/extension ID from draft upload. |
+
+The client ID is not a secret. It is embedded in the extension manifest. Do not commit secrets, API keys, refresh tokens, or access tokens.
+
+## Environment Injection
+
+Use environment variables and `manifest.config.ts` to inject the correct client ID.
+
+Example `.env.example`:
+
+```env
+VITE_GOOGLE_OAUTH_CLIENT_ID=replace-me.apps.googleusercontent.com
+```
+
+Local `.env.local` should not be committed.
+
+The build should fail clearly if `VITE_GOOGLE_OAUTH_CLIENT_ID` is missing.
+
+## Development Setup
+
+1. Create/select a Google Cloud project.
+2. Enable Google Drive API.
+3. Configure OAuth consent screen.
+4. Build/load the extension as unpacked in `chrome://extensions`.
+5. Copy the local extension ID.
+6. Create an OAuth client:
+   - Application type: Chrome Extension
+   - Extension ID: local development extension ID
+7. Put the generated client ID in `.env.local`.
+8. Run the extension locally and verify `chrome.identity.getAuthToken` can obtain a token for `drive.file`.
+
+## Production Setup
+
+Before publishing publicly:
+
+1. Build a production zip.
+2. Upload it to Chrome Web Store Developer Dashboard as a draft.
+3. Get the production Chrome extension ID from the draft item.
+4. Create a production OAuth client in Google Cloud Console:
+   - Application type: Chrome Extension
+   - Extension ID: production Chrome Web Store extension ID
+5. Configure production build env with the production OAuth client ID.
+6. Rebuild the production extension with that client ID.
+7. Upload the final production zip.
+8. Verify OAuth works from the published/draft extension.
+
+## Stable Local Extension ID Option
+
+Chrome's OAuth extension docs describe using the extension public key in the manifest `key` field to keep an unpacked extension ID consistent with the Web Store item.
+
+This can be useful later, but MVP can start simpler with separate dev/prod OAuth clients.
+
+If using `key`, document how the public key was obtained and ensure it is safe to commit. Do not confuse the public extension key with secrets.
+
+## OAuth Consent and Verification
+
+The MVP requests:
+
+```txt
+https://www.googleapis.com/auth/drive.file
+```
+
+This is intentionally narrower than full Drive access. It supports the product goal while making consent easier to explain.
+
+Public release may still require OAuth app verification or review, especially if users outside test users authenticate. Prepare:
+
+- App name and support email.
+- Application home page or listing page.
+- Privacy policy URL.
+- Clear explanation of why Drive access is needed.
+- A demo or instructions showing the extension only creates/manages `bookmark-ai/bookmarks.jsonl`.
+
+## Chrome Web Store Review Notes
+
+Keep the extension's permissions aligned with the actual MVP:
+
+- `identity`: Google OAuth.
+- `storage`: local cache.
+- `activeTab`: user-initiated current tab access.
+- `scripting`: inject extractor only after Save click.
+- `https://www.googleapis.com/*`: Drive API calls.
+
+Avoid broad host permissions in MVP.
+
+## Privacy Posture for Publication
+
+Publication copy should emphasize:
+
+- Bookmark data is stored in the user's own Google Drive.
+- The extension has no custom backend database.
+- The extension uses only `drive.file` for app-created Drive files.
+- Page text excerpts are used transiently for AI analysis and are not stored in JSONL.
+- AI output is generated locally by Chrome Built-in AI / Prompt API when available.
+- No external AI API key fallback is included in MVP.
+
+See [`privacy-policy.md`](privacy-policy.md) for the draft policy text.
+
+## Release Checklist
+
+Before public release:
+
+- [ ] Production Chrome Web Store item exists as draft.
+- [ ] Production extension ID recorded in release notes.
+- [ ] Production OAuth client created for that extension ID.
+- [ ] Production env points to production OAuth client ID.
+- [ ] Privacy policy published at a stable URL.
+- [ ] OAuth consent screen configured with the same privacy policy URL.
+- [ ] Drive API enabled in production Google Cloud project.
+- [ ] Extension listing explains Drive storage and page analysis clearly.
+- [ ] Manual test: sign in, create `bookmark-ai/`, save page, verify `bookmarks.jsonl` in Drive.
+- [ ] Manual test: second PC/profile reads the same Drive file.
+- [ ] Manual test: Prompt API unavailable still saves bookmark with AI unavailable status.

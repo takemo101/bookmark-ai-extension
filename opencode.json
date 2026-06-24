@@ -1,0 +1,22 @@
+{
+  "mcp": {
+    "asem": {
+      "type": "local",
+      "command": [
+        "asem",
+        "mcp"
+      ],
+      "enabled": true,
+      "environment": {}
+    },
+    "mikan": {
+      "type": "local",
+      "command": [
+        "mikan",
+        "mcp"
+      ],
+      "enabled": true,
+      "environment": {}
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# asem runtime state (token-bearing files; never commit)
+.asem/sessions/
+.asem/current-session*.json
+.asem/tokens/
