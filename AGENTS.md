@@ -120,11 +120,12 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 Use durable docs as the source of truth. Before changing behavior, architecture, storage, OAuth scopes, permissions, AI behavior, publication/privacy semantics, or user-visible terminology, read the relevant docs first:
 
 1. `docs/design.md` — canonical MVP design and architecture.
-2. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
-3. `docs/privacy-policy.md` — privacy constraints and policy draft.
-4. `docs/handoff.md` — historical handoff only.
+2. `docs/implementation-principles.md` — implementation principles adapted from okite-ai skills.
+3. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
+4. `docs/privacy-policy.md` — privacy constraints and policy draft.
+5. `docs/handoff.md` — historical handoff only.
 
-If `docs/handoff.md` conflicts with newer durable docs, trust `docs/design.md`, `docs/publication.md`, and `docs/privacy-policy.md`.
+If `docs/handoff.md` conflicts with newer durable docs, trust `docs/design.md`, `docs/implementation-principles.md`, `docs/publication.md`, and `docs/privacy-policy.md`.
 
 ## MVP scope guard
 
@@ -157,6 +158,8 @@ Do not mix Drive API details, Prompt API prompting, JSONL merge logic, and React
 
 ## Testability rules
 
+Follow `docs/implementation-principles.md` for model-first implementation, parsing at boundaries, typed errors, first-class bookmark collections, and intent-based deduplication.
+
 Default tests should not require real Chrome, Google Drive, or Prompt API access. Use fake/injected dependencies for:
 
 - Drive client;
@@ -187,7 +190,7 @@ Use asem Sessions for non-trivial implementation work in this project. The paren
 
 ### Default loop
 
-1. Parent Session reads the relevant durable docs (`docs/design.md`, `docs/publication.md`, `docs/privacy-policy.md`) and prepares a bounded prompt with acceptance criteria.
+1. Parent Session reads the relevant durable docs (`docs/design.md`, `docs/implementation-principles.md`, `docs/publication.md`, `docs/privacy-policy.md`) and prepares a bounded prompt with acceptance criteria.
 2. Launch a claude-code implementation child with the `worker` profile:
 
    ```sh

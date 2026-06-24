@@ -262,7 +262,17 @@ Duplicate saves use URL-based upsert.
 
 ## UI Design
 
-### Popup
+### Selected direction
+
+Design deck selections from 2026-06-24:
+
+- Popup: **Bookmark Receipt**.
+- Options page: **Research Ledger**.
+- Visual identity: **Warm Library**.
+
+The product should feel like a warm personal knowledge shelf rather than a generic AI dashboard. Prefer paper, ledger, and library cues: warm off-white backgrounds, muted ink colors, gentle borders, readable hierarchy, and restrained accent colors. Avoid overusing neon gradients or generic AI-purple branding.
+
+### Popup: Bookmark Receipt
 
 Popup responsibilities:
 
@@ -273,7 +283,19 @@ Popup responsibilities:
 - Show recent saved bookmarks.
 - Link to options page.
 
-### Options page
+The popup should behave like a save receipt:
+
+1. Show the current tab title and URL.
+2. Provide one primary **Save & Analyze** action.
+3. After click, show a compact progress trail:
+   - pending record saved;
+   - page excerpt extracted;
+   - AI analyzing;
+   - Drive synced / AI ready.
+4. Show a short preview of the generated Japanese description, genre, and tags when ready.
+5. If Prompt API is unavailable or fails, keep the saved bookmark visible with `unavailable` or `failed` status and a path to re-analyze later.
+
+### Options page: Research Ledger
 
 Options page responsibilities:
 
@@ -283,6 +305,12 @@ Options page responsibilities:
 - Delete bookmarks.
 - Re-analyze bookmarks with `pending`, `unavailable`, or `failed` status.
 - Show Drive sync status and errors.
+
+Use a ledger layout:
+
+- Left rail: search, genre filters, tag filters, sync state.
+- Center list: dense bookmark rows with title, short AI summary, status, and updated time.
+- Right detail pane: selected bookmark description, genre, tags, URL, timestamps, open/delete/re-analyze actions.
 
 MVP search is normal local-cache text search plus filters. Semantic search is out of scope.
 
