@@ -181,6 +181,19 @@ Unit test JSONL parsing, schema validation, URL canonicalization, upsert behavio
 - Keep Google Drive as the source of truth and `chrome.storage.local` as cache only.
 - Redact tokens and sensitive values from logs, errors, reports, and test fixtures.
 
+## GitButler / but workflow
+
+Use the `but` GitButler workflow for version-control mutations in this repository.
+
+- Use `but status -fv` before version-control mutations when branch, stack, commit, conflict, or history context matters.
+- Use `but diff` first when selecting dirty files or hunks for a commit.
+- Use `but` instead of git write commands.
+- Do not run `git add`, `git commit`, `git push`, `git checkout`, `git merge`, `git rebase`, or `git stash` for write operations.
+- Use IDs reported by `but status -fv`, `but diff`, or `but show`; do not hardcode IDs.
+- Add `--status-after` to `but` mutation commands when available.
+- Read-only git inspection is acceptable when needed.
+- If `but` cannot perform a requested GitHub push/PR step because repository target metadata is not configured, explain the limitation before using a narrowly scoped fallback.
+
 ## ASEM delegated development workflow
 
 Use asem Sessions for non-trivial implementation work in this project. The parent Session keeps final judgment; child Sessions implement or review and report back. In this repository, the local `.asem.yaml` maps claude-code to the `claude` Agent Template, so use `--agent claude` for claude-code children.
