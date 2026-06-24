@@ -58,6 +58,11 @@ function byOldestCreated(a: BookmarkRecord, b: BookmarkRecord): number {
 	return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** Deterministic, locale-independent ordering for facet values. */
+function compareString(a: string, b: string): number {
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function matchesQuery(record: BookmarkRecord, needle: string): boolean {
 	const haystacks = [
 		record.title,
@@ -178,7 +183,10 @@ export class Bookmarks {
 	): Result<Bookmarks, CollectionError> {
 		const existing = this.byUrl.get(canonicalUrl);
 		if (!existing) {
-			return err({ field: "canonicalUrl", message: "no record for canonical URL" });
+			return err({
+				field: "canonicalUrl",
+				message: "no record for canonical URL",
+			});
 		}
 		const updatedAt = maxIsoTimestamp(existing.updatedAt, now);
 		const updated = createBookmarkRecord(
@@ -215,7 +223,10 @@ export class Bookmarks {
 	): Result<Bookmarks, CollectionError> {
 		const existing = this.byUrl.get(canonicalUrl);
 		if (!existing) {
-			return err({ field: "canonicalUrl", message: "no record for canonical URL" });
+			return err({
+				field: "canonicalUrl",
+				message: "no record for canonical URL",
+			});
 		}
 		return ok(
 			this.with({
@@ -323,6 +334,34 @@ export class Bookmarks {
 			}
 			return true;
 		});
+	}
+
+	/**
+	 * The distinct genres present, sorted, for building filter facets. Returning
+	 * this from the collection keeps facet derivation a list operation here rather
+	 * than a reducer duplicated in the options UI (First-class collection).
+	 */
+	genres(): Genre[] {
+		const seen = new Map<string, Genre>();
+		for (const record of this.byUrl.values()) {
+			if (record.genre !== undefined && !seen.has(record.genre)) {
+				seen.set(record.genre, record.genre);
+			}
+		}
+		return [...seen.values()].sort(compareString);
+	}
+
+	/** The distinct tags present, sorted, for building filter facets. */
+	tags(): Tag[] {
+		const seen = new Map<string, Tag>();
+		for (const record of this.byUrl.values()) {
+			for (const t of record.tags) {
+				if (!seen.has(t)) {
+					seen.set(t, t);
+				}
+			}
+		}
+		return [...seen.values()].sort(compareString);
 	}
 
 	filterByGenre(genre: Genre | string): BookmarkRecord[] {

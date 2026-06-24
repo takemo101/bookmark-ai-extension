@@ -195,9 +195,7 @@ describe("Bookmarks.delete", () => {
 
 	it("is a no-op for unknown keys", () => {
 		const set = Bookmarks.from([record()]);
-		expect(set.delete(canon("https://example.com/z")).size).toBe(
-			1,
-		);
+		expect(set.delete(canon("https://example.com/z")).size).toBe(1);
 	});
 });
 
@@ -222,7 +220,9 @@ describe("Bookmarks.mergeRemote", () => {
 
 	it("takes the later updatedAt fields and preserves the earliest createdAt", () => {
 		const { local, remote } = pair();
-		const merged = Bookmarks.from([local]).mergeRemote(Bookmarks.from([remote]));
+		const merged = Bookmarks.from([local]).mergeRemote(
+			Bookmarks.from([remote]),
+		);
 		const saved = merged.get(canonA);
 		expect(saved?.title).toBe("remote title");
 		expect(saved?.createdAt).toBe("2026-06-24T00:00:00.000Z");
@@ -282,11 +282,15 @@ describe("Bookmarks.toArray ordering", () => {
 			updatedAt: "2026-06-26T00:00:00.000Z",
 		});
 		expect(
-			Bookmarks.from([older, newer]).toArray().map((r) => r.id),
+			Bookmarks.from([older, newer])
+				.toArray()
+				.map((r) => r.id),
 		).toEqual(["newer", "older"]);
 		// Building in the opposite order yields the same result.
 		expect(
-			Bookmarks.from([newer, older]).toArray().map((r) => r.id),
+			Bookmarks.from([newer, older])
+				.toArray()
+				.map((r) => r.id),
 		).toEqual(["newer", "older"]);
 	});
 });
@@ -341,6 +345,14 @@ describe("Bookmarks search and filter", () => {
 		expect(collection.search("   ")).toHaveLength(2);
 	});
 
+	it("lists distinct sorted genres as filter facets", () => {
+		expect(collection.genres()).toEqual(["ニュース", "開発ツール"]);
+	});
+
+	it("lists distinct sorted tags as filter facets", () => {
+		expect(collection.tags()).toEqual(["TypeScript", "拡張機能", "時事"]);
+	});
+
 	it("filters by genre, tag, and AI status", () => {
 		expect(collection.filterByGenre("開発ツール").map((r) => r.id)).toEqual([
 			"bm-1",
@@ -362,4 +374,3 @@ describe("Bookmarks search and filter", () => {
 		).toHaveLength(0);
 	});
 });
-
