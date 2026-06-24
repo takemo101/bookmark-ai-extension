@@ -1,11 +1,39 @@
 /**
  * `storage/*` boundary.
  *
- * Owns the `chrome.storage.local` cache: last bookmark snapshot, Drive
- * folder/file IDs, last known Drive revision metadata, and sync status. Cache
- * only — Google Drive remains the source of truth.
+ * Owns the `chrome.storage.local` cache: the last bookmark snapshot, Drive
+ * folder/file ids and revision metadata, and the last sync status/errors. It is
+ * a cache only — Google Drive remains the source of truth (docs/design.md "Local
+ * Cache"). External persisted data is parsed into always-valid types before any
+ * internal use, and raw page excerpts are never stored.
  *
- * Scaffold placeholder; real cache lands in later issues (see
- * docs/design.md and docs/implementation-principles.md).
+ * Surface:
+ *   - {@link LocalCache} + {@link createChromeLocalCache} — the cache port and
+ *     its `chrome.storage.local` adapter.
+ *   - {@link parseCachedState} / {@link serializeCacheState} — the pure boundary
+ *     parser and serializer (no Chrome needed).
+ *   - {@link CacheState} and friends — the trusted in-memory view and its typed
+ *     sync status/errors.
  */
-export {}
+export type { Result, Ok, Err } from "./result";
+export { ok, err } from "./result";
+
+export type {
+	SyncStatus,
+	SyncError,
+	SyncState,
+	CacheState,
+	CachedStateV1,
+	CachedDriveLocationV1,
+	CachedSyncStateV1,
+	CacheProblem,
+	CacheProblemKind,
+	CacheParseResult,
+} from "./types";
+export { CACHE_KEY, CACHE_SCHEMA_VERSION } from "./types";
+
+export { parseCachedState, emptyCacheState } from "./parse";
+export { serializeCacheState } from "./serialize";
+
+export type { LocalCache, LocalCacheStorageArea } from "./local-cache";
+export { createChromeLocalCache } from "./local-cache";
