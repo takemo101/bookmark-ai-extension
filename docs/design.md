@@ -388,8 +388,22 @@ Options page responsibilities:
 - Text search over title, URL, description, genre, and tags.
 - Filter by genre and tags.
 - Delete bookmarks.
-- Re-analyze bookmarks with `pending`, `unavailable`, or `failed` status.
+- Re-analyze bookmarks with `pending`, `unavailable`, or `failed` status, subject
+  to the activeTab constraint below.
 - Show Drive sync status and errors.
+
+Re-analyze is bound by the same `activeTab` + `scripting` posture as the save
+flow: re-extraction only works when the target page **is the active tab in the
+current window**. The extension never reaches for an arbitrary tab (no `tabs`
+permission, no host permissions). When a re-analyze is requested from an
+unrelated active tab, the app surfaces a safe action error
+(`Open the page in the active tab to re-analyze it from here.`) and leaves the
+existing bookmark record unchanged — it is **not** flipped to `pending` or
+`failed`, and no Drive write is made. A genuine extraction/AI failure *after* a
+valid active-tab target still marks the bookmark `failed` so it can be retried.
+This matches the manual posture documented in
+[`smoke-checklist.md`](smoke-checklist.md) (section 5 and its re-analysis note);
+re-analyze from the page's own tab, or save it again.
 
 Use a ledger layout:
 

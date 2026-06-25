@@ -578,6 +578,63 @@ describe("createBookmarkApp", () => {
 			if (result.ok) return;
 			expect(result.error.kind).toBe("not-found");
 		});
+
+		it("returns a safe error and leaves the bookmark unchanged when the page is not the active tab (MIK-015)", async () => {
+			const { app, repo, extractor, cache } = makeHarness();
+			// Save lands `ready` while the page is the active tab and extractable.
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+			const before = cache.state.bookmarks.get(canonicalUrl);
+			const savesBefore = repo.saveCalls;
+
+			// The page is no longer the active tab: the runtime extractor reports the
+			// typed `tab` precondition error rather than reaching for another tab.
+			extractor.setResult(
+				extractionErr({
+					field: "tab",
+					message:
+						"Open the page in the active tab to re-analyze it from here.",
+				}),
+			);
+
+			const result = await app.reAnalyzeBookmark(canonicalUrl);
+
+			expect(result.ok).toBe(false);
+			if (result.ok) return;
+			// A safe action error surfaces the precondition; nothing is mutated.
+			expect(result.error.kind).toBe("extraction");
+			expect(result.error.detail).toBe("tab");
+			expect(result.error.message).toContain("active tab");
+			// The cached record is unchanged and no Drive write was attempted for the
+			// (non-)mutation: the bookmark keeps its prior `ready` status.
+			expect(cache.state.bookmarks.get(canonicalUrl)).toBe(before);
+			expect(cache.state.bookmarks.get(canonicalUrl)?.aiStatus).toBe("ready");
+			expect(repo.saveCalls).toBe(savesBefore);
+		});
+
+		it("still marks the bookmark failed when extraction fails for a real reason after a valid target (MIK-015)", async () => {
+			const { app, extractor, cache } = makeHarness();
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+
+			// The page *is* the active tab (no `tab` error), but its content could not
+			// be read. This is a recoverable failure, not the activeTab precondition.
+			extractor.setResult(
+				extractionErr({ field: "page", message: "no document" }),
+			);
+
+			const result = await app.reAnalyzeBookmark(canonicalUrl);
+
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.value.aiStatus).toBe("failed");
+			expect(result.value.record.aiError).toContain("extraction failed");
+			expect(cache.state.bookmarks.get(canonicalUrl)?.aiStatus).toBe("failed");
+		});
 	});
 
 	describe("loadCachedState", () => {

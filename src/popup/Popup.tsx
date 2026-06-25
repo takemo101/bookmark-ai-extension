@@ -26,6 +26,7 @@ import type {
 	PromptApiStatus,
 } from "./use-cases";
 import type { AiStatus } from "./view-types";
+import { openOptionsPage } from "./open-options";
 import {
 	card,
 	palette,
@@ -375,11 +376,10 @@ function Footer() {
 			<button
 				type="button"
 				style={subtleButton}
-				onClick={() => {
-					// `chrome.runtime` is absent outside the extension (and in tests);
-					// guard so the popup never throws when opened standalone.
-					chrome?.runtime?.openOptionsPage?.();
-				}}
+				// `globalThis.chrome` is absent outside the extension (and in tests);
+				// `openOptionsPage` reads it safely so the popup never throws when
+				// opened standalone (a bare `chrome` reference would `ReferenceError`).
+				onClick={() => openOptionsPage()}
 			>
 				Manage in Options
 			</button>
