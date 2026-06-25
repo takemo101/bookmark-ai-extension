@@ -24,9 +24,42 @@ bun run dev            # start Vite dev build (uses a dev placeholder OAuth clie
 bun run typecheck      # tsc --noEmit
 bun run test           # run the Vitest suite once
 bun run test:watch     # run Vitest in watch mode
-bun run check          # typecheck + test (the gate later automation wraps)
+bun run check          # typecheck + test (the gate automation wraps)
+bun run validate       # check + production build (the full local baseline)
 bun run build          # production extension build into dist/
 ```
+
+### Task automation (just) and git hooks (lefthook)
+
+A root [`justfile`](justfile) wraps the package scripts so humans and AI workers
+share one command surface, and [`lefthook.yml`](lefthook.yml) runs the same
+baseline as a pre-commit hook. Both call the package scripts above — they do not
+duplicate their internals.
+
+```sh
+just                   # list all recipes (alias for `just --list`)
+just install           # bun install
+just hooks-install     # install the lefthook git hooks for this checkout
+just hooks-run         # run the pre-commit baseline without committing
+just typecheck         # bun run typecheck
+just test              # bun run test
+just check             # typecheck + test
+just fix               # apply safe formatter/lint fixes (no-op until such tooling exists)
+just build             # bun run build (needs VITE_GOOGLE_OAUTH_CLIENT_ID)
+just validate          # typecheck + test + build — the default final check
+```
+
+`just validate` is the documented local validation baseline and the default
+final check for AI-worker implementation Issues. For its compile-only build it
+supplies a non-functional dummy `VITE_GOOGLE_OAUTH_CLIENT_ID` unless one is
+already set in the environment, so it runs without real OAuth values. To
+validate against your real dev client ID, export `VITE_GOOGLE_OAUTH_CLIENT_ID`
+(or keep it in `.env.local`) and run `bun run validate`.
+
+The lefthook pre-commit hook runs `typecheck` then `test` sequentially
+(`parallel: false`) to avoid duplicated concurrent `tsc`/Vitest runs. It does
+not run the build, which needs an OAuth client ID; use `just validate` for that.
+After cloning, run `just install && just hooks-install` once to enable the hook.
 
 ### OAuth client ID
 
