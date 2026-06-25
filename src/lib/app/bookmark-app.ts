@@ -41,12 +41,18 @@ import {
 	canonicalizeUrl,
 } from "../bookmarks/index";
 import type { DriveLocation } from "../drive/index";
-import { buildExcerpt } from "../extraction/index";
+import {
+	type ExtractedPage,
+	type ExtractionError,
+	type Result as ExtractionResult,
+	buildExcerpt,
+} from "../extraction/index";
 import type { CacheState } from "../storage/index";
 import {
 	type AppError,
 	appError,
 	fromCollectionError,
+	fromExtractionError,
 	fromRepositoryError,
 	toSyncError,
 } from "./errors";
@@ -153,29 +159,18 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
-	 * The shared tail of save and re-analyze: extract the page, build an excerpt,
-	 * ask the analyzer, and apply the resulting status to the record through the
-	 * domain. Extraction failure keeps the bookmark and marks it `failed` (so it
-	 * can be re-analyzed), it is not a hard error.
+	 * The analysis tail once a page has been extracted: build the excerpt, ask the
+	 * analyzer, and apply the resulting status to the record through the domain.
 	 */
-	async function applyAnalysis(
+	async function analyzeExtractedPage(
 		bookmarks: Bookmarks,
 		canonicalUrl: CanonicalUrl,
 		target: ExtractionTarget,
+		page: ExtractedPage,
 		now: ReturnType<AppDeps["clock"]["now"]>,
 		onProgress?: SaveProgress,
 	): Promise<Result<Bookmarks, CollectionError>> {
-		onProgress?.("extracting");
-		const extraction = await deps.extractor.extract(target);
-		if (!extraction.ok) {
-			return bookmarks.markAiFailed(
-				canonicalUrl,
-				`extraction failed: ${extraction.error.message}`,
-				now,
-			);
-		}
-
-		const excerpt = buildExcerpt(extraction.value);
+		const excerpt = buildExcerpt(page);
 		onProgress?.("analyzing");
 		const outcome = await deps.analyzer.analyze({
 			title: target.title,
@@ -197,20 +192,36 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		return bookmarks.markAiFailed(canonicalUrl, outcome.error.message, now);
 	}
 
-	async function analyzeAndApply(
+	/**
+	 * The shared tail of save and re-analyze once extraction has run: apply the
+	 * extracted page's analysis, then sync to Drive. A failed extraction *after a
+	 * valid target* keeps the bookmark and marks it `failed` so it can be retried;
+	 * it is recoverable, not a hard error. (Re-analyze handles the separate
+	 * activeTab precondition — a `tab` extraction error — before reaching here, so
+	 * that case never mutates the record.)
+	 */
+	async function finishAnalysis(
 		base: CacheState,
 		canonicalUrl: CanonicalUrl,
 		target: ExtractionTarget,
+		extraction: ExtractionResult<ExtractedPage, ExtractionError>,
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>> {
 		const now = deps.clock.now();
-		const updated = await applyAnalysis(
-			base.bookmarks,
-			canonicalUrl,
-			target,
-			now,
-			onProgress,
-		);
+		const updated = extraction.ok
+			? await analyzeExtractedPage(
+					base.bookmarks,
+					canonicalUrl,
+					target,
+					extraction.value,
+					now,
+					onProgress,
+				)
+			: base.bookmarks.markAiFailed(
+					canonicalUrl,
+					`extraction failed: ${extraction.error.message}`,
+					now,
+				);
 		if (!updated.ok) {
 			return err(fromCollectionError(updated.error));
 		}
@@ -349,11 +360,20 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				prevLocation: cached.location,
 			});
 
-			// 3. Extract → analyze → apply the resulting AI status.
-			return analyzeAndApply(
+			// 3. Extract → analyze → apply the resulting AI status. The active tab's
+			//    `tabId` targets injection at exactly the user-chosen tab, so the
+			//    save path never hits the re-analyze activeTab precondition.
+			onProgress?.("extracting");
+			const extraction = await deps.extractor.extract({
+				url: tab.url,
+				title: tab.title,
+				tabId: tab.id,
+			});
+			return finishAnalysis(
 				pendingPush.state,
 				canonicalUrl,
-				{ url: tab.url, title: tab.title, tabId: tab.id },
+				{ url: tab.url, title: tab.title },
+				extraction,
 				onProgress,
 			);
 		},
@@ -382,13 +402,31 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				return err(appError("not-found", "no cached bookmark for that URL"));
 			}
 
+			onProgress?.("saving");
+			// Re-analyze can only re-extract a page through `activeTab` + `scripting`,
+			// i.e. when the page is the active tab in the current window. Probe the
+			// extraction *before* any mutation: when the page is not the active tab the
+			// runtime extractor returns a typed `tab` error (it never reaches for an
+			// arbitrary tab), which we surface as a safe action error and leave the
+			// existing bookmark untouched — no `pending` flip, no Drive write
+			// (docs/design.md "Options page: Research Ledger"; docs/smoke-checklist.md).
+			// A real extraction failure after a valid target is *not* caught here: it
+			// falls through and is recorded as a recoverable `failed` status below.
+			onProgress?.("extracting");
+			const extraction = await deps.extractor.extract({
+				url: record.url,
+				title: record.title,
+			});
+			if (!extraction.ok && extraction.error.field === "tab") {
+				return err(fromExtractionError(extraction.error));
+			}
+
 			const now = deps.clock.now();
 			// Move the record back to pending through the domain before re-running AI.
 			const pending = cached.bookmarks.markAiPending(canonicalUrl, now);
 			if (!pending.ok) {
 				return err(fromCollectionError(pending.error));
 			}
-			onProgress?.("saving");
 			await deps.cache.save({
 				bookmarks: pending.value,
 				location: cached.location,
@@ -405,10 +443,11 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				prevLocation: cached.location,
 			});
 
-			return analyzeAndApply(
+			return finishAnalysis(
 				pendingPush.state,
 				canonicalUrl,
 				{ url: record.url, title: record.title },
+				extraction,
 				onProgress,
 			);
 		},

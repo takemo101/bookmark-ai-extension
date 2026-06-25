@@ -415,6 +415,34 @@ describe("createOptionsController", () => {
 			expect(controller.getView().actionNotice).toContain("network down");
 		});
 
+		it("leaves the row unchanged and surfaces a safe error on the activeTab precondition (MIK-015)", async () => {
+			const fake = new FakeUseCases();
+			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "unavailable" });
+			fake.cache = cacheOf([rec]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const url = controller.getView().rows[0].canonicalUrl;
+			// The page is not the active tab: the app returns a safe error and never
+			// mutates the cache, so reloading it must not change the row's status.
+			fake.reAnalyzeResult = {
+				ok: false,
+				error: {
+					kind: "extraction",
+					message: "Open the page in the active tab to re-analyze it from here.",
+					detail: "tab",
+				},
+			};
+			await controller.reAnalyze(url);
+
+			const view = controller.getView();
+			expect(view.actionError).toBe(
+				"Open the page in the active tab to re-analyze it from here.",
+			);
+			expect(view.rows[0].aiStatus).toBe("unavailable");
+			expect(view.rows[0].canReAnalyze).toBe(true);
+		});
+
 		it("surfaces a safe action error when re-analyze fails", async () => {
 			const fake = new FakeUseCases();
 			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "failed" });
