@@ -44,6 +44,7 @@ import type {
 	AppDeps,
 	ExtractionTarget,
 	LogLevel,
+	SaveProgress,
 } from "./ports";
 import { type Result, err, ok } from "./result";
 
@@ -64,13 +65,22 @@ export interface BookmarkApp {
 	loadCachedState(): Promise<CacheState>;
 	/** Pull the authoritative store from Drive and refresh the cache. */
 	syncFromDrive(): Promise<Result<CacheState, AppError>>;
-	/** Save the current active tab, then extract → analyze → apply AI status. */
-	saveCurrentTab(): Promise<Result<SaveOutcome, AppError>>;
+	/**
+	 * Save the current active tab, then extract → analyze → apply AI status.
+	 * `onProgress`, when supplied, fires as each stage genuinely begins.
+	 */
+	saveCurrentTab(
+		onProgress?: SaveProgress,
+	): Promise<Result<SaveOutcome, AppError>>;
 	/** Delete a bookmark by canonical URL using the domain delete operation. */
 	deleteBookmark(canonicalUrl: CanonicalUrl): Promise<Result<CacheState, AppError>>;
-	/** Re-run AI analysis for an existing bookmark by canonical URL. */
+	/**
+	 * Re-run AI analysis for an existing bookmark by canonical URL. `onProgress`,
+	 * when supplied, fires as each stage genuinely begins.
+	 */
 	reAnalyzeBookmark(
 		canonicalUrl: CanonicalUrl,
+		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>>;
 }
 
@@ -141,7 +151,9 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		canonicalUrl: CanonicalUrl,
 		target: ExtractionTarget,
 		now: ReturnType<AppDeps["clock"]["now"]>,
+		onProgress?: SaveProgress,
 	): Promise<Result<Bookmarks, CollectionError>> {
+		onProgress?.("extracting");
 		const extraction = await deps.extractor.extract(target);
 		if (!extraction.ok) {
 			return bookmarks.markAiFailed(
@@ -152,6 +164,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		}
 
 		const excerpt = buildExcerpt(extraction.value);
+		onProgress?.("analyzing");
 		const outcome = await deps.analyzer.analyze({
 			title: target.title,
 			url: target.url,
@@ -176,13 +189,21 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		base: CacheState,
 		canonicalUrl: CanonicalUrl,
 		target: ExtractionTarget,
+		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>> {
 		const now = deps.clock.now();
-		const updated = await applyAnalysis(base.bookmarks, canonicalUrl, target, now);
+		const updated = await applyAnalysis(
+			base.bookmarks,
+			canonicalUrl,
+			target,
+			now,
+			onProgress,
+		);
 		if (!updated.ok) {
 			return err(fromCollectionError(updated.error));
 		}
 
+		onProgress?.("syncing");
 		const push = await pushToDrive(updated.value, {
 			trustMerge: true,
 			prevLocation: base.location,
@@ -230,7 +251,9 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			return ok(state);
 		},
 
-		async saveCurrentTab(): Promise<Result<SaveOutcome, AppError>> {
+		async saveCurrentTab(
+			onProgress?: SaveProgress,
+		): Promise<Result<SaveOutcome, AppError>> {
 			const tabResult = await deps.tabs.activeTab();
 			if (!tabResult.ok) {
 				return tabResult;
@@ -263,6 +286,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 
 			// 2. Persist/cache the pending record before slow extraction/analysis so a
 			//    closed popup still leaves a durable pending bookmark.
+			onProgress?.("saving");
 			await deps.cache.save({
 				bookmarks: pending.value,
 				location: cached.location,
@@ -274,11 +298,12 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			});
 
 			// 3. Extract → analyze → apply the resulting AI status.
-			return analyzeAndApply(pendingPush.state, canonicalUrl, {
-				url: tab.url,
-				title: tab.title,
-				tabId: tab.id,
-			});
+			return analyzeAndApply(
+				pendingPush.state,
+				canonicalUrl,
+				{ url: tab.url, title: tab.title, tabId: tab.id },
+				onProgress,
+			);
 		},
 
 		async deleteBookmark(
@@ -296,6 +321,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 
 		async reAnalyzeBookmark(
 			canonicalUrl: CanonicalUrl,
+			onProgress?: SaveProgress,
 		): Promise<Result<SaveOutcome, AppError>> {
 			const cached = await deps.cache.load();
 			const record = cached.bookmarks.get(canonicalUrl);
@@ -309,6 +335,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			if (!pending.ok) {
 				return err(fromCollectionError(pending.error));
 			}
+			onProgress?.("saving");
 			await deps.cache.save({
 				bookmarks: pending.value,
 				location: cached.location,
@@ -319,10 +346,12 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				prevLocation: cached.location,
 			});
 
-			return analyzeAndApply(pendingPush.state, canonicalUrl, {
-				url: record.url,
-				title: record.title,
-			});
+			return analyzeAndApply(
+				pendingPush.state,
+				canonicalUrl,
+				{ url: record.url, title: record.title },
+				onProgress,
+			);
 		},
 	};
 }

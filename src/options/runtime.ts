@@ -3,28 +3,32 @@
  * extension runtime.
  *
  * This is the one place adapters are wired, so the React component and controller
- * stay free of Chrome/Drive/AI imports. What can be wired now is wired now:
+ * stay free of Chrome/Drive/AI imports. Every port is now backed by a real
+ * adapter:
+ *   - the Drive repository (chrome.identity → Drive REST client → conflict-safe
+ *     {@link DriveBookmarkRepository}), assembled by `runtime/*` — the ledger's
+ *     authoritative source on `Sync now`;
  *   - the local cache (`chrome.storage.local`) — the ledger's render source;
  *   - the AI analyzer (Chrome Built-in AI / Prompt API) for re-analyze;
+ *   - the page extractor (`chrome.scripting`) for re-analyze;
  *   - the system clock and crypto id generator.
  *
- * ## MIK-009 seam (intentional, localized)
- *
- * Two ports require OAuth/Drive bootstrap and `chrome.scripting` page injection
- * that this issue does not own — {@link BookmarkRepositoryPort} and
- * {@link PageExtractorPort}. They are supplied here as clearly-named placeholders
- * that return typed, UI-safe errors. The use-case layer already degrades
- * correctly around them: the cached list still renders, sync surfaces an honest
- * error badge, and re-analyze marks the record `failed` with a safe message.
- * When MIK-009 lands the Drive repository and the scripting extractor, only these
- * factories change; nothing in the controller or the React layer moves.
- *
  * The options page never saves the current tab, so the required {@link
- * TabProviderPort} is a typed placeholder too.
+ * TabProviderPort} is a typed placeholder: it cannot resolve an active tab from a
+ * full-page context and `saveCurrentTab` is never invoked here.
+ *
+ * Re-analyze note: re-analysis re-extracts from the live page through the same
+ * `chrome.scripting` adapter. Because the options page is itself the active tab,
+ * extraction succeeds only when the target page happens to be the active tab in
+ * the current window; otherwise the record is marked `failed` with a safe message
+ * and can be re-analyzed from the page's own tab. See the runtime extractor for
+ * the activeTab-only posture.
+ *
+ * Tests never reach this module: the options controller is exercised with a fake
+ * {@link OptionsUseCases}, and the runtime adapters are tested directly with fake
+ * chrome/fetch dependencies in `runtime/*` and `storage/*`.
  */
 import {
-	type BookmarkRepositoryPort,
-	type PageExtractorPort,
 	type TabProviderPort,
 	appError,
 	createAnalyzerPort,
@@ -35,43 +39,11 @@ import {
 } from "../lib/app/index";
 import { createChromePromptClient } from "../lib/ai/index";
 import {
-	type RepositoryError,
-	type RepositorySnapshot,
-	type Result as DriveResult,
-	err as driveErr,
-} from "../lib/drive/index";
-import {
-	type ExtractedPage,
-	type ExtractionError,
-	type Result as ExtractionResult,
-	err as extractionErr,
-} from "../lib/extraction/index";
+	createChromeDriveRuntime,
+	createChromeScriptingExtractor,
+} from "../lib/runtime/index";
 import { createChromeLocalCache } from "../lib/storage/index";
 import { type OptionsUseCases, createOptionsUseCases } from "./use-cases";
-
-const PENDING_WIRING =
-	"Drive sync and page analysis finish wiring in a later update.";
-
-/** Placeholder Drive repository: typed `drive` errors until MIK-009 wires it. */
-function createPendingRepository(): BookmarkRepositoryPort {
-	const error: RepositoryError = { kind: "unknown", message: PENDING_WIRING };
-	const fail = async (): Promise<DriveResult<never, RepositoryError>> =>
-		driveErr(error);
-	return {
-		bootstrap: fail,
-		load: fail,
-		save: fail as () => Promise<DriveResult<RepositorySnapshot, RepositoryError>>,
-	};
-}
-
-/** Placeholder page extractor: typed `extraction` errors until MIK-009 wires it. */
-function createPendingExtractor(): PageExtractorPort {
-	return {
-		async extract(): Promise<ExtractionResult<ExtractedPage, ExtractionError>> {
-			return extractionErr({ field: "page", message: PENDING_WIRING });
-		},
-	};
-}
 
 /** The options page does not save the current tab; a typed placeholder suffices. */
 function createUnusedTabProvider(): TabProviderPort {
@@ -86,10 +58,11 @@ function createUnusedTabProvider(): TabProviderPort {
 
 /** Build the real {@link OptionsUseCases} for the extension options page. */
 export function createRuntimeUseCases(): OptionsUseCases {
+	const drive = createChromeDriveRuntime();
 	const app = createBookmarkApp({
-		repository: createPendingRepository(),
+		repository: drive.repository,
 		analyzer: createAnalyzerPort(createChromePromptClient()),
-		extractor: createPendingExtractor(),
+		extractor: createChromeScriptingExtractor(),
 		tabs: createUnusedTabProvider(),
 		cache: createChromeLocalCache(),
 		clock: createSystemClock(),

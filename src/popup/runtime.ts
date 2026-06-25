@@ -3,29 +3,25 @@
  * extension runtime.
  *
  * This is the one place adapters are wired, so the React component and controller
- * stay free of Chrome/Drive/AI imports. What can be wired now is wired now:
+ * stay free of Chrome/Drive/AI imports. Every port is now backed by a real
+ * adapter:
+ *   - the Drive repository (chrome.identity → Drive REST client → conflict-safe
+ *     {@link DriveBookmarkRepository}), assembled by `runtime/*`;
+ *   - the page extractor (`chrome.scripting`, injected only after the user's Save
+ *     gesture into the active tab);
  *   - the local cache (`chrome.storage.local`);
  *   - the AI analyzer (Chrome Built-in AI / Prompt API), including its real
  *     availability probe for the badge;
  *   - the active-tab provider (`chrome.tabs`), used both to save and to show the
- *     receipt header;
+ *     receipt header, plus a non-interactive connection probe for the badge;
  *   - the system clock and crypto id generator.
  *
- * ## MIK-009 seam (intentional, localized)
- *
- * Two ports require OAuth/Drive bootstrap and `chrome.scripting` page injection
- * that this issue does not own — {@link BookmarkRepositoryPort} and
- * {@link PageExtractorPort}. They are supplied here as clearly-named placeholders
- * that return typed, UI-safe errors. The use-case layer already degrades
- * correctly around them: a save still writes a pending bookmark to the local
- * cache and surfaces an honest "saved locally / analysis pending" receipt. When
- * MIK-009 lands the Drive repository and the scripting extractor, only these two
- * factories change; nothing in the controller or the React layer moves.
+ * Tests never reach this module: the popup controller is exercised with a fake
+ * {@link PopupUseCases}, and the runtime adapters are tested directly with fake
+ * chrome/fetch dependencies in `runtime/*` and `storage/*`.
  */
 import {
 	type AppError,
-	type BookmarkRepositoryPort,
-	type PageExtractorPort,
 	type TabProviderPort,
 	appError,
 	createAnalyzerPort,
@@ -37,46 +33,15 @@ import {
 } from "../lib/app/index";
 import { createChromePromptClient } from "../lib/ai/index";
 import {
-	type RepositoryError,
-	type RepositorySnapshot,
-	type Result as DriveResult,
-	err as driveErr,
-} from "../lib/drive/index";
-import {
-	type ExtractedPage,
-	type ExtractionError,
-	type Result as ExtractionResult,
-	err as extractionErr,
-} from "../lib/extraction/index";
+	createChromeDriveRuntime,
+	createChromeScriptingExtractor,
+} from "../lib/runtime/index";
 import { createChromeLocalCache } from "../lib/storage/index";
 import {
 	type PopupEnvironmentProvider,
 	type PopupUseCases,
 	createPopupUseCases,
 } from "./use-cases";
-
-const PENDING_WIRING = "Drive sync and page analysis finish wiring in a later update.";
-
-/** Placeholder Drive repository: typed `drive` errors until MIK-009 wires it. */
-function createPendingRepository(): BookmarkRepositoryPort {
-	const error: RepositoryError = { kind: "unknown", message: PENDING_WIRING };
-	const fail = async (): Promise<DriveResult<never, RepositoryError>> =>
-		driveErr(error);
-	return {
-		bootstrap: fail,
-		load: fail,
-		save: fail as () => Promise<DriveResult<RepositorySnapshot, RepositoryError>>,
-	};
-}
-
-/** Placeholder page extractor: typed `extraction` errors until MIK-009 wires it. */
-function createPendingExtractor(): PageExtractorPort {
-	return {
-		async extract(): Promise<ExtractionResult<ExtractedPage, ExtractionError>> {
-			return extractionErr({ field: "page", message: PENDING_WIRING });
-		},
-	};
-}
 
 /** Active-tab provider backed by `chrome.tabs`. */
 function createChromeTabProvider(): TabProviderPort {
@@ -109,6 +74,7 @@ function createChromeTabProvider(): TabProviderPort {
 /** Environment provider: current tab for the header, plus the status badges. */
 function createChromeEnvironmentProvider(
 	tabs: TabProviderPort,
+	probeConnection: () => Promise<"connected" | "disconnected">,
 ): PopupEnvironmentProvider {
 	const promptClient = createChromePromptClient();
 	return {
@@ -120,13 +86,13 @@ function createChromeEnvironmentProvider(
 			return appOk({ title: result.value.title, url: result.value.url });
 		},
 		async environment() {
-			const promptApi = await promptClient.availability();
-			return {
-				// Identity/connection wiring is part of the MIK-009 runtime work; until
-				// then the badge reads "unknown" rather than guessing a state.
-				connection: "unknown",
-				promptApi,
-			};
+			// Probe identity (non-interactive) and Prompt API independently so a
+			// disconnected account never blocks the AI badge and vice versa.
+			const [connection, promptApi] = await Promise.all([
+				probeConnection(),
+				promptClient.availability(),
+			]);
+			return { connection, promptApi };
 		},
 	};
 }
@@ -134,14 +100,18 @@ function createChromeEnvironmentProvider(
 /** Build the real {@link PopupUseCases} for the extension popup. */
 export function createRuntimeUseCases(): PopupUseCases {
 	const tabs = createChromeTabProvider();
+	const drive = createChromeDriveRuntime();
 	const app = createBookmarkApp({
-		repository: createPendingRepository(),
+		repository: drive.repository,
 		analyzer: createAnalyzerPort(createChromePromptClient()),
-		extractor: createPendingExtractor(),
+		extractor: createChromeScriptingExtractor(),
 		tabs,
 		cache: createChromeLocalCache(),
 		clock: createSystemClock(),
 		ids: createCryptoIdGenerator(),
 	});
-	return createPopupUseCases(app, createChromeEnvironmentProvider(tabs));
+	return createPopupUseCases(
+		app,
+		createChromeEnvironmentProvider(tabs, () => drive.probeConnection()),
+	);
 }

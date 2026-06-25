@@ -4,7 +4,7 @@ Chrome extension idea for saving the current tab as an AI-enriched bookmark, sto
 
 ## Current status
 
-The MV3 extension scaffold is in place (Vite + TypeScript + React + `@crxjs/vite-plugin` + Vitest, managed with Bun). Popup and options pages currently render minimal placeholders; Drive sync and AI analysis are not implemented yet.
+The MV3 extension is wired end-to-end (Vite + TypeScript + React + `@crxjs/vite-plugin` + Vitest, managed with Bun). The popup (save current tab) and options page (research ledger) run on real adapters: `chrome.identity` + Google Drive for storage, `chrome.scripting` for page extraction, the Chrome Built-in AI / Prompt API for analysis, and `chrome.storage.local` as cache. The runtime can be loaded as an unpacked extension and exercised with the [manual smoke checklist](docs/smoke-checklist.md).
 
 Start here:
 
@@ -39,10 +39,32 @@ The Google OAuth client ID is injected into the manifest from the environment.
 
 ### Load the unpacked extension
 
+The development OAuth client is bound to the unpacked extension ID, so first
+builds use a dummy client ID just to obtain that ID:
+
 ```sh
-bun run build          # with VITE_GOOGLE_OAUTH_CLIENT_ID set in .env.local
-# then load the generated dist/ folder via chrome://extensions (Developer mode → Load unpacked)
+# 1. Build the bundle with any non-empty client ID (dummy is fine to just load it):
+VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
+
+# 2. Load the generated dist/ folder via chrome://extensions
+#    (Developer mode → Load unpacked), then copy the extension ID shown there.
+
+# 3. In Google Cloud Console, create an OAuth client of type "Chrome Extension"
+#    bound to that extension ID (see docs/publication.md "Development Setup"),
+#    put the real dev client ID in .env.local, then rebuild and reload:
+bun run build          # reads VITE_GOOGLE_OAUTH_CLIENT_ID from .env.local
 ```
+
+The dummy-env build above is also the quick way to confirm the bundle compiles
+and `dist/manifest.json` keeps only the MVP permissions and the `drive.file`
+scope, without needing a real OAuth client.
+
+### Manual smoke test
+
+After loading the unpacked build with a real dev client ID, run the
+[manual smoke checklist](docs/smoke-checklist.md) to verify sign-in, Drive
+folder/file creation, save (AI available and unavailable), and the options
+list/search/delete/re-analyze flows.
 
 ### Source layout
 
@@ -51,14 +73,16 @@ config/                  build-time config (OAuth client ID resolution)
 manifest.config.ts       MV3 manifest (permissions, OAuth scope)
 src/
   background/            service worker
-  popup/                 save-current-tab UI (placeholder)
-  options/               library management UI (placeholder)
+  popup/                 Bookmark Receipt save-current-tab UI
+  options/               Research Ledger bookmark management UI
   lib/
     bookmarks/           schema, JSONL, upsert/merge, search (domain)
     drive/               Google auth + Drive I/O
     extraction/          page extraction + excerpt building
     ai/                  Prompt API availability + Japanese analysis
     storage/             chrome.storage.local cache
+    app/                 use cases (ports + orchestration, Chrome-free)
+    runtime/             extension composition: chrome.scripting + Drive adapters
 ```
 
 ## MVP direction
@@ -74,4 +98,4 @@ src/
 
 ## Next step
 
-Continue with the mikan implementation plan, starting from `MIK-002` after this scaffold is merged.
+Continue with the mikan implementation plan from the remaining open issues. The core domain, extraction, AI, Drive, cache/use-case, popup, options, and runtime-wiring slices have been merged; final MVP QA and release-readiness checks remain.
