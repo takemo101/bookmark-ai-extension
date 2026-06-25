@@ -84,6 +84,12 @@ export type SyncView = {
 	readonly status: SyncStatus;
 	readonly lastSyncedAt?: string;
 	readonly error?: string;
+	/**
+	 * Whether the cache holds local changes not yet confirmed on Drive (a failed
+	 * or in-flight save/update/delete). A token-free boolean the sync panel
+	 * surfaces so the user knows a retry is still owed (MIK-014).
+	 */
+	readonly pendingLocalChanges: boolean;
 };
 
 /** The complete immutable snapshot the React component renders. */
@@ -128,7 +134,7 @@ export interface OptionsController {
 	reAnalyze(canonicalUrl: string): Promise<void>;
 }
 
-const INITIAL_SYNC: SyncView = { status: "idle" };
+const INITIAL_SYNC: SyncView = { status: "idle", pendingLocalChanges: false };
 
 export function createOptionsController(
 	useCases: OptionsUseCases,
@@ -180,6 +186,7 @@ export function createOptionsController(
 			status: snapshot.sync.status,
 			lastSyncedAt: snapshot.sync.lastSyncedAt,
 			error: snapshot.sync.error?.message,
+			pendingLocalChanges: snapshot.sync.pending === true,
 		};
 	}
 

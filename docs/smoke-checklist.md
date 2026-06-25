@@ -92,6 +92,19 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
       unrelated active tab it returns a safe "open the page in the active tab"
       error rather than reaching for a tab the extension was not granted.
 
+### 6. Unsynced local mutations survive Drive failure (MIK-014)
+
+- [ ] With Drive made unavailable (e.g. offline, or revoke the token), **Delete**
+      a bookmark in options. The row disappears and the sync panel shows
+      **Local changes pending — will retry on next sync** (the popup shows a
+      `Local: changes pending` badge).
+- [ ] Click **Sync now** while still offline: the deletion is **not** resurrected
+      and the pending indicator remains.
+- [ ] Restore Drive connectivity and **Sync now** again: the pending indicator
+      clears, the deletion is now written to `bookmarks.jsonl` as a tombstone, and
+      it stays deleted on a subsequent sync. The same holds for a save/re-analyze
+      performed while Drive was unavailable (the record is pushed, not lost).
+
 ## Run record
 
 Record each real run here. Do not mark a row **PASS** unless the step was
@@ -126,3 +139,12 @@ rows as **N/A** when run on a channel without the Prompt API.
   update for the same URL, which wins by the documented delete-vs-update rule
   (see `docs/design.md` "Delete vs. update conflict rules"). Tombstones are not
   pruned in the MVP, so the JSONL file retains one line per past deletion.
+- A local mutation (delete/save/update/re-analyze) made while Drive is
+  unavailable is kept in the cache and flagged **pending**; a later `Sync now`
+  re-pushes it rather than overwriting it with the remote state, so it is not
+  silently lost and is written to Drive once it recovers (see `docs/design.md`
+  "Preserving unsynced local mutations"). The MVP has no background retry queue,
+  so the push happens on the next user-triggered sync/save, not automatically in
+  the background. A cache written by a pre-MIK-014 build that recorded only a
+  sync error (no pending flag) is treated as a plain pull; the flag is set again
+  on the next mutation.
