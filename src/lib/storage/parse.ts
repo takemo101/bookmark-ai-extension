@@ -16,8 +16,10 @@
 import {
 	Bookmarks,
 	type BookmarkRecord,
+	type Tombstone,
 	parseBookmarkRecord,
 	parseIsoTimestamp,
+	parseTombstone,
 } from "../bookmarks/index";
 import type {
 	DriveFileId,
@@ -87,6 +89,36 @@ function parseRecords(
 		records.push(parsed.value);
 	}
 	return records;
+}
+
+function parseTombstones(
+	value: unknown,
+	problems: CacheProblem[],
+): Tombstone[] {
+	if (value === undefined) {
+		return [];
+	}
+	if (!Array.isArray(value)) {
+		problems.push({
+			kind: "invalid-record",
+			message: "cached tombstones is not an array",
+		});
+		return [];
+	}
+	const tombstones: Tombstone[] = [];
+	for (const entry of value) {
+		const parsed = parseTombstone(entry);
+		if (!parsed.ok) {
+			// Quarantine the bad tombstone; the rest of the snapshot survives.
+			problems.push({
+				kind: "invalid-record",
+				message: `tombstone ${parsed.error.field}: ${parsed.error.message}`,
+			});
+			continue;
+		}
+		tombstones.push(parsed.value);
+	}
+	return tombstones;
 }
 
 function parseLocation(
@@ -193,11 +225,12 @@ export function parseCachedState(value: unknown): CacheParseResult {
 	}
 
 	const records = parseRecords(value.bookmarks, problems);
+	const tombstones = parseTombstones(value.tombstones, problems);
 	const location = parseLocation(value.drive, problems);
 	const sync = parseSync(value.sync, problems);
 
 	return {
-		state: { bookmarks: Bookmarks.from(records), location, sync },
+		state: { bookmarks: Bookmarks.from(records, tombstones), location, sync },
 		problems,
 	};
 }

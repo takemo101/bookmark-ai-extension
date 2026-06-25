@@ -5,9 +5,11 @@
  * folder/file bootstrap, JSONL read/write, conflict detection by revision, and
  * mapping every failure onto a typed {@link RepositoryError}. It owns *no*
  * bookmark behavior: parsing JSONL, building the collection, and — critically —
- * merging local and remote records are all delegated to `bookmarks/*`
- * (`parseJsonl`, `serializeJsonl`, `Bookmarks.mergeRemote`). The repository never
- * inspects or resolves a record conflict itself. See
+ * merging local and remote records (deletion tombstones included) are all
+ * delegated to `bookmarks/*` (`parseJsonl`, `serializeJsonl`,
+ * `Bookmarks.mergeRemote`). The repository never inspects or resolves a record or
+ * deletion conflict itself; it serializes whatever the domain merge decides —
+ * tombstones included — so a delete propagates durably to Drive. See
  * docs/implementation-principles.md "Repository / Drive client rules" and
  * docs/design.md "Drive Write and Conflict Strategy".
  *
@@ -80,10 +82,10 @@ export class DriveBookmarkRepository {
 		try {
 			const location = await this.ensureLocation();
 			const download = await this.client.downloadFile(location.file.id);
-			const { records, problems } = parseJsonl(download.content);
+			const { records, tombstones, problems } = parseJsonl(download.content);
 			this.location = { folder: location.folder, file: download.metadata };
 			return ok({
-				bookmarks: Bookmarks.from(records),
+				bookmarks: Bookmarks.from(records, tombstones),
 				problems,
 				file: download.metadata,
 				folder: location.folder,
@@ -110,11 +112,12 @@ export class DriveBookmarkRepository {
 
 			for (let attempt = 0; attempt < this.maxWriteAttempts; attempt++) {
 				const download = await this.client.downloadFile(location.file.id);
-				const { records, problems } = parseJsonl(download.content);
+				const { records, tombstones, problems } = parseJsonl(download.content);
 				lastProblems = problems;
 
-				// Merge belongs to the bookmark domain, not to this I/O layer.
-				const merged = base.mergeRemote(Bookmarks.from(records));
+				// Merge belongs to the bookmark domain, not to this I/O layer. Remote
+				// tombstones flow in so a deletion made on another device is honored.
+				const merged = base.mergeRemote(Bookmarks.from(records, tombstones));
 
 				// Re-check the revision; if it moved between our download and now,
 				// another writer raced us — carry the merge forward and retry against
@@ -125,7 +128,10 @@ export class DriveBookmarkRepository {
 					continue;
 				}
 
-				const content = serializeJsonl(merged.sortedByCreated("asc"));
+				const content = serializeJsonl(
+					merged.sortedByCreated("asc"),
+					merged.tombstones(),
+				);
 				const uploaded = await this.client.uploadFile(
 					location.file.id,
 					content,

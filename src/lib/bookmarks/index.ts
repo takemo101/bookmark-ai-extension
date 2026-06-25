@@ -62,6 +62,16 @@ export {
 } from "./record";
 
 export {
+	type Tombstone,
+	type TombstoneV1,
+	TOMBSTONE_KIND,
+	isTombstoneShape,
+	parseTombstone,
+	serializeTombstone,
+	createTombstone,
+} from "./tombstone";
+
+export {
 	type JsonlProblem,
 	type JsonlProblemKind,
 	type JsonlParseResult,

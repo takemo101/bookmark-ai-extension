@@ -99,8 +99,15 @@ class FakeUseCases implements OptionsUseCases {
 		if (this.deleteResult) {
 			return this.deleteResult;
 		}
-		// Mirror the real domain delete: drop the record and return the new cache.
-		this.cache = { ...this.cache, bookmarks: this.cache.bookmarks.delete(canonicalUrl) };
+		// Mirror the real domain delete: drop the record (leaving a tombstone) and
+		// return the new cache.
+		this.cache = {
+			...this.cache,
+			bookmarks: this.cache.bookmarks.delete(
+				canonicalUrl,
+				isoTimestamp("2026-06-25T12:00:00.000Z"),
+			),
+		};
 		return { ok: true as const, value: this.cache };
 	}
 	async reAnalyzeBookmark(canonicalUrl: CanonicalUrl) {

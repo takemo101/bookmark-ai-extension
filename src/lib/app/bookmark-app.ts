@@ -11,15 +11,15 @@
  * rather than performed by hand here ("Tell, don't ask"). The cache is written
  * as a cache; Drive remains the source of truth.
  *
- * ## Known limitation: deletion vs. the union merge
+ * ## Durable deletion
  *
- * The MVP Drive repository's `save` merges local and remote by *union* of
- * canonical URLs (`Bookmarks.mergeRemote`), so it has no way to propagate a
- * deletion to Drive yet. `deleteBookmark` therefore removes the record from the
- * local cache (the render source) but a later `syncFromDrive` can resurrect it.
- * Durable cross-PC deletion needs a repository capability (tombstones or an
- * explicit delete) that is out of scope for this issue — see the report's
- * follow-up risks.
+ * `deleteBookmark` records a deletion tombstone through the domain
+ * (`Bookmarks.delete`) and pushes it like any other change. The Drive
+ * repository's revision-conflict merge (`Bookmarks.mergeRemote`) carries
+ * tombstones, so the deletion is written to Drive and is not resurrected by a
+ * later `syncFromDrive` or by another device, unless that device holds a
+ * strictly newer explicit update for the same URL (the documented delete-vs-
+ * update rule; docs/design.md "Drive Write and Conflict Strategy").
  */
 import {
 	type AiAnalysis,
@@ -104,21 +104,20 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 
 	/**
 	 * Write `desired` to Drive, then reconcile the cache. On success the cache is
-	 * refreshed from the authoritative repository snapshot; on failure the desired
-	 * collection is kept locally with a typed sync error so the bookmark is not
-	 * lost. `trustMerge: false` keeps `desired` rather than the repository's merged
-	 * result — used by deletion, whose union merge would otherwise re-add the
-	 * record.
+	 * refreshed from the authoritative repository snapshot (the domain merge of
+	 * `desired` with Drive, tombstones included); on failure the desired
+	 * collection is kept locally with a typed sync error so the change is not
+	 * lost.
 	 */
 	async function pushToDrive(
 		desired: Bookmarks,
-		opts: { trustMerge: boolean; prevLocation?: DriveLocation },
+		opts: { prevLocation?: DriveLocation },
 	): Promise<DrivePush> {
 		const result = await deps.repository.save(desired);
 		if (result.ok) {
 			const snapshot = result.value;
 			const state: CacheState = {
-				bookmarks: opts.trustMerge ? snapshot.bookmarks : desired,
+				bookmarks: snapshot.bookmarks,
 				location: { folder: snapshot.folder, file: snapshot.file },
 				sync: { status: "synced", lastSyncedAt: deps.clock.now() },
 			};
@@ -205,7 +204,6 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 
 		onProgress?.("syncing");
 		const push = await pushToDrive(updated.value, {
-			trustMerge: true,
 			prevLocation: base.location,
 		});
 		const record = push.state.bookmarks.get(canonicalUrl);
@@ -293,7 +291,6 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				sync: { status: "syncing", lastSyncedAt: cached.sync.lastSyncedAt },
 			});
 			const pendingPush = await pushToDrive(pending.value, {
-				trustMerge: true,
 				prevLocation: cached.location,
 			});
 
@@ -310,10 +307,11 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			canonicalUrl: CanonicalUrl,
 		): Promise<Result<CacheState, AppError>> {
 			const cached = await deps.cache.load();
-			// Domain delete (idempotent), not a UI-side array mutation.
-			const reduced = cached.bookmarks.delete(canonicalUrl);
+			// Domain delete leaves a tombstone stamped `now` (idempotent), not a
+			// UI-side array mutation. The tombstone propagates through the repository
+			// merge so the deletion is durable across syncs and devices.
+			const reduced = cached.bookmarks.delete(canonicalUrl, deps.clock.now());
 			const push = await pushToDrive(reduced, {
-				trustMerge: false,
 				prevLocation: cached.location,
 			});
 			return ok(push.state);
@@ -342,7 +340,6 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				sync: { status: "syncing", lastSyncedAt: cached.sync.lastSyncedAt },
 			});
 			const pendingPush = await pushToDrive(pending.value, {
-				trustMerge: true,
 				prevLocation: cached.location,
 			});
 

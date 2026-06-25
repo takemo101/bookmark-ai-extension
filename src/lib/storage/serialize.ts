@@ -8,7 +8,10 @@
  * Cache", docs/privacy-policy.md "Page Text Excerpts"). Snapshot order is
  * deterministic (oldest-created first) to keep persisted bytes stable.
  */
-import { serializeBookmarkRecord } from "../bookmarks/index";
+import {
+	serializeBookmarkRecord,
+	serializeTombstone,
+} from "../bookmarks/index";
 import {
 	CACHE_SCHEMA_VERSION,
 	type CacheState,
@@ -25,6 +28,13 @@ export function serializeCacheState(state: CacheState): CachedStateV1 {
 			status: state.sync.status,
 		},
 	};
+
+	// Persist tombstones only when present, so an unchanged cache keeps its prior
+	// byte shape and old readers that ignore the field are unaffected.
+	const tombstones = state.bookmarks.tombstones();
+	if (tombstones.length > 0) {
+		serialized.tombstones = tombstones.map(serializeTombstone);
+	}
 
 	if (state.sync.lastSyncedAt !== undefined) {
 		serialized.sync.lastSyncedAt = state.sync.lastSyncedAt;

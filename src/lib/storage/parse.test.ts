@@ -109,6 +109,41 @@ describe("parseCachedState", () => {
 		expect(state.sync.status).toBe("idle");
 	});
 
+	it("round-trips deletion tombstones through serialize → parse", () => {
+		const live = bookmarksOf([
+			{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+			{ url: "https://b.test/", title: "B", now: "2026-01-02T00:00:00Z", id: "b" },
+		]);
+		const canonicalB = live.toArray().find((r) => r.url === "https://b.test/")!
+			.canonicalUrl;
+		const original: CacheState = {
+			bookmarks: live.delete(canonicalB, isoTimestamp("2026-02-03T00:00:00Z")),
+			sync: { status: "synced" },
+		};
+		expect(original.bookmarks.tombstones()).toHaveLength(1);
+
+		const { state, problems } = parseCachedState(serializeCacheState(original));
+
+		expect(problems).toHaveLength(0);
+		// One live record remains, and the deletion is preserved as a tombstone so
+		// it is not resurrected before the next Drive sync.
+		expect(state.bookmarks.size).toBe(1);
+		expect(state.bookmarks.get(canonicalB)).toBeUndefined();
+		expect(state.bookmarks.tombstones().map((t) => t.canonicalUrl)).toEqual([
+			canonicalB,
+		]);
+	});
+
+	it("omits the tombstones field entirely when there are none", () => {
+		const serialized = serializeCacheState({
+			bookmarks: bookmarksOf([
+				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+			]),
+			sync: { status: "synced" },
+		});
+		expect(serialized.tombstones).toBeUndefined();
+	});
+
 	it("round-trips a full state through serialize → parse", () => {
 		const original: CacheState = {
 			bookmarks: bookmarksOf([
