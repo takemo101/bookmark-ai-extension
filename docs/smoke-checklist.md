@@ -92,6 +92,27 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
       unrelated active tab it returns a safe "open the page in the active tab"
       error rather than reaching for a tab the extension was not granted.
 
+## Run record
+
+Record each real run here. Do not mark a row **PASS** unless the step was
+actually exercised against real Chrome + a dev OAuth client. Leave AI-available
+rows as **N/A** when run on a channel without the Prompt API.
+
+| Date | Section | Result | Notes |
+|---|---|---|---|
+| 2026-06-25 | 1. Sign-in (OAuth) | NOT EXECUTED | MIK-010 QA ran in a headless agent session with no interactive Chrome and no dev OAuth client. |
+| 2026-06-25 | 2. Drive folder/file creation | NOT EXECUTED | Requires real `drive.file` token; see above. |
+| 2026-06-25 | 3. Save page (AI available) | NOT EXECUTED | Requires a Chrome channel with the Prompt API enabled. |
+| 2026-06-25 | 4. Prompt API unavailable behavior | NOT EXECUTED | Requires loaded unpacked extension. |
+| 2026-06-25 | 5. Options: list / search / delete / re-analyze | NOT EXECUTED | Requires loaded unpacked extension with saved records. |
+
+> MIK-010 status: automated validation (`just validate`, `just hooks-run`,
+> dummy-OAuth `bun run build` + `dist/manifest.json` inspection) passed and the
+> architecture/privacy/publication review found no MVP-blocking issue. The manual
+> smoke pass above remains a **required human QA step** before Chrome Web Store
+> submission; it is not executable in a headless agent session and is carried as
+> follow-up rather than a blocker for closing the automated QA scope of MIK-010.
+
 ## Notes / known limitations
 
 - Re-analysis uses `activeTab` + `scripting` only, so it works from the page's
