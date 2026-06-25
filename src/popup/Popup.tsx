@@ -114,6 +114,9 @@ function Badges({ view }: { view: PopupView }) {
 			<Badge label="Google" text={connectionText(view.connection)} tone={connectionTone(view.connection)} />
 			<Badge label="Prompt API" text={promptApiText(view.promptApi)} tone={promptApiTone(view.promptApi)} />
 			<Badge label="Sync" text={view.sync.status} tone={syncTone(view.sync.status)} />
+			{view.sync.pendingLocalChanges ? (
+				<Badge label="Local" text="changes pending" tone="warn" />
+			) : null}
 		</section>
 	);
 }

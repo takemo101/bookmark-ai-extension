@@ -113,6 +113,12 @@ export type SyncView = {
 	readonly status: SyncStatus;
 	readonly lastSyncedAt?: string;
 	readonly error?: string;
+	/**
+	 * Whether the cache holds local changes not yet confirmed on Drive (a failed
+	 * or in-flight save/update/delete). A token-free boolean the receipt surfaces
+	 * so the user knows a retry is still owed (MIK-014).
+	 */
+	readonly pendingLocalChanges: boolean;
 };
 
 /** The complete immutable snapshot the React component renders. */
@@ -148,7 +154,7 @@ const INITIAL_VIEW: PopupView = {
 	loading: true,
 	connection: "unknown",
 	promptApi: "unknown",
-	sync: { status: "idle" },
+	sync: { status: "idle", pendingLocalChanges: false },
 	flow: { kind: "idle" },
 	recent: [],
 	canSave: false,
@@ -188,6 +194,7 @@ export function createPopupController(
 			status: state.sync.status,
 			lastSyncedAt: state.sync.lastSyncedAt,
 			error: state.sync.error?.message,
+			pendingLocalChanges: state.sync.pending === true,
 		};
 	}
 

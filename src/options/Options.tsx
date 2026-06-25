@@ -140,6 +140,11 @@ function SyncPanel({
 				/>
 				<span style={{ fontSize: 13 }}>{sync.status}</span>
 			</div>
+			{sync.pendingLocalChanges ? (
+				<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
+					Local changes pending — will retry on next sync
+				</p>
+			) : null}
 			{sync.lastSyncedAt ? (
 				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}>
 					Last synced {formatTime(sync.lastSyncedAt)}

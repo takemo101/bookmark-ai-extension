@@ -358,6 +358,121 @@ describe("createBookmarkApp", () => {
 		});
 	});
 
+	describe("unsynced local mutations (MIK-014)", () => {
+		it("flags pending and preserves a delete tombstone across a sync while Drive is down, then pushes it on recovery", async () => {
+			const { app, repo, cache } = makeHarness();
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+
+			// Drive goes down; the delete only reaches the cache as a tombstone.
+			repo.failKind = "network";
+			const deleted = await app.deleteBookmark(canonicalUrl);
+			expect(deleted.ok).toBe(true);
+			expect(cache.state.sync.pending).toBe(true);
+			expect(cache.state.bookmarks.size).toBe(0);
+			expect(cache.state.bookmarks.tombstones()).toHaveLength(1);
+
+			// A sync while Drive is still down must not discard the tombstone: it is
+			// re-pushed (and fails again), so it survives for the next attempt.
+			const stillDown = await app.syncFromDrive();
+			expect(stillDown.ok).toBe(false);
+			expect(cache.state.sync.pending).toBe(true);
+			expect(cache.state.bookmarks.tombstones()).toHaveLength(1);
+			// Drive still holds the live record because nothing was written to it yet.
+			expect(repo.remote.get(canonicalUrl)).toBeDefined();
+
+			// Drive recovers; the next sync pushes the tombstone and the delete sticks.
+			repo.failKind = null;
+			const recovered = await app.syncFromDrive();
+			expect(recovered.ok).toBe(true);
+			if (!recovered.ok) return;
+			expect(recovered.value.bookmarks.get(canonicalUrl)).toBeUndefined();
+			expect(recovered.value.sync.pending).toBeFalsy();
+			expect(recovered.value.sync.status).toBe("synced");
+			expect(repo.remote.get(canonicalUrl)).toBeUndefined();
+			expect(repo.remote.tombstones()).toHaveLength(1);
+		});
+
+		it("does not discard an unsynced local save on remote sync and pushes it on recovery", async () => {
+			const { app, repo, cache } = makeHarness();
+			// Drive is down for the whole save: AI applies locally, the write fails.
+			repo.failKind = "network";
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			expect(saved.value.driveSynced).toBe(false);
+			expect(cache.state.sync.pending).toBe(true);
+			expect(cache.state.bookmarks.size).toBe(1);
+			const canonicalUrl = saved.value.record.canonicalUrl;
+			// Drive never received the record.
+			expect(repo.remote.size).toBe(0);
+
+			// Drive recovers; syncing must push the local save rather than replacing
+			// the cache with the (empty) remote state and silently losing it.
+			repo.failKind = null;
+			const synced = await app.syncFromDrive();
+			expect(synced.ok).toBe(true);
+			if (!synced.ok) return;
+			expect(synced.value.bookmarks.size).toBe(1);
+			expect(synced.value.bookmarks.get(canonicalUrl)).toBeDefined();
+			expect(synced.value.sync.pending).toBeFalsy();
+			expect(repo.remote.get(canonicalUrl)).toBeDefined();
+		});
+
+		it("preserves an unsynced re-analyze mutation and pushes it on recovery", async () => {
+			const { app, repo, cache, analyzer } = makeHarness({
+				outcome: { status: "unavailable", reason: "Prompt API unavailable" },
+			});
+			// First save lands as unavailable but reaches Drive.
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+
+			// Now AI works but Drive is down: the re-analyze is applied locally only.
+			analyzer.setOutcome(READY);
+			repo.failKind = "network";
+			const reAnalyzed = await app.reAnalyzeBookmark(canonicalUrl);
+			expect(reAnalyzed.ok).toBe(true);
+			if (!reAnalyzed.ok) return;
+			expect(reAnalyzed.value.aiStatus).toBe("ready");
+			expect(reAnalyzed.value.driveSynced).toBe(false);
+			expect(cache.state.sync.pending).toBe(true);
+
+			// Drive recovers; the re-analyzed record is pushed, not lost.
+			repo.failKind = null;
+			const synced = await app.syncFromDrive();
+			expect(synced.ok).toBe(true);
+			if (!synced.ok) return;
+			const pushed = repo.remote.get(canonicalUrl);
+			expect(pushed?.aiStatus).toBe("ready");
+			expect(pushed?.description).toBe("説明文");
+			expect(synced.value.sync.pending).toBeFalsy();
+		});
+
+		it("still pulls and replaces the cache when there are no pending local changes", async () => {
+			let remote = Bookmarks.empty();
+			const seeded = remote.upsert(
+				{ url: "https://remote.test/", title: "R" },
+				{ id: bookmarkId("r"), now: isoTimestamp("2026-01-01T00:00:00Z") },
+			);
+			if (!seeded.ok) throw new Error("seed failed");
+			remote = seeded.value;
+			const { app, repo } = makeHarness({ remote });
+
+			const result = await app.syncFromDrive();
+
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			// A plain pull: no write was issued, the remote store is authoritative.
+			expect(repo.saveCalls).toBe(0);
+			expect(result.value.bookmarks.size).toBe(1);
+			expect(result.value.sync.pending).toBeFalsy();
+		});
+	});
+
 	describe("deleteBookmark", () => {
 		it("removes the record from the cache via the domain delete", async () => {
 			const { app } = makeHarness();

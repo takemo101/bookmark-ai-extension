@@ -138,8 +138,16 @@ Cache:
 - Drive file ID.
 - Last known Drive revision/version/modified metadata.
 - Last sync status and errors.
+- A `pending` flag marking that the snapshot holds **unsynced local mutations**
+  (a save/update/re-analyze or a deletion tombstone) that have not yet been
+  confirmed on Drive; see "Preserving unsynced local mutations" below.
 
 Popup/options should render from local cache first, then sync with Drive when needed.
+
+The cache stays the source of truth's *cache*, never an authority of its own, so
+a corrupt entry is safely discarded and re-pulled. The one nuance is the
+`pending` flag: while it is set, the cache holds the only copy of a change that
+never reached Drive, so a sync must reconcile (push) rather than overwrite it.
 
 ## Bookmark Data Model
 
@@ -294,6 +302,39 @@ Tombstones currently accumulate indefinitely (the MVP never prunes them), which
 is the safe choice: pruning risks resurrecting a record from a device that has
 been offline since before the prune. Bounded tombstone garbage collection is a
 possible later refinement.
+
+### Preserving unsynced local mutations
+
+Durable deletion makes a delete survive a *merge*, but a delete (or any local
+mutation) that never reached Drive must also survive a *sync*. When a Drive write
+fails — offline, auth lapse, conflict retries exhausted — the desired collection
+is kept in the cache and the sync state is flagged `pending` (see "Local Cache").
+The flag is the cache's record that it diverges from Drive and owes a push.
+
+`syncFromDrive` checks the flag before pulling:
+
+- **No pending changes** → the normal pull: download Drive, replace the cache
+  with the authoritative remote snapshot.
+- **Pending changes** → re-push the cached collection instead. The repository's
+  conflict-safe write delegates reconciliation to the domain merge
+  (`Bookmarks.mergeRemote`, tombstones included), so the local mutation is made
+  durable on Drive while newer remote changes still win by the rules above. If
+  Drive is still unavailable the push fails, the cache keeps the mutation and
+  stays `pending`, so the change **survives the sync** and is retried next time.
+
+This closes the offline-delete edge: a tombstone created while Drive is down is
+not overwritten by a later sync that still sees the live remote record, and is
+eventually written to Drive once it recovers. The same guarantee covers an
+offline save/update/re-analyze. The flow is pinned by tests in
+`app/bookmark-app.test.ts` ("unsynced local mutations (MIK-014)").
+
+Scope note: the guarantee applies to mutations made by a build that writes the
+`pending` flag. A cache written by an older build that recorded only `status:
+"error"` (no `pending`) is treated as a plain pull, matching prior behavior;
+this is acceptable because the flag is set on the very next mutation. A full
+background retry queue is intentionally out of MVP scope — the cache-resident
+collection plus the `pending` flag is the minimal representation that satisfies
+the requirement.
 
 ## Duplicate Behavior
 

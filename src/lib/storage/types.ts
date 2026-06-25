@@ -48,6 +48,17 @@ export type SyncState = {
 	readonly status: SyncStatus;
 	readonly lastSyncedAt?: IsoTimestamp;
 	readonly error?: SyncError;
+	/**
+	 * Whether the cached {@link CacheState.bookmarks} hold local mutations (a
+	 * save, update, re-analyze, or deletion tombstone) that have not yet been
+	 * confirmed on Drive. When set, `syncFromDrive` must push/merge the cached
+	 * collection instead of replacing it with the remote state, so an unsynced
+	 * mutation made while Drive was unavailable is preserved and eventually
+	 * pushed (docs/design.md "Local Cache"). Optional and omitted when false, so
+	 * the persisted byte shape is unchanged for an all-synced cache and older
+	 * readers that ignore the field are unaffected.
+	 */
+	readonly pending?: boolean;
 };
 
 /**
@@ -74,6 +85,11 @@ export type CachedSyncStateV1 = {
 	status: SyncStatus;
 	lastSyncedAt?: string;
 	error?: SyncError;
+	/**
+	 * Persisted only when there are unsynced local mutations (see
+	 * {@link SyncState.pending}); absent otherwise for backward compatibility.
+	 */
+	pending?: boolean;
 };
 
 /** Loose JSON shape persisted in `chrome.storage.local`. Untrusted. */

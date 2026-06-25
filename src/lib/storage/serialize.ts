@@ -42,6 +42,11 @@ export function serializeCacheState(state: CacheState): CachedStateV1 {
 	if (state.sync.error !== undefined) {
 		serialized.sync.error = state.sync.error;
 	}
+	// Persist the unsynced-mutation flag only when set, so an all-synced cache
+	// keeps its prior byte shape and older readers are unaffected.
+	if (state.sync.pending === true) {
+		serialized.sync.pending = true;
+	}
 
 	if (state.location !== undefined) {
 		serialized.drive = {

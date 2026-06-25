@@ -138,7 +138,21 @@ describe("createOptionsController", () => {
 			expect(view.filteredCount).toBe(2);
 			expect(view.rows.map((r) => r.title).sort()).toEqual(["Alpha", "Beta"]);
 			expect(view.sync.status).toBe("synced");
+			expect(view.sync.pendingLocalChanges).toBe(false);
 			expect(view.empty).toBe(false);
+		});
+
+		it("surfaces pending local changes from the cached sync state", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ title: "Alpha", id: "a" })], {
+				status: "error",
+				pending: true,
+			});
+			const controller = controllerWith(fake);
+
+			await controller.init();
+
+			expect(controller.getView().sync.pendingLocalChanges).toBe(true);
 		});
 
 		it("reports the empty state when there are no bookmarks", async () => {

@@ -197,7 +197,10 @@ function parseSync(value: unknown, problems: CacheProblem[]): SyncState {
 	}
 
 	const error = parseSyncError(value.error);
-	return { status, lastSyncedAt, error };
+	// `pending` marks unsynced local mutations; only an explicit `true` counts, so
+	// any other persisted value is treated as "no pending changes".
+	const pending = value.pending === true ? true : undefined;
+	return { status, lastSyncedAt, error, pending };
 }
 
 /**

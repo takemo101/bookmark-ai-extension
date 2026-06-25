@@ -144,6 +144,39 @@ describe("parseCachedState", () => {
 		expect(serialized.tombstones).toBeUndefined();
 	});
 
+	it("round-trips the unsynced-mutation pending flag and omits it when false", () => {
+		const base = bookmarksOf([
+			{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+		]);
+
+		const pendingSerialized = serializeCacheState({
+			bookmarks: base,
+			sync: { status: "error", pending: true },
+		});
+		expect(pendingSerialized.sync.pending).toBe(true);
+		const { state } = parseCachedState(pendingSerialized);
+		expect(state.sync.pending).toBe(true);
+
+		// A synced cache carries no pending flag, keeping the persisted shape stable.
+		const syncedSerialized = serializeCacheState({
+			bookmarks: base,
+			sync: { status: "synced" },
+		});
+		expect(syncedSerialized.sync.pending).toBeUndefined();
+		expect(parseCachedState(syncedSerialized).state.sync.pending).toBeUndefined();
+	});
+
+	it("treats a non-boolean or missing pending value as no pending changes", () => {
+		for (const pending of [undefined, "yes", 1, null, false]) {
+			const { state } = parseCachedState({
+				schemaVersion: CACHE_SCHEMA_VERSION,
+				bookmarks: [],
+				sync: { status: "synced", pending },
+			});
+			expect(state.sync.pending).toBeUndefined();
+		}
+	});
+
 	it("round-trips a full state through serialize → parse", () => {
 		const original: CacheState = {
 			bookmarks: bookmarksOf([

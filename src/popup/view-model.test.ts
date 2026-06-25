@@ -143,7 +143,21 @@ describe("createPopupController", () => {
 			expect(view.recent).toHaveLength(1);
 			expect(view.recent[0].title).toBe("Saved One");
 			expect(view.sync.status).toBe("synced");
+			expect(view.sync.pendingLocalChanges).toBe(false);
 			expect(view.canSave).toBe(true);
+		});
+
+		it("surfaces pending local changes from the cached sync state", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = {
+				bookmarks: Bookmarks.from([recordOf({ id: "id-1" })]),
+				sync: { status: "error", pending: true },
+			};
+			const controller = controllerWith(fake);
+
+			await controller.init();
+
+			expect(controller.getView().sync.pendingLocalChanges).toBe(true);
 		});
 
 		it("renders without a tab when the active tab is unavailable", async () => {

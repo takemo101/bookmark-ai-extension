@@ -20,6 +20,16 @@
  * later `syncFromDrive` or by another device, unless that device holds a
  * strictly newer explicit update for the same URL (the documented delete-vs-
  * update rule; docs/design.md "Drive Write and Conflict Strategy").
+ *
+ * ## Unsynced local mutations
+ *
+ * When a Drive write fails, the desired collection is kept in the cache and the
+ * sync state is flagged `pending` (a save/update/re-analyze, or a deletion
+ * tombstone, that never reached Drive). `syncFromDrive` checks that flag first:
+ * with pending changes it re-pushes the cached collection (letting the domain
+ * merge reconcile it with Drive) rather than replacing the cache with the remote
+ * state, so an offline mutation is never silently discarded and is eventually
+ * pushed once Drive recovers (MIK-014).
  */
 import {
 	type AiAnalysis,
@@ -128,7 +138,10 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		const state: CacheState = {
 			bookmarks: desired,
 			location: opts.prevLocation,
-			sync: { status: "error", error: toSyncError(result.error) },
+			// The change reached only the cache: mark it pending so a later
+			// `syncFromDrive` preserves and re-pushes it instead of replacing it
+			// with the remote state (MIK-014; docs/design.md "Local Cache").
+			sync: { status: "error", error: toSyncError(result.error), pending: true },
 		};
 		await deps.cache.save(state);
 		log("warn", "drive-save-failed", `${result.error.kind}: ${result.error.message}`);
@@ -225,9 +238,44 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		},
 
 		async syncFromDrive(): Promise<Result<CacheState, AppError>> {
+			const cached = await deps.cache.load();
+
+			// Unsynced local mutations (a failed save/update/re-analyze or a deletion
+			// tombstone) live in the cache with `pending` set. Treating Drive as
+			// authoritative here would silently discard them, so instead push the
+			// cached collection: the repository delegates the reconciliation to the
+			// domain merge (`Bookmarks.mergeRemote`, tombstones included), which makes
+			// the mutation durable on Drive while still honoring newer remote changes
+			// (docs/design.md "Drive Write and Conflict Strategy"). If Drive is still
+			// unavailable the mutation is kept locally and stays pending for the next
+			// attempt, so it survives this sync rather than being lost (MIK-014).
+			if (cached.sync.pending) {
+				const push = await pushToDrive(cached.bookmarks, {
+					prevLocation: cached.location,
+				});
+				if (push.driveSynced) {
+					log(
+						"info",
+						"drive-pending-pushed",
+						`${push.state.bookmarks.size} bookmarks`,
+					);
+					return ok(push.state);
+				}
+				log(
+					"warn",
+					"drive-pending-push-failed",
+					push.driveError
+						? `${push.driveError.detail ?? push.driveError.kind}: ${push.driveError.message}`
+						: "pending push failed",
+				);
+				return err(
+					push.driveError ??
+						appError("drive", "pending local changes could not be pushed"),
+				);
+			}
+
 			const result = await deps.repository.load();
 			if (!result.ok) {
-				const cached = await deps.cache.load();
 				const state: CacheState = {
 					bookmarks: cached.bookmarks,
 					location: cached.location,
@@ -288,7 +336,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			await deps.cache.save({
 				bookmarks: pending.value,
 				location: cached.location,
-				sync: { status: "syncing", lastSyncedAt: cached.sync.lastSyncedAt },
+				// The pending record is cached before the (slow) Drive write begins, so
+				// it is an unsynced local mutation until that write lands; mark it
+				// pending so a sync racing a closed popup re-pushes it (MIK-014).
+				sync: {
+					status: "syncing",
+					lastSyncedAt: cached.sync.lastSyncedAt,
+					pending: true,
+				},
 			});
 			const pendingPush = await pushToDrive(pending.value, {
 				prevLocation: cached.location,
@@ -337,7 +392,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			await deps.cache.save({
 				bookmarks: pending.value,
 				location: cached.location,
-				sync: { status: "syncing", lastSyncedAt: cached.sync.lastSyncedAt },
+				// Re-analyze moves the record back to pending in the cache before the
+				// Drive write; mark it pending so the transition is preserved if a sync
+				// races a closed popup (MIK-014).
+				sync: {
+					status: "syncing",
+					lastSyncedAt: cached.sync.lastSyncedAt,
+					pending: true,
+				},
 			});
 			const pendingPush = await pushToDrive(pending.value, {
 				prevLocation: cached.location,
