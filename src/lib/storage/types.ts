@@ -16,7 +16,12 @@
  * serialized {@link BookmarkRecordV1} values (which themselves omit excerpts)
  * are persisted.
  */
-import type { Bookmarks, BookmarkRecordV1, IsoTimestamp } from "../bookmarks/index";
+import type {
+	Bookmarks,
+	BookmarkRecordV1,
+	IsoTimestamp,
+	TombstoneV1,
+} from "../bookmarks/index";
 import type { DriveLocation } from "../drive/index";
 
 /** The single key the cache occupies in `chrome.storage.local`. */
@@ -75,6 +80,12 @@ export type CachedSyncStateV1 = {
 export type CachedStateV1 = {
 	schemaVersion: 1;
 	bookmarks: BookmarkRecordV1[];
+	/**
+	 * Deletion tombstones, cached so a local delete is not resurrected before the
+	 * next Drive sync confirms it (docs/design.md "Local Cache"). Optional for
+	 * backward compatibility with caches written before tombstones existed.
+	 */
+	tombstones?: TombstoneV1[];
 	drive?: CachedDriveLocationV1;
 	sync: CachedSyncStateV1;
 };

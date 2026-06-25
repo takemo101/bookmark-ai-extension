@@ -12,6 +12,12 @@ import {
 	parseBookmarkRecord,
 	serializeBookmarkRecord,
 } from "./record";
+import {
+	type Tombstone,
+	isTombstoneShape,
+	parseTombstone,
+	serializeTombstone,
+} from "./tombstone";
 
 export type JsonlProblemKind =
 	| "malformed-json"
@@ -28,6 +34,8 @@ export type JsonlProblem = {
 
 export type JsonlParseResult = {
 	readonly records: BookmarkRecord[];
+	/** Deletion tombstones, kept separate from live records (docs/design.md). */
+	readonly tombstones: Tombstone[];
 	readonly problems: JsonlProblem[];
 };
 
@@ -44,6 +52,7 @@ function classify(field: string): JsonlProblemKind {
  */
 export function parseJsonl(text: string): JsonlParseResult {
 	const records: BookmarkRecord[] = [];
+	const tombstones: Tombstone[] = [];
 	const problems: JsonlProblem[] = [];
 
 	const lines = text.split("\n");
@@ -67,6 +76,23 @@ export function parseJsonl(text: string): JsonlParseResult {
 			continue;
 		}
 
+		// A deletion tombstone is a distinct line type; route it before the live
+		// record parser, which would reject it for missing record fields.
+		if (isTombstoneShape(decoded)) {
+			const parsed = parseTombstone(decoded);
+			if (!parsed.ok) {
+				problems.push({
+					line,
+					kind: classify(parsed.error.field),
+					message: parsed.error.message,
+					raw,
+				});
+				continue;
+			}
+			tombstones.push(parsed.value);
+			continue;
+		}
+
 		const parsed = parseBookmarkRecord(decoded);
 		if (!parsed.ok) {
 			problems.push({
@@ -80,19 +106,27 @@ export function parseJsonl(text: string): JsonlParseResult {
 		records.push(parsed.value);
 	}
 
-	return { records, problems };
+	return { records, tombstones, problems };
 }
 
 /**
- * Serialize records to JSONL: one compact JSON object per line, terminated by a
- * trailing newline. `parseJsonl(serializeJsonl(records))` round-trips the
- * records (the trailing newline is parsed as a skipped blank line).
+ * Serialize records and any deletion tombstones to JSONL: one compact JSON
+ * object per line, terminated by a trailing newline. Records come first, then
+ * tombstones. `parseJsonl(serializeJsonl(records, tombstones))` round-trips both
+ * (the trailing newline is parsed as a skipped blank line).
  */
-export function serializeJsonl(records: readonly BookmarkRecord[]): string {
-	if (records.length === 0) {
+export function serializeJsonl(
+	records: readonly BookmarkRecord[],
+	tombstones: readonly Tombstone[] = [],
+): string {
+	const lines = [
+		...records.map((record) => JSON.stringify(serializeBookmarkRecord(record))),
+		...tombstones.map((tombstone) =>
+			JSON.stringify(serializeTombstone(tombstone)),
+		),
+	];
+	if (lines.length === 0) {
 		return "";
 	}
-	return `${records
-		.map((record) => JSON.stringify(serializeBookmarkRecord(record)))
-		.join("\n")}\n`;
+	return `${lines.join("\n")}\n`;
 }

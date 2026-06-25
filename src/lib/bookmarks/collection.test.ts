@@ -187,15 +187,45 @@ describe("Bookmarks AI status transitions", () => {
 });
 
 describe("Bookmarks.delete", () => {
-	it("removes by canonical URL and by id", () => {
+	const at = isoTimestamp("2026-06-26T00:00:00.000Z");
+
+	it("removes by canonical URL and by id, leaving a tombstone", () => {
 		const set = Bookmarks.from([record({ id: "bm-1" })]);
-		expect(set.delete(CANON_A).size).toBe(0);
-		expect(set.deleteById("bm-1" as unknown as BookmarkId).size).toBe(0);
+		const byUrl = set.delete(CANON_A, at);
+		expect(byUrl.size).toBe(0);
+		expect(byUrl.get(CANON_A)).toBeUndefined();
+		expect(byUrl.tombstones().map((t) => t.canonicalUrl)).toEqual([CANON_A]);
+
+		const byId = set.deleteById("bm-1" as unknown as BookmarkId, at);
+		expect(byId.size).toBe(0);
+		expect(byId.tombstones()).toHaveLength(1);
 	});
 
-	it("is a no-op for unknown keys", () => {
+	it("is a no-op for unknown keys and records no tombstone", () => {
 		const set = Bookmarks.from([record()]);
-		expect(set.delete(canon("https://example.com/z")).size).toBe(1);
+		const after = set.delete(canon("https://example.com/z"), at);
+		expect(after.size).toBe(1);
+		expect(after.tombstones()).toHaveLength(0);
+	});
+
+	it("does not move an existing tombstone's deletedAt backward", () => {
+		const set = Bookmarks.from([record()]).delete(CANON_A, at);
+		const earlier = set.delete(CANON_A, isoTimestamp("2026-06-25T00:00:00.000Z"));
+		expect(earlier.tombstones()[0].deletedAt).toBe("2026-06-26T00:00:00.000Z");
+	});
+
+	it("re-saving a deleted URL clears its tombstone", () => {
+		const deleted = Bookmarks.from([record()]).delete(CANON_A, at);
+		const resaved = deleted.upsert(
+			{ url: "https://example.com/a", title: "Back" },
+			ctx("bm-2", "2026-06-27T00:00:00.000Z"),
+		);
+		expect(resaved.ok).toBe(true);
+		if (resaved.ok) {
+			expect(resaved.value.size).toBe(1);
+			expect(resaved.value.tombstones()).toHaveLength(0);
+			expect(resaved.value.get(CANON_A)?.title).toBe("Back");
+		}
 	});
 });
 
@@ -264,6 +294,76 @@ describe("Bookmarks.mergeRemote", () => {
 		// Lower id ("aaa") wins regardless of merge direction.
 		expect(a.get(canonA)?.title).toBe("remote");
 		expect(b.get(canonA)?.title).toBe("remote");
+	});
+});
+
+describe("Bookmarks.mergeRemote tombstones (delete propagation)", () => {
+	// A device deletes a record locally; the remote still holds the live record.
+	function deletedLocally(deletedAt: string) {
+		const remote = Bookmarks.from([
+			record({ updatedAt: "2026-06-25T00:00:00.000Z" }),
+		]);
+		const local = Bookmarks.from([
+			record({ updatedAt: "2026-06-25T00:00:00.000Z" }),
+		]).delete(CANON_A, isoTimestamp(deletedAt));
+		return { local, remote };
+	}
+
+	it("a deletion survives a merge with a remote that still has the record", () => {
+		const { local, remote } = deletedLocally("2026-06-25T01:00:00.000Z");
+		const merged = local.mergeRemote(remote);
+		expect(merged.size).toBe(0);
+		expect(merged.get(CANON_A)).toBeUndefined();
+		expect(merged.tombstones()).toHaveLength(1);
+	});
+
+	it("is order-independent: the remote merging a local delete also drops it", () => {
+		const { local, remote } = deletedLocally("2026-06-25T01:00:00.000Z");
+		// Simulate the other device pulling our tombstone in.
+		const onOtherDevice = remote.mergeRemote(local);
+		expect(onOtherDevice.size).toBe(0);
+		expect(onOtherDevice.tombstones()).toHaveLength(1);
+	});
+
+	it("a strictly newer explicit update wins over an older tombstone", () => {
+		// deletedAt is older than the remote record's updatedAt → resurrection is
+		// the documented, intended behavior.
+		const remote = Bookmarks.from([
+			record({ title: "edited", updatedAt: "2026-06-25T05:00:00.000Z" }),
+		]);
+		const local = Bookmarks.from([record()]).delete(
+			CANON_A,
+			isoTimestamp("2026-06-25T01:00:00.000Z"),
+		);
+		const merged = local.mergeRemote(remote);
+		expect(merged.size).toBe(1);
+		expect(merged.get(CANON_A)?.title).toBe("edited");
+		expect(merged.tombstones()).toHaveLength(0);
+	});
+
+	it("a tie between delete and update keeps the deletion durable", () => {
+		const sameInstant = "2026-06-25T03:00:00.000Z";
+		const remote = Bookmarks.from([record({ updatedAt: sameInstant })]);
+		const local = Bookmarks.from([record({ updatedAt: sameInstant })]).delete(
+			CANON_A,
+			isoTimestamp(sameInstant),
+		);
+		const merged = local.mergeRemote(remote);
+		expect(merged.size).toBe(0);
+		expect(merged.tombstones()).toHaveLength(1);
+	});
+
+	it("merging two tombstones keeps the later deletedAt", () => {
+		const earlier = Bookmarks.from([record()]).delete(
+			CANON_A,
+			isoTimestamp("2026-06-25T01:00:00.000Z"),
+		);
+		const later = Bookmarks.from([record()]).delete(
+			CANON_A,
+			isoTimestamp("2026-06-25T09:00:00.000Z"),
+		);
+		const merged = earlier.mergeRemote(later);
+		expect(merged.tombstones()[0].deletedAt).toBe("2026-06-25T09:00:00.000Z");
 	});
 });
 

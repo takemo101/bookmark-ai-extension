@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseJsonl, serializeJsonl } from "./jsonl";
 import { type BookmarkRecordV1 } from "./record";
+import { type TombstoneV1 } from "./tombstone";
 
 function line(overrides: Partial<BookmarkRecordV1> = {}): string {
 	const record: BookmarkRecordV1 = {
@@ -17,6 +18,17 @@ function line(overrides: Partial<BookmarkRecordV1> = {}): string {
 		...overrides,
 	};
 	return JSON.stringify(record);
+}
+
+function tombstoneLine(overrides: Partial<TombstoneV1> = {}): string {
+	const tombstone: TombstoneV1 = {
+		schemaVersion: 1,
+		kind: "tombstone",
+		canonicalUrl: "https://example.com/a",
+		deletedAt: "2026-06-26T00:00:00.000Z",
+		...overrides,
+	};
+	return JSON.stringify(tombstone);
 }
 
 describe("parseJsonl", () => {
@@ -65,6 +77,29 @@ describe("parseJsonl", () => {
 		expect(result.problems[0].kind).toBe("invalid-field");
 	});
 
+	it("parses tombstone lines separately from records", () => {
+		const text = [line(), tombstoneLine({ canonicalUrl: "https://example.com/b" })].join(
+			"\n",
+		);
+		const result = parseJsonl(text);
+		expect(result.records).toHaveLength(1);
+		expect(result.tombstones).toHaveLength(1);
+		expect(result.tombstones[0].canonicalUrl).toBe("https://example.com/b");
+		expect(result.problems).toHaveLength(0);
+	});
+
+	it("reports a malformed tombstone without dropping the rest of the file", () => {
+		const text = [
+			line(),
+			tombstoneLine({ deletedAt: "nope" }),
+			line({ id: "bm-2", url: "https://example.com/b", canonicalUrl: "https://example.com/b" }),
+		].join("\n");
+		const result = parseJsonl(text);
+		expect(result.records).toHaveLength(2);
+		expect(result.tombstones).toHaveLength(0);
+		expect(result.problems.map((p) => p.line)).toEqual([2]);
+	});
+
 	it("keeps good records while quarantining bad lines", () => {
 		const text = [
 			line({ id: "good-1" }),
@@ -100,5 +135,22 @@ describe("serializeJsonl", () => {
 
 	it("serializes an empty collection to an empty string", () => {
 		expect(serializeJsonl([])).toBe("");
+	});
+
+	it("round-trips records and tombstones together", () => {
+		const parsed = parseJsonl(
+			[line(), tombstoneLine({ canonicalUrl: "https://example.com/b" })].join("\n"),
+		);
+		const serialized = serializeJsonl(parsed.records, parsed.tombstones);
+		const reparsed = parseJsonl(serialized);
+		expect(reparsed.problems).toHaveLength(0);
+		expect(reparsed.records).toEqual(parsed.records);
+		expect(reparsed.tombstones).toEqual(parsed.tombstones);
+	});
+
+	it("serializes only tombstones when there are no records", () => {
+		const serialized = serializeJsonl([], parseJsonl(tombstoneLine()).tombstones);
+		expect(serialized.endsWith("\n")).toBe(true);
+		expect(parseJsonl(serialized).tombstones).toHaveLength(1);
 	});
 });

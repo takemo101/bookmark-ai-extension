@@ -18,6 +18,7 @@ import {
 	type RecordError,
 	createBookmarkRecord,
 } from "./record";
+import { type Tombstone, createTombstone } from "./tombstone";
 import { canonicalizeUrl, type UrlError } from "./url";
 import {
 	type BookmarkId,
@@ -82,27 +83,71 @@ export type FilterCriteria = {
 };
 
 export class Bookmarks {
-	// Keyed by canonical URL, the upsert/merge identity.
+	// Keyed by canonical URL, the upsert/merge identity. A URL is either live (in
+	// `byUrl`) or deleted (in `tombstoneByUrl`), never both — the constructors and
+	// merge keep the two maps disjoint by URL.
 	private readonly byUrl: ReadonlyMap<CanonicalUrl, BookmarkRecord>;
+	private readonly tombstoneByUrl: ReadonlyMap<CanonicalUrl, Tombstone>;
 
-	private constructor(byUrl: ReadonlyMap<CanonicalUrl, BookmarkRecord>) {
+	private constructor(
+		byUrl: ReadonlyMap<CanonicalUrl, BookmarkRecord>,
+		tombstoneByUrl: ReadonlyMap<CanonicalUrl, Tombstone> = new Map(),
+	) {
 		this.byUrl = byUrl;
+		this.tombstoneByUrl = tombstoneByUrl;
 	}
 
 	static empty(): Bookmarks {
-		return new Bookmarks(new Map());
+		return new Bookmarks(new Map(), new Map());
 	}
 
 	/**
-	 * Build from already-valid records. Later records win when two share a
-	 * canonical URL, so callers control precedence by ordering.
+	 * Build from already-valid records and (optionally) deletion tombstones. Later
+	 * records win when two share a canonical URL, so callers control precedence by
+	 * ordering. When a URL has both a record and a tombstone, the documented
+	 * delete-vs-update rule (see {@link mergeRemote}) decides which survives, so
+	 * the result keeps the live and deleted sets disjoint.
 	 */
-	static from(records: Iterable<BookmarkRecord>): Bookmarks {
-		const map = new Map<CanonicalUrl, BookmarkRecord>();
+	static from(
+		records: Iterable<BookmarkRecord>,
+		tombstones: Iterable<Tombstone> = [],
+	): Bookmarks {
+		const recordByUrl = new Map<CanonicalUrl, BookmarkRecord>();
 		for (const record of records) {
-			map.set(record.canonicalUrl, record);
+			recordByUrl.set(record.canonicalUrl, record);
 		}
-		return new Bookmarks(map);
+		const tombstoneByUrl = new Map<CanonicalUrl, Tombstone>();
+		for (const tombstone of tombstones) {
+			const prev = tombstoneByUrl.get(tombstone.canonicalUrl);
+			if (
+				prev === undefined ||
+				compareIsoTimestamp(tombstone.deletedAt, prev.deletedAt) >= 0
+			) {
+				tombstoneByUrl.set(tombstone.canonicalUrl, tombstone);
+			}
+		}
+
+		const byUrl = new Map<CanonicalUrl, BookmarkRecord>();
+		const liveTombstones = new Map<CanonicalUrl, Tombstone>();
+		for (const [url, record] of recordByUrl) {
+			const tombstone = tombstoneByUrl.get(url);
+			if (tombstone === undefined) {
+				byUrl.set(url, record);
+				continue;
+			}
+			const winner = resolveRecordVsTombstone(record, tombstone);
+			if (isTombstone(winner)) {
+				liveTombstones.set(url, winner);
+			} else {
+				byUrl.set(url, winner);
+			}
+		}
+		for (const [url, tombstone] of tombstoneByUrl) {
+			if (!recordByUrl.has(url)) {
+				liveTombstones.set(url, tombstone);
+			}
+		}
+		return new Bookmarks(byUrl, liveTombstones);
 	}
 
 	get size(): number {
@@ -113,15 +158,41 @@ export class Bookmarks {
 		return this.byUrl.get(canonicalUrl);
 	}
 
-	/** All records, most-recently-updated first. */
+	/** All records, most-recently-updated first. Tombstones are not records. */
 	toArray(): BookmarkRecord[] {
 		return [...this.byUrl.values()].sort(byRecency);
+	}
+
+	/**
+	 * Active deletion tombstones, deterministically ordered, for serialization to
+	 * Drive/cache. They are not part of {@link toArray}/{@link size}; only the
+	 * persistence and merge layers need them.
+	 */
+	tombstones(): Tombstone[] {
+		return [...this.tombstoneByUrl.values()].sort((a, b) => {
+			if (a.canonicalUrl !== b.canonicalUrl) {
+				return a.canonicalUrl < b.canonicalUrl ? -1 : 1;
+			}
+			return compareIsoTimestamp(a.deletedAt, b.deletedAt);
+		});
+	}
+
+	/** The single entry a URL resolves to: a live record, a tombstone, or nothing. */
+	private entryFor(canonicalUrl: CanonicalUrl): Entry | undefined {
+		return this.byUrl.get(canonicalUrl) ?? this.tombstoneByUrl.get(canonicalUrl);
 	}
 
 	private with(record: BookmarkRecord): Bookmarks {
 		const next = new Map(this.byUrl);
 		next.set(record.canonicalUrl, record);
-		return new Bookmarks(next);
+		// Writing a live record supersedes any local tombstone for the same URL
+		// (e.g. re-saving a page that was previously deleted on this device).
+		if (!this.tombstoneByUrl.has(record.canonicalUrl)) {
+			return new Bookmarks(next, this.tombstoneByUrl);
+		}
+		const nextTombstones = new Map(this.tombstoneByUrl);
+		nextTombstones.delete(record.canonicalUrl);
+		return new Bookmarks(next, nextTombstones);
 	}
 
 	/**
@@ -260,42 +331,73 @@ export class Bookmarks {
 		return this.transition(canonicalUrl, "failed", now, reason);
 	}
 
-	delete(canonicalUrl: CanonicalUrl): Bookmarks {
-		if (!this.byUrl.has(canonicalUrl)) {
+	/**
+	 * Delete by canonical URL, leaving a tombstone stamped `now` so the deletion
+	 * propagates through {@link mergeRemote} instead of being undone by it. A URL
+	 * we have never seen (no live record, no existing tombstone) is a no-op, as
+	 * before. An existing tombstone is refreshed forward, never backward.
+	 */
+	delete(canonicalUrl: CanonicalUrl, now: IsoTimestamp): Bookmarks {
+		const existingTombstone = this.tombstoneByUrl.get(canonicalUrl);
+		if (!this.byUrl.has(canonicalUrl) && existingTombstone === undefined) {
 			return this;
 		}
+		const deletedAt =
+			existingTombstone === undefined
+				? now
+				: maxIsoTimestamp(existingTombstone.deletedAt, now);
 		const next = new Map(this.byUrl);
 		next.delete(canonicalUrl);
-		return new Bookmarks(next);
+		const nextTombstones = new Map(this.tombstoneByUrl);
+		nextTombstones.set(canonicalUrl, createTombstone(canonicalUrl, deletedAt));
+		return new Bookmarks(next, nextTombstones);
 	}
 
-	deleteById(id: BookmarkId): Bookmarks {
+	deleteById(id: BookmarkId, now: IsoTimestamp): Bookmarks {
 		for (const record of this.byUrl.values()) {
 			if (record.id === id) {
-				return this.delete(record.canonicalUrl);
+				return this.delete(record.canonicalUrl, now);
 			}
 		}
 		return this;
 	}
 
 	/**
-	 * Merge remote records into this set by canonical URL (revision-conflict
-	 * resolution). For a URL present on both sides the latest `updatedAt` wins
-	 * its field values, the earliest `createdAt` is preserved, and ties break
-	 * deterministically by id. The result is independent of argument order
-	 * except for the deterministic tie-break.
+	 * Merge remote into this set by canonical URL, resolving record/record,
+	 * tombstone/tombstone, and the delete-vs-update conflict (revision-conflict
+	 * resolution). The result is independent of argument order except for the
+	 * deterministic id tie-break.
+	 *
+	 * Rules (docs/design.md "Drive Write and Conflict Strategy"):
+	 *   - record vs record  → latest `updatedAt` wins fields, earliest `createdAt`
+	 *                          is preserved, ties break by id;
+	 *   - tombstone vs tombstone → the later `deletedAt` survives;
+	 *   - record vs tombstone → the tombstone wins unless the record's `updatedAt`
+	 *                          is strictly newer than the tombstone's `deletedAt`
+	 *                          (a newer explicit update intentionally resurrects).
+	 *                          A tie favors the deletion, so a delete is durable.
 	 */
 	mergeRemote(remote: Bookmarks): Bookmarks {
-		const next = new Map(this.byUrl);
-		for (const incoming of remote.byUrl.values()) {
-			const local = next.get(incoming.canonicalUrl);
-			if (!local) {
-				next.set(incoming.canonicalUrl, incoming);
+		const urls = new Set<CanonicalUrl>([
+			...this.byUrl.keys(),
+			...this.tombstoneByUrl.keys(),
+			...remote.byUrl.keys(),
+			...remote.tombstoneByUrl.keys(),
+		]);
+		const nextRecords = new Map<CanonicalUrl, BookmarkRecord>();
+		const nextTombstones = new Map<CanonicalUrl, Tombstone>();
+		for (const url of urls) {
+			const winner = resolveEntry(this.entryFor(url), remote.entryFor(url));
+			if (winner === undefined) {
 				continue;
 			}
-			next.set(incoming.canonicalUrl, resolveConflict(local, incoming));
+			if (isTombstone(winner)) {
+				nextTombstones.set(url, winner);
+			} else {
+				nextRecords.set(url, winner);
+			}
 		}
-		return new Bookmarks(next);
+		return new Bookmarks(nextRecords, nextTombstones);
 	}
 
 	/** Case-insensitive substring search over title/url/description/genre/tags. */
@@ -385,6 +487,52 @@ export class Bookmarks {
 		const sorted = [...this.byUrl.values()].sort(byOldestCreated);
 		return direction === "asc" ? sorted : sorted.reverse();
 	}
+}
+
+/** What a canonical URL resolves to inside the collection. */
+type Entry = BookmarkRecord | Tombstone;
+
+function isTombstone(entry: Entry): entry is Tombstone {
+	return (entry as Tombstone).kind === "tombstone";
+}
+
+/**
+ * Resolve the entry for one canonical URL across the two sides of a merge. Each
+ * side contributes at most one entry (the collection keeps live and deleted
+ * disjoint), so this dispatches on the four combinations.
+ */
+function resolveEntry(left?: Entry, right?: Entry): Entry | undefined {
+	if (left === undefined) return right;
+	if (right === undefined) return left;
+	const leftIsTombstone = isTombstone(left);
+	const rightIsTombstone = isTombstone(right);
+	if (leftIsTombstone && rightIsTombstone) {
+		return compareIsoTimestamp(left.deletedAt, right.deletedAt) >= 0
+			? left
+			: right;
+	}
+	if (!leftIsTombstone && !rightIsTombstone) {
+		return resolveConflict(left, right);
+	}
+	const tombstone = leftIsTombstone ? (left as Tombstone) : (right as Tombstone);
+	const record = leftIsTombstone
+		? (right as BookmarkRecord)
+		: (left as BookmarkRecord);
+	return resolveRecordVsTombstone(record, tombstone);
+}
+
+/**
+ * Delete vs update: the record survives only if its `updatedAt` is strictly
+ * newer than the tombstone's `deletedAt`; otherwise the deletion stands (a tie
+ * keeps the delete durable).
+ */
+function resolveRecordVsTombstone(
+	record: BookmarkRecord,
+	tombstone: Tombstone,
+): Entry {
+	return compareIsoTimestamp(record.updatedAt, tombstone.deletedAt) > 0
+		? record
+		: tombstone;
 }
 
 function resolveConflict(

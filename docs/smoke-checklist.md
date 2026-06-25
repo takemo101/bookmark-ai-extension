@@ -119,7 +119,10 @@ rows as **N/A** when run on a channel without the Prompt API.
   own tab (popup) but not for an arbitrary record opened from the options page in
   a different tab. This is intentional to keep permissions narrow (no `tabs`
   permission). Re-analyze from the page itself, or save it again.
-- Deleting a bookmark updates the local cache and is written to Drive, but the
-  MVP repository merges by union of canonical URLs, so a subsequent `Sync now`
-  from another device that still has the record can resurrect it. Durable
-  cross-device deletion needs a repository tombstone capability (out of scope).
+- Deleting a bookmark writes a deletion **tombstone** to Drive (and the local
+  cache), so the deletion is durable: a later `Sync now`, or a sync from another
+  device that still holds the record, does **not** resurrect it. The one
+  intended exception is when another device has a *strictly newer* explicit
+  update for the same URL, which wins by the documented delete-vs-update rule
+  (see `docs/design.md` "Delete vs. update conflict rules"). Tombstones are not
+  pruned in the MVP, so the JSONL file retains one line per past deletion.

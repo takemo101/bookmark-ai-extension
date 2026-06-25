@@ -86,7 +86,7 @@ class FakeRepository implements BookmarkRepositoryPort {
 		if (this.failKind) {
 			return driveErr({ kind: this.failKind, message: "save boom" });
 		}
-		// Union merge, exactly like DriveBookmarkRepository.
+		// Domain merge (tombstone-aware), exactly like DriveBookmarkRepository.
 		this.remote = local.mergeRemote(this.remote);
 		this.revision += 1;
 		return driveOk(this.snapshot());
@@ -382,6 +382,53 @@ describe("createBookmarkApp", () => {
 			expect(result.ok).toBe(true);
 			if (!result.ok) return;
 			expect(result.value.bookmarks.size).toBe(0);
+		});
+
+		it("does not resurrect a deleted bookmark on a later syncFromDrive", async () => {
+			const { app } = makeHarness();
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+
+			const deleted = await app.deleteBookmark(canonicalUrl);
+			expect(deleted.ok).toBe(true);
+
+			// Pull the authoritative store back from Drive: the deletion must hold,
+			// which is the whole point of durable cross-device deletion.
+			const synced = await app.syncFromDrive();
+			expect(synced.ok).toBe(true);
+			if (!synced.ok) return;
+			expect(synced.value.bookmarks.size).toBe(0);
+			expect(synced.value.bookmarks.get(canonicalUrl)).toBeUndefined();
+		});
+
+		it("propagates a deletion to a second device that still holds the record", async () => {
+			// Device A saves, syncing the record into shared Drive state.
+			const { app, repo } = makeHarness();
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			if (!saved.ok) return;
+			const canonicalUrl = saved.value.record.canonicalUrl;
+
+			// Device B holds the same live record in its own cache.
+			const deviceB = makeHarness({
+				remote: repo.remote,
+				cache: { bookmarks: repo.remote, sync: { status: "synced" } },
+			});
+
+			// Device A deletes; the tombstone lands in shared Drive state, which we
+			// then hand to device B's Drive (Bookmarks is immutable, so this models
+			// device B downloading the file device A just wrote).
+			const deleted = await app.deleteBookmark(canonicalUrl);
+			expect(deleted.ok).toBe(true);
+			deviceB.repo.remote = repo.remote;
+
+			// Device B syncs and the record is gone for it too.
+			const synced = await deviceB.app.syncFromDrive();
+			expect(synced.ok).toBe(true);
+			if (!synced.ok) return;
+			expect(synced.value.bookmarks.get(canonicalUrl)).toBeUndefined();
 		});
 	});
 

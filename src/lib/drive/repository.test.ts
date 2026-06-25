@@ -324,6 +324,48 @@ describe("DriveBookmarkRepository", () => {
 			expect(uploaded[0].title).toBe("new");
 		});
 
+		it("propagates a deletion: writes a tombstone and drops the record from Drive", async () => {
+			// Drive still holds the record this device deleted locally.
+			const remote = makeBookmarks([
+				{ url: "https://gone.test/", title: "G", now: "2026-01-01T00:00:00Z", id: "g" },
+			]);
+			const client = new FakeDriveClient({
+				folderId: "folder-1",
+				content: jsonlOf(remote),
+			});
+			const canonicalUrl = remote.toArray()[0].canonicalUrl;
+			// Deleted after the record's updatedAt, so the tombstone wins the merge.
+			const local = remote.delete(
+				canonicalUrl,
+				isoTimestamp("2026-02-01T00:00:00Z"),
+			);
+			const repo = new DriveBookmarkRepository(client);
+
+			const result = await repo.save(local);
+
+			expect(result.ok).toBe(true);
+			// The uploaded file no longer carries the live record...
+			const uploaded = parseJsonl(client.log.uploads[0]);
+			expect(uploaded.records).toHaveLength(0);
+			// ...but does carry a tombstone, so another device cannot resurrect it.
+			expect(uploaded.tombstones.map((t) => t.canonicalUrl)).toEqual([
+				canonicalUrl,
+			]);
+
+			// A second device loading this Drive state sees the record gone.
+			const otherClient = new FakeDriveClient({
+				folderId: "folder-1",
+				content: client.log.uploads[0],
+			});
+			const otherRepo = new DriveBookmarkRepository(otherClient);
+			const loaded = await otherRepo.load();
+			expect(loaded.ok).toBe(true);
+			if (loaded.ok) {
+				expect(loaded.value.bookmarks.size).toBe(0);
+				expect(loaded.value.bookmarks.get(canonicalUrl)).toBeUndefined();
+			}
+		});
+
 		it("gives up with a conflict error when the revision never settles", async () => {
 			const remote = makeBookmarks([
 				{ url: "https://remote.test/", title: "R", now: "2026-01-01T00:00:00Z", id: "r" },
