@@ -37,6 +37,8 @@ export type {
 	ExtractionTarget,
 	TabProviderPort,
 	ActiveTab,
+	SaveStage,
+	SaveProgress,
 	Clock,
 	IdGenerator,
 	Logger,

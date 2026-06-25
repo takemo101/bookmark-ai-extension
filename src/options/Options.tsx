@@ -256,17 +256,26 @@ function CenterList({
 			</section>
 		);
 	}
+	// Action banners must survive a filter that excludes every row after a delete
+	// or re-analyze, so they render above the no-matches notice too — otherwise the
+	// only feedback for "deleted the last matching row" would silently vanish.
+	const banners = (
+		<>
+			{view.actionError ? <Banner tone="danger" text={view.actionError} /> : null}
+			{view.actionNotice ? <Banner tone="warn" text={view.actionNotice} /> : null}
+		</>
+	);
 	if (view.noMatches) {
 		return (
-			<section>
+			<section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+				{banners}
 				<Notice text="No bookmarks match the current search and filters." />
 			</section>
 		);
 	}
 	return (
 		<section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-			{view.actionError ? <Banner tone="danger" text={view.actionError} /> : null}
-			{view.actionNotice ? <Banner tone="warn" text={view.actionNotice} /> : null}
+			{banners}
 			<ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
 				{view.rows.map((item) => (
 					<li key={item.canonicalUrl}>

@@ -85,6 +85,24 @@ export interface TabProviderPort {
 	activeTab(): Promise<Result<ActiveTab, AppError>>;
 }
 
+/**
+ * One step of the documented Save Flow (docs/design.md "Save Flow"). The use
+ * cases emit these as the corresponding work actually begins, so the popup trail
+ * reflects genuine per-stage timing rather than a coarse guess:
+ *   - `saving`     → the pending record is being persisted to cache/Drive;
+ *   - `extracting` → the page excerpt is being extracted;
+ *   - `analyzing`  → the Prompt API is analyzing the excerpt;
+ *   - `syncing`    → the final record is being synced to Drive.
+ */
+export type SaveStage = "saving" | "extracting" | "analyzing" | "syncing";
+
+/**
+ * Optional progress reporter for the save/re-analyze flow. The popup passes one
+ * to drive its trail; the options page omits it. Reporting is best-effort and
+ * must never affect the flow's result.
+ */
+export type SaveProgress = (stage: SaveStage) => void;
+
 /** A clock, so use cases never read `Date` directly and stay deterministic. */
 export interface Clock {
 	now(): IsoTimestamp;

@@ -105,19 +105,25 @@ export interface PopupEnvironmentProvider {
  * Adapt the `app/*` {@link BookmarkApp} (plus a {@link PopupEnvironmentProvider})
  * into the {@link PopupUseCases} the controller consumes.
  *
- * `BookmarkApp.saveCurrentTab` / `reAnalyzeBookmark` are atomic — they run
- * extract → analyze → sync internally and resolve once — so this adapter emits a
- * coarse, best-effort progress sequence (`saving` then `analyzing`) around the
- * call rather than fabricating precise per-stage timing. The controller finalizes
- * the trail from the returned {@link SaveOutcome}. Real per-stage events are a
- * MIK-009 concern; the observer signature is already in place for them.
+ * The app's `saveCurrentTab` / `reAnalyzeBookmark` accept a progress reporter and
+ * fire it as each stage genuinely begins (saving → extracting → analyzing →
+ * syncing), so this adapter forwards those real events to the controller's
+ * {@link ProgressObserver} rather than fabricating a coarse sequence. The app's
+ * {@link SaveStage} string union is identical to the popup's, so the mapping is a
+ * direct relay. The controller finalizes the trail from the returned
+ * {@link SaveOutcome}.
  */
 export function createPopupUseCases(
 	app: BookmarkApp,
 	env: PopupEnvironmentProvider,
 ): PopupUseCases {
-	function emit(onProgress: ProgressObserver | undefined, stage: SaveStage) {
-		onProgress?.({ stage });
+	function relay(
+		onProgress: ProgressObserver | undefined,
+	): ((stage: SaveStage) => void) | undefined {
+		if (!onProgress) {
+			return undefined;
+		}
+		return (stage) => onProgress({ stage });
 	}
 
 	return {
@@ -134,14 +140,10 @@ export function createPopupUseCases(
 			return app.syncFromDrive();
 		},
 		async saveCurrentTab(onProgress) {
-			emit(onProgress, "saving");
-			emit(onProgress, "analyzing");
-			return app.saveCurrentTab();
+			return app.saveCurrentTab(relay(onProgress));
 		},
 		async reAnalyzeBookmark(canonicalUrl, onProgress) {
-			emit(onProgress, "saving");
-			emit(onProgress, "analyzing");
-			return app.reAnalyzeBookmark(canonicalUrl);
+			return app.reAnalyzeBookmark(canonicalUrl, relay(onProgress));
 		},
 	};
 }
