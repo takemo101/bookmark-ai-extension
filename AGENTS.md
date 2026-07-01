@@ -123,9 +123,14 @@ Use durable docs as the source of truth. Before changing behavior, architecture,
 2. `docs/implementation-principles.md` — implementation principles adapted from okite-ai skills.
 3. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
 4. `docs/privacy-policy.md` — privacy constraints and policy draft.
-5. `docs/handoff.md` — historical handoff only.
+5. `docs/local-unpacked-setup.md` — detailed local unpacked-extension
+   setup and dev OAuth guide.
+6. `docs/handoff.md` — historical handoff only.
 
-If `docs/handoff.md` conflicts with newer durable docs, trust `docs/design.md`, `docs/implementation-principles.md`, `docs/publication.md`, and `docs/privacy-policy.md`.
+If `docs/handoff.md` conflicts with newer durable docs, trust
+`docs/design.md`, `docs/implementation-principles.md`,
+`docs/publication.md`, `docs/privacy-policy.md`, and
+`docs/local-unpacked-setup.md`.
 
 ## MVP scope guard
 
