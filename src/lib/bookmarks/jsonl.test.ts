@@ -33,9 +33,14 @@ function tombstoneLine(overrides: Partial<TombstoneV1> = {}): string {
 
 describe("parseJsonl", () => {
 	it("parses valid lines into records", () => {
-		const text = [line({ id: "bm-1" }), line({ id: "bm-2", url: "https://example.com/b", canonicalUrl: "https://example.com/b" })].join(
-			"\n",
-		);
+		const text = [
+			line({ id: "bm-1" }),
+			line({
+				id: "bm-2",
+				url: "https://example.com/b",
+				canonicalUrl: "https://example.com/b",
+			}),
+		].join("\n");
 		const result = parseJsonl(text);
 		expect(result.records).toHaveLength(2);
 		expect(result.problems).toHaveLength(0);
@@ -78,9 +83,10 @@ describe("parseJsonl", () => {
 	});
 
 	it("parses tombstone lines separately from records", () => {
-		const text = [line(), tombstoneLine({ canonicalUrl: "https://example.com/b" })].join(
-			"\n",
-		);
+		const text = [
+			line(),
+			tombstoneLine({ canonicalUrl: "https://example.com/b" }),
+		].join("\n");
 		const result = parseJsonl(text);
 		expect(result.records).toHaveLength(1);
 		expect(result.tombstones).toHaveLength(1);
@@ -92,7 +98,11 @@ describe("parseJsonl", () => {
 		const text = [
 			line(),
 			tombstoneLine({ deletedAt: "nope" }),
-			line({ id: "bm-2", url: "https://example.com/b", canonicalUrl: "https://example.com/b" }),
+			line({
+				id: "bm-2",
+				url: "https://example.com/b",
+				canonicalUrl: "https://example.com/b",
+			}),
 		].join("\n");
 		const result = parseJsonl(text);
 		expect(result.records).toHaveLength(2);
@@ -105,7 +115,11 @@ describe("parseJsonl", () => {
 			line({ id: "good-1" }),
 			"garbage",
 			line({ id: "bad", aiStatus: "???" as "pending" }),
-			line({ id: "good-2", url: "https://example.com/c", canonicalUrl: "https://example.com/c" }),
+			line({
+				id: "good-2",
+				url: "https://example.com/c",
+				canonicalUrl: "https://example.com/c",
+			}),
 		].join("\n");
 		const result = parseJsonl(text);
 		expect(result.records.map((r) => r.id)).toEqual(["good-1", "good-2"]);
@@ -117,7 +131,11 @@ describe("serializeJsonl", () => {
 	it("round-trips records through serialize → parse", () => {
 		const text = [
 			line({ id: "bm-1" }),
-			line({ id: "bm-2", url: "https://example.com/b", canonicalUrl: "https://example.com/b" }),
+			line({
+				id: "bm-2",
+				url: "https://example.com/b",
+				canonicalUrl: "https://example.com/b",
+			}),
 		].join("\n");
 		const parsed = parseJsonl(text);
 		const serialized = serializeJsonl(parsed.records);
@@ -139,7 +157,9 @@ describe("serializeJsonl", () => {
 
 	it("round-trips records and tombstones together", () => {
 		const parsed = parseJsonl(
-			[line(), tombstoneLine({ canonicalUrl: "https://example.com/b" })].join("\n"),
+			[line(), tombstoneLine({ canonicalUrl: "https://example.com/b" })].join(
+				"\n",
+			),
 		);
 		const serialized = serializeJsonl(parsed.records, parsed.tombstones);
 		const reparsed = parseJsonl(serialized);
@@ -149,7 +169,10 @@ describe("serializeJsonl", () => {
 	});
 
 	it("serializes only tombstones when there are no records", () => {
-		const serialized = serializeJsonl([], parseJsonl(tombstoneLine()).tombstones);
+		const serialized = serializeJsonl(
+			[],
+			parseJsonl(tombstoneLine()).tombstones,
+		);
 		expect(serialized.endsWith("\n")).toBe(true);
 		expect(parseJsonl(serialized).tombstones).toHaveLength(1);
 	});

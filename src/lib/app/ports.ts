@@ -16,11 +16,7 @@
  *   - {@link PageExtractorPort} returns already-parsed {@link ExtractedPage}; use
  *     cases never run extraction algorithms themselves.
  */
-import type {
-	BookmarkId,
-	Bookmarks,
-	IsoTimestamp,
-} from "../bookmarks/index";
+import type { BookmarkId, Bookmarks, IsoTimestamp } from "../bookmarks/index";
 import type {
 	DriveLocation,
 	RepositoryError,

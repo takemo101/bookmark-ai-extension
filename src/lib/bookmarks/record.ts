@@ -87,7 +87,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isAiStatus(value: unknown): value is AiStatus {
 	return (
-		typeof value === "string" && (AI_STATUSES as readonly string[]).includes(value)
+		typeof value === "string" &&
+		(AI_STATUSES as readonly string[]).includes(value)
 	);
 }
 
@@ -146,7 +147,10 @@ export function parseBookmarkRecord(
 	}
 	const title = value.title.trim().length > 0 ? value.title.trim() : url.value;
 
-	if (value.description !== undefined && typeof value.description !== "string") {
+	if (
+		value.description !== undefined &&
+		typeof value.description !== "string"
+	) {
 		return err(fieldError("description", "description must be a string"));
 	}
 	const description =
@@ -170,13 +174,19 @@ export function parseBookmarkRecord(
 
 	if (!isAiStatus(value.aiStatus)) {
 		return err(
-			fieldError("aiStatus", `unknown aiStatus: ${JSON.stringify(value.aiStatus)}`),
+			fieldError(
+				"aiStatus",
+				`unknown aiStatus: ${JSON.stringify(value.aiStatus)}`,
+			),
 		);
 	}
 
 	if (value.aiModel !== undefined && value.aiModel !== AI_MODEL) {
 		return err(
-			fieldError("aiModel", `unknown aiModel: ${JSON.stringify(value.aiModel)}`),
+			fieldError(
+				"aiModel",
+				`unknown aiModel: ${JSON.stringify(value.aiModel)}`,
+			),
 		);
 	}
 
@@ -242,7 +252,8 @@ export function serializeBookmarkRecord(
 		createdAt: record.createdAt,
 		updatedAt: record.updatedAt,
 	};
-	if (record.description !== undefined) serialized.description = record.description;
+	if (record.description !== undefined)
+		serialized.description = record.description;
 	if (record.genre !== undefined) serialized.genre = record.genre;
 	if (record.aiModel !== undefined) serialized.aiModel = record.aiModel;
 	if (record.aiError !== undefined) serialized.aiError = record.aiError;

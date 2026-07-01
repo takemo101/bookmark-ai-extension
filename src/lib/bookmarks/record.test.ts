@@ -88,7 +88,8 @@ describe("parseBookmarkRecord", () => {
 			parseBookmarkRecord(validV1({ aiStatus: "bogus" as "ready" })).ok,
 		).toBe(false);
 		expect(
-			parseBookmarkRecord(validV1({ tags: "GitHub" as unknown as string[] })).ok,
+			parseBookmarkRecord(validV1({ tags: "GitHub" as unknown as string[] }))
+				.ok,
 		).toBe(false);
 		expect(parseBookmarkRecord(validV1({ createdAt: "yesterday" })).ok).toBe(
 			false,
@@ -108,7 +109,8 @@ describe("parseBookmarkRecord", () => {
 
 	it("rejects an unknown aiModel", () => {
 		expect(
-			parseBookmarkRecord(validV1({ aiModel: "gpt" as "chrome-prompt-api" })).ok,
+			parseBookmarkRecord(validV1({ aiModel: "gpt" as "chrome-prompt-api" }))
+				.ok,
 		).toBe(false);
 	});
 });

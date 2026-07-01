@@ -1,16 +1,12 @@
 {
-  "mcpServers": {
-    "asem": {
-      "command": "asem",
-      "args": [
-        "mcp"
-      ]
-    },
-    "mikan": {
-      "command": "mikan",
-      "args": [
-        "mcp"
-      ]
-    }
-  }
+	"mcpServers": {
+		"asem": {
+			"command": "asem",
+			"args": ["mcp"]
+		},
+		"mikan": {
+			"command": "mikan",
+			"args": ["mcp"]
+		}
+	}
 }

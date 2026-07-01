@@ -72,7 +72,10 @@ export function buildExcerpt(
 	page: ExtractedPage,
 	options: BuildExcerptOptions = {},
 ): PageExcerpt {
-	const cap = Math.max(0, Math.trunc(options.maxChars ?? DEFAULT_EXCERPT_CHAR_CAP));
+	const cap = Math.max(
+		0,
+		Math.trunc(options.maxChars ?? DEFAULT_EXCERPT_CHAR_CAP),
+	);
 	const sections = orderedSections(page);
 
 	let text = "";

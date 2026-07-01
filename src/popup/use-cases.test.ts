@@ -207,8 +207,8 @@ describe("createPopupUseCases", () => {
 		expect(saved.ok).toBe(true);
 
 		const useCases = createPopupUseCases(app, fakeEnv);
-		const canonical = (await useCases.loadCachedState()).bookmarks
-			.toArray()[0]?.canonicalUrl as CanonicalUrl;
+		const canonical = (await useCases.loadCachedState()).bookmarks.toArray()[0]
+			?.canonicalUrl as CanonicalUrl;
 
 		const stages: SaveStage[] = [];
 		const result = await useCases.reAnalyzeBookmark(canonical, ({ stage }) =>

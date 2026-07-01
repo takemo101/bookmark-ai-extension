@@ -39,10 +39,7 @@ export interface ChromeIdentityApi {
 		details: { interactive?: boolean },
 		callback: (token?: string) => void,
 	): void;
-	removeCachedAuthToken(
-		details: { token: string },
-		callback: () => void,
-	): void;
+	removeCachedAuthToken(details: { token: string }, callback: () => void): void;
 }
 
 /** Accessor for `chrome.runtime.lastError`, injectable for tests. */

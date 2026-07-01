@@ -19,11 +19,7 @@
  * `OptionsUseCases` and read `getView()` across states — no DOM, Chrome, Drive,
  * or Prompt API required.
  */
-import type {
-	CacheState,
-	CanonicalUrl,
-	OptionsUseCases,
-} from "./use-cases";
+import type { CacheState, CanonicalUrl, OptionsUseCases } from "./use-cases";
 import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
 /** AI-status filter options offered in the left rail, in lifecycle order. */
@@ -173,7 +169,10 @@ export function createOptionsController(
 		state = snapshot;
 		indexCanonicals(snapshot);
 		// Drop a selection that no longer resolves (e.g. it was just deleted).
-		if (selectedDisplay !== undefined && !canonicalByDisplay.has(selectedDisplay)) {
+		if (
+			selectedDisplay !== undefined &&
+			!canonicalByDisplay.has(selectedDisplay)
+		) {
 			selectedDisplay = undefined;
 		}
 	}

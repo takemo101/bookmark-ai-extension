@@ -21,10 +21,7 @@ import type {
 	TrailStage,
 	TrailStageStatus,
 } from "./view-model";
-import type {
-	ConnectionStatus,
-	PromptApiStatus,
-} from "./use-cases";
+import type { ConnectionStatus, PromptApiStatus } from "./use-cases";
 import type { AiStatus } from "./view-types";
 import { openOptionsPage } from "./open-options";
 import {
@@ -74,7 +71,9 @@ function Header() {
 }
 
 function TabReceipt({ view }: { view: PopupView }) {
-	const title = view.tab?.title ?? (view.loading ? "Reading current tab…" : "No active tab");
+	const title =
+		view.tab?.title ??
+		(view.loading ? "Reading current tab…" : "No active tab");
 	const url = view.tab?.url ?? "";
 	return (
 		<section style={{ ...card, marginBottom: 8 }}>
@@ -112,9 +111,21 @@ function Badges({ view }: { view: PopupView }) {
 		<section
 			style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}
 		>
-			<Badge label="Google" text={connectionText(view.connection)} tone={connectionTone(view.connection)} />
-			<Badge label="Prompt API" text={promptApiText(view.promptApi)} tone={promptApiTone(view.promptApi)} />
-			<Badge label="Sync" text={view.sync.status} tone={syncTone(view.sync.status)} />
+			<Badge
+				label="Google"
+				text={connectionText(view.connection)}
+				tone={connectionTone(view.connection)}
+			/>
+			<Badge
+				label="Prompt API"
+				text={promptApiText(view.promptApi)}
+				tone={promptApiTone(view.promptApi)}
+			/>
+			<Badge
+				label="Sync"
+				text={view.sync.status}
+				tone={syncTone(view.sync.status)}
+			/>
 			{view.sync.pendingLocalChanges ? (
 				<Badge label="Local" text="changes pending" tone="warn" />
 			) : null}
@@ -203,7 +214,8 @@ function Trail({ trail }: { trail: readonly TrailStage[] }) {
 						alignItems: "center",
 						gap: 8,
 						fontSize: 12,
-						color: stage.status === "pending" ? palette.inkFaint : palette.inkSoft,
+						color:
+							stage.status === "pending" ? palette.inkFaint : palette.inkSoft,
 						padding: "2px 0",
 					}}
 				>
@@ -223,7 +235,12 @@ function Receipt({
 	return (
 		<div style={{ marginTop: 8 }}>
 			<div
-				style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 6,
+					marginBottom: 4,
+				}}
 			>
 				<StatusPill status={receipt.aiStatus} />
 				{!receipt.driveSynced ? (
@@ -260,7 +277,14 @@ function Preview({ preview }: { preview: AiPreview }) {
 					{preview.description}
 				</p>
 			) : null}
-			<div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+			<div
+				style={{
+					display: "flex",
+					flexWrap: "wrap",
+					gap: 4,
+					alignItems: "center",
+				}}
+			>
 				{preview.genre ? (
 					<span
 						style={{
@@ -343,7 +367,14 @@ function Recent({
 								{item.description ?? item.url}
 							</div>
 						</div>
-						<div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								gap: 4,
+								alignItems: "flex-end",
+							}}
+						>
 							<StatusPill status={item.aiStatus} />
 							{item.canReAnalyze ? (
 								<button
@@ -445,7 +476,11 @@ function connectionText(status: ConnectionStatus): string {
 }
 
 function connectionTone(status: ConnectionStatus): "ok" | "warn" | "neutral" {
-	return status === "connected" ? "ok" : status === "disconnected" ? "warn" : "neutral";
+	return status === "connected"
+		? "ok"
+		: status === "disconnected"
+			? "warn"
+			: "neutral";
 }
 
 function promptApiText(status: PromptApiStatus): string {

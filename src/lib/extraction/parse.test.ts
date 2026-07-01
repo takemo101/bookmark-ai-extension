@@ -34,7 +34,10 @@ describe("parseExtractedPage", () => {
 	});
 
 	it("falls back to the url when the title is missing or blank", () => {
-		const result = parseExtractedPage({ url: "https://example.com", title: "   " });
+		const result = parseExtractedPage({
+			url: "https://example.com",
+			title: "   ",
+		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
 		expect(result.value.title).toBe("https://example.com");

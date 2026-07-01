@@ -21,11 +21,7 @@ import type {
 	SaveOutcome,
 	SaveStage,
 } from "./use-cases";
-import type {
-	AiStatus,
-	BookmarkRecord,
-	SyncStatus,
-} from "./view-types";
+import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
 export type {
 	ConnectionStatus,
@@ -204,14 +200,18 @@ export function createPopupController(
 			key,
 			label: STAGE_LABEL[key],
 			status:
-				index < activeIndex ? "done" : index === activeIndex ? "active" : "pending",
+				index < activeIndex
+					? "done"
+					: index === activeIndex
+						? "active"
+						: "pending",
 		}));
 	}
 
 	async function runFlow(
-		invoke: (onProgress: ProgressObserver) => Promise<
-			Awaited<ReturnType<PopupUseCases["saveCurrentTab"]>>
-		>,
+		invoke: (
+			onProgress: ProgressObserver,
+		) => Promise<Awaited<ReturnType<PopupUseCases["saveCurrentTab"]>>>,
 	): Promise<void> {
 		setView({
 			flow: { kind: "running", trail: runningTrail("saving") },
@@ -250,7 +250,9 @@ export function createPopupController(
 			]);
 			setView({
 				loading: false,
-				tab: tab.ok ? { title: tab.value.title, url: tab.value.url } : undefined,
+				tab: tab.ok
+					? { title: tab.value.title, url: tab.value.url }
+					: undefined,
 				connection: environment.connection,
 				promptApi: environment.promptApi,
 				recent: mapRecent(state),
@@ -279,7 +281,10 @@ export function createPopupController(
 		async refresh() {
 			const result = await useCases.syncFromDrive();
 			if (result.ok) {
-				setView({ recent: mapRecent(result.value), sync: mapSync(result.value) });
+				setView({
+					recent: mapRecent(result.value),
+					sync: mapSync(result.value),
+				});
 				return;
 			}
 			// Keep recents; surface the safe sync error message.
@@ -304,7 +309,9 @@ function toRecentItem(record: BookmarkRecord): RecentItemView {
 }
 
 /** Build a terminal trail keyed by each stage's final status. */
-function trailFrom(statuses: Record<SaveStage, TrailStageStatus>): TrailStage[] {
+function trailFrom(
+	statuses: Record<SaveStage, TrailStageStatus>,
+): TrailStage[] {
 	return STAGE_ORDER.map((key) => ({
 		key,
 		label: STAGE_LABEL[key],
@@ -379,7 +386,8 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 
 	// `failed` (or any non-ready terminal): distinguish an extraction failure so
 	// the trail points at the stage that actually broke.
-	const extractionFailed = record.aiError?.startsWith("extraction failed") ?? false;
+	const extractionFailed =
+		record.aiError?.startsWith("extraction failed") ?? false;
 	return {
 		kind: "done",
 		trail: trailFrom({

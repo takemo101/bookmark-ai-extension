@@ -205,7 +205,9 @@ function FilterFacets({
 								type="button"
 								style={filters.genre === genre ? chipActive : chip}
 								onClick={() =>
-									controller.setGenre(filters.genre === genre ? undefined : genre)
+									controller.setGenre(
+										filters.genre === genre ? undefined : genre,
+									)
 								}
 							>
 								{genre}
@@ -255,9 +257,7 @@ function CenterList({
 	if (view.empty) {
 		return (
 			<section>
-				<Notice
-					text="No bookmarks yet. Save the current tab from the popup to start your ledger."
-				/>
+				<Notice text="No bookmarks yet. Save the current tab from the popup to start your ledger." />
 			</section>
 		);
 	}
@@ -266,8 +266,12 @@ function CenterList({
 	// only feedback for "deleted the last matching row" would silently vanish.
 	const banners = (
 		<>
-			{view.actionError ? <Banner tone="danger" text={view.actionError} /> : null}
-			{view.actionNotice ? <Banner tone="warn" text={view.actionNotice} /> : null}
+			{view.actionError ? (
+				<Banner tone="danger" text={view.actionError} />
+			) : null}
+			{view.actionNotice ? (
+				<Banner tone="warn" text={view.actionNotice} />
+			) : null}
 		</>
 	);
 	if (view.noMatches) {
@@ -281,10 +285,22 @@ function CenterList({
 	return (
 		<section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 			{banners}
-			<ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+			<ul
+				style={{
+					listStyle: "none",
+					margin: 0,
+					padding: 0,
+					display: "flex",
+					flexDirection: "column",
+					gap: 8,
+				}}
+			>
 				{view.rows.map((item) => (
 					<li key={item.canonicalUrl}>
-						<LedgerRow row={item} onSelect={() => controller.select(item.canonicalUrl)} />
+						<LedgerRow
+							row={item}
+							onSelect={() => controller.select(item.canonicalUrl)}
+						/>
 					</li>
 				))}
 			</ul>
@@ -294,9 +310,15 @@ function CenterList({
 
 function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 	return (
-		<button type="button" style={row.selected ? rowSelected : rowStyle} onClick={onSelect}>
+		<button
+			type="button"
+			style={row.selected ? rowSelected : rowStyle}
+			onClick={onSelect}
+		>
 			<div style={{ minWidth: 0, flex: 1 }}>
-				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>{row.title}</div>
+				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
+					{row.title}
+				</div>
 				<div style={{ fontSize: 12, color: palette.inkSoft, ...truncate }}>
 					{row.summary}
 				</div>
@@ -311,7 +333,9 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 						}}
 					>
 						{row.genre ? (
-							<span style={{ fontSize: 11, color: palette.accent }}>{row.genre}</span>
+							<span style={{ fontSize: 11, color: palette.accent }}>
+								{row.genre}
+							</span>
 						) : null}
 						{row.tags.slice(0, 4).map((t) => (
 							<span key={t} style={{ fontSize: 11, color: palette.inkFaint }}>
@@ -321,7 +345,14 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 					</div>
 				) : null}
 			</div>
-			<div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+			<div
+				style={{
+					display: "flex",
+					flexDirection: "column",
+					alignItems: "flex-end",
+					gap: 4,
+				}}
+			>
 				<StatusPill status={row.aiStatus} />
 				<span style={{ fontSize: 10, color: palette.inkFaint }}>
 					{formatTime(row.updatedAt)}
@@ -350,7 +381,14 @@ function DetailPane({
 	}
 	return (
 		<aside style={{ ...panel, position: "sticky", top: 20 }}>
-			<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+			<div
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 6,
+					marginBottom: 6,
+				}}
+			>
 				<StatusPill status={detail.aiStatus} />
 			</div>
 			<h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{detail.title}</h2>
@@ -373,9 +411,7 @@ function DetailPane({
 				</p>
 			)}
 
-			{detail.genre ? (
-				<DetailField label="Genre" value={detail.genre} />
-			) : null}
+			{detail.genre ? <DetailField label="Genre" value={detail.genre} /> : null}
 
 			{detail.tags.length > 0 ? (
 				<div style={{ marginTop: 10 }}>
@@ -405,13 +441,20 @@ function DetailPane({
 			</dl>
 
 			<div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-				<a href={detail.url} target="_blank" rel="noreferrer" style={primaryButton}>
+				<a
+					href={detail.url}
+					target="_blank"
+					rel="noreferrer"
+					style={primaryButton}
+				>
 					Open
 				</a>
 				{detail.canReAnalyze ? (
 					<button
 						type="button"
-						style={view.busy ? { ...subtleButton, ...disabledButton } : subtleButton}
+						style={
+							view.busy ? { ...subtleButton, ...disabledButton } : subtleButton
+						}
 						disabled={view.busy}
 						onClick={() => void controller.reAnalyze(detail.canonicalUrl)}
 					>
@@ -420,7 +463,9 @@ function DetailPane({
 				) : null}
 				<button
 					type="button"
-					style={view.busy ? { ...dangerButton, ...disabledButton } : dangerButton}
+					style={
+						view.busy ? { ...dangerButton, ...disabledButton } : dangerButton
+					}
 					disabled={view.busy}
 					onClick={() => void controller.deleteBookmark(detail.canonicalUrl)}
 				>
@@ -451,7 +496,14 @@ function TimeRow({ label, value }: { label: string; value: string }) {
 
 function Notice({ text }: { text: string }) {
 	return (
-		<div style={{ ...panel, textAlign: "center", color: palette.inkSoft, fontSize: 13 }}>
+		<div
+			style={{
+				...panel,
+				textAlign: "center",
+				color: palette.inkSoft,
+				fontSize: 13,
+			}}
+		>
 			{text}
 		</div>
 	);

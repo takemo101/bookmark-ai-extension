@@ -35,7 +35,9 @@ export interface OptionsUseCases {
 	/** Pull the authoritative store from Drive and refresh the cache. */
 	syncFromDrive(): Promise<Result<CacheState, AppError>>;
 	/** Delete a bookmark by canonical URL through the domain delete operation. */
-	deleteBookmark(canonicalUrl: CanonicalUrl): Promise<Result<CacheState, AppError>>;
+	deleteBookmark(
+		canonicalUrl: CanonicalUrl,
+	): Promise<Result<CacheState, AppError>>;
 	/** Re-run AI analysis for an existing bookmark by canonical URL. */
 	reAnalyzeBookmark(
 		canonicalUrl: CanonicalUrl,

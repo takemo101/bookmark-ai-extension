@@ -75,7 +75,9 @@ export function parseTombstone(value: unknown): Result<Tombstone, RecordError> {
 		);
 	}
 	if (value.kind !== TOMBSTONE_KIND) {
-		return err(fieldError("kind", `not a tombstone: ${JSON.stringify(value.kind)}`));
+		return err(
+			fieldError("kind", `not a tombstone: ${JSON.stringify(value.kind)}`),
+		);
 	}
 	const canonicalUrl = parseCanonicalUrl(value.canonicalUrl);
 	if (!canonicalUrl.ok) {

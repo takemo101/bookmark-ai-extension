@@ -186,7 +186,12 @@ describe("DriveBookmarkRepository", () => {
 	describe("load", () => {
 		it("parses JSONL into a Bookmarks collection and reports problems", async () => {
 			const remote = makeBookmarks([
-				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+				{
+					url: "https://a.test/",
+					title: "A",
+					now: "2026-01-01T00:00:00Z",
+					id: "a",
+				},
 			]);
 			const content = `${jsonlOf(remote)}{ not json }\n`;
 			const client = new FakeDriveClient({ folderId: "folder-1", content });
@@ -237,14 +242,24 @@ describe("DriveBookmarkRepository", () => {
 	describe("save", () => {
 		it("merges local with remote and uploads once when no conflict occurs", async () => {
 			const remote = makeBookmarks([
-				{ url: "https://remote.test/", title: "R", now: "2026-01-01T00:00:00Z", id: "r" },
+				{
+					url: "https://remote.test/",
+					title: "R",
+					now: "2026-01-01T00:00:00Z",
+					id: "r",
+				},
 			]);
 			const client = new FakeDriveClient({
 				folderId: "folder-1",
 				content: jsonlOf(remote),
 			});
 			const local = makeBookmarks([
-				{ url: "https://local.test/", title: "L", now: "2026-02-01T00:00:00Z", id: "l" },
+				{
+					url: "https://local.test/",
+					title: "L",
+					now: "2026-02-01T00:00:00Z",
+					id: "l",
+				},
 			]);
 			const repo = new DriveBookmarkRepository(client);
 
@@ -261,11 +276,26 @@ describe("DriveBookmarkRepository", () => {
 
 		it("re-downloads and re-merges when the revision changed before upload", async () => {
 			const remote0 = makeBookmarks([
-				{ url: "https://remote.test/", title: "R", now: "2026-01-01T00:00:00Z", id: "r" },
+				{
+					url: "https://remote.test/",
+					title: "R",
+					now: "2026-01-01T00:00:00Z",
+					id: "r",
+				},
 			]);
 			const remote1 = makeBookmarks([
-				{ url: "https://remote.test/", title: "R", now: "2026-01-01T00:00:00Z", id: "r" },
-				{ url: "https://other-pc.test/", title: "O", now: "2026-01-15T00:00:00Z", id: "o" },
+				{
+					url: "https://remote.test/",
+					title: "R",
+					now: "2026-01-01T00:00:00Z",
+					id: "r",
+				},
+				{
+					url: "https://other-pc.test/",
+					title: "O",
+					now: "2026-01-15T00:00:00Z",
+					id: "o",
+				},
 			]);
 			const client = new FakeDriveClient({
 				folderId: "folder-1",
@@ -275,7 +305,12 @@ describe("DriveBookmarkRepository", () => {
 			client.externalEdits = [jsonlOf(remote1)];
 
 			const local = makeBookmarks([
-				{ url: "https://local.test/", title: "L", now: "2026-02-01T00:00:00Z", id: "l" },
+				{
+					url: "https://local.test/",
+					title: "L",
+					now: "2026-02-01T00:00:00Z",
+					id: "l",
+				},
 			]);
 			const repo = new DriveBookmarkRepository(client);
 
@@ -303,10 +338,20 @@ describe("DriveBookmarkRepository", () => {
 			// Same canonical URL on both sides with different updatedAt: the newer
 			// one must win, which is mergeRemote's contract, not the repo's.
 			const remote = makeBookmarks([
-				{ url: "https://dup.test/", title: "old", now: "2026-01-01T00:00:00Z", id: "d" },
+				{
+					url: "https://dup.test/",
+					title: "old",
+					now: "2026-01-01T00:00:00Z",
+					id: "d",
+				},
 			]);
 			const local = makeBookmarks([
-				{ url: "https://dup.test/", title: "new", now: "2026-03-01T00:00:00Z", id: "d" },
+				{
+					url: "https://dup.test/",
+					title: "new",
+					now: "2026-03-01T00:00:00Z",
+					id: "d",
+				},
 			]);
 			const client = new FakeDriveClient({
 				folderId: "folder-1",
@@ -327,7 +372,12 @@ describe("DriveBookmarkRepository", () => {
 		it("propagates a deletion: writes a tombstone and drops the record from Drive", async () => {
 			// Drive still holds the record this device deleted locally.
 			const remote = makeBookmarks([
-				{ url: "https://gone.test/", title: "G", now: "2026-01-01T00:00:00Z", id: "g" },
+				{
+					url: "https://gone.test/",
+					title: "G",
+					now: "2026-01-01T00:00:00Z",
+					id: "g",
+				},
 			]);
 			const client = new FakeDriveClient({
 				folderId: "folder-1",
@@ -368,7 +418,12 @@ describe("DriveBookmarkRepository", () => {
 
 		it("gives up with a conflict error when the revision never settles", async () => {
 			const remote = makeBookmarks([
-				{ url: "https://remote.test/", title: "R", now: "2026-01-01T00:00:00Z", id: "r" },
+				{
+					url: "https://remote.test/",
+					title: "R",
+					now: "2026-01-01T00:00:00Z",
+					id: "r",
+				},
 			]);
 			const client = new FakeDriveClient({
 				folderId: "folder-1",
@@ -382,7 +437,12 @@ describe("DriveBookmarkRepository", () => {
 				jsonlOf(remote),
 			];
 			const local = makeBookmarks([
-				{ url: "https://local.test/", title: "L", now: "2026-02-01T00:00:00Z", id: "l" },
+				{
+					url: "https://local.test/",
+					title: "L",
+					now: "2026-02-01T00:00:00Z",
+					id: "l",
+				},
 			]);
 			const repo = new DriveBookmarkRepository(client, { maxWriteAttempts: 2 });
 

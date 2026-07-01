@@ -17,10 +17,7 @@
  */
 import { parseAnalysis } from "./parse";
 import { buildAnalysisPrompt } from "./prompt";
-import {
-	type PromptClient,
-	PromptApiUnavailableError,
-} from "./prompt-api";
+import { type PromptClient, PromptApiUnavailableError } from "./prompt-api";
 import type { AnalysisInput, AnalysisOutcome } from "./types";
 
 function describeError(error: unknown): string {

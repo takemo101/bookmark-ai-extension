@@ -17,10 +17,7 @@ import type {
 	Result as DriveResult,
 } from "../drive/index";
 import { ok as driveOk, err as driveErr } from "../drive/index";
-import type {
-	AnalysisInput,
-	AnalysisOutcome,
-} from "../ai/index";
+import type { AnalysisInput, AnalysisOutcome } from "../ai/index";
 import type {
 	ExtractedPage,
 	ExtractionError,
@@ -139,7 +136,10 @@ class FakeCache implements LocalCache {
 	state: CacheState;
 	saves: CacheState[] = [];
 	constructor(state?: CacheState) {
-		this.state = state ?? { bookmarks: Bookmarks.empty(), sync: { status: "idle" } };
+		this.state = state ?? {
+			bookmarks: Bookmarks.empty(),
+			sync: { status: "idle" },
+		};
 	}
 	async load(): Promise<CacheState> {
 		return this.state;
@@ -184,7 +184,11 @@ function samplePage(url: string, title: string): ExtractedPage {
 
 const READY: AnalysisOutcome = {
 	status: "ready",
-	analysis: { description: "説明文", genre: "開発ツール", tags: ["GitHub", "TypeScript"] },
+	analysis: {
+		description: "説明文",
+		genre: "開発ツール",
+		tags: ["GitHub", "TypeScript"],
+	},
 };
 
 type Harness = {
@@ -210,7 +214,8 @@ function makeHarness(
 	const repo = new FakeRepository(opts.remote);
 	const analyzer = new FakeAnalyzer(opts.outcome ?? READY);
 	const extractor = new FakeExtractor(
-		opts.extraction ?? extractionOk(samplePage("https://example.test/page", "Example Page")),
+		opts.extraction ??
+			extractionOk(samplePage("https://example.test/page", "Example Page")),
 	);
 	const cache = new FakeCache(opts.cache);
 	const app = createBookmarkApp({

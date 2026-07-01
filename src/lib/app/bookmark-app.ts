@@ -89,7 +89,9 @@ export interface BookmarkApp {
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>>;
 	/** Delete a bookmark by canonical URL using the domain delete operation. */
-	deleteBookmark(canonicalUrl: CanonicalUrl): Promise<Result<CacheState, AppError>>;
+	deleteBookmark(
+		canonicalUrl: CanonicalUrl,
+	): Promise<Result<CacheState, AppError>>;
 	/**
 	 * Re-run AI analysis for an existing bookmark by canonical URL. `onProgress`,
 	 * when supplied, fires as each stage genuinely begins.
@@ -147,10 +149,18 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			// The change reached only the cache: mark it pending so a later
 			// `syncFromDrive` preserves and re-pushes it instead of replacing it
 			// with the remote state (MIK-014; docs/design.md "Local Cache").
-			sync: { status: "error", error: toSyncError(result.error), pending: true },
+			sync: {
+				status: "error",
+				error: toSyncError(result.error),
+				pending: true,
+			},
 		};
 		await deps.cache.save(state);
-		log("warn", "drive-save-failed", `${result.error.kind}: ${result.error.message}`);
+		log(
+			"warn",
+			"drive-save-failed",
+			`${result.error.kind}: ${result.error.message}`,
+		);
 		return {
 			state,
 			driveSynced: false,
@@ -233,7 +243,9 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		const record = push.state.bookmarks.get(canonicalUrl);
 		if (!record) {
 			// The record we just applied must be present; its absence is a defect.
-			return err(appError("invalid-bookmark", "record missing after analysis save"));
+			return err(
+				appError("invalid-bookmark", "record missing after analysis save"),
+			);
 		}
 		return ok({
 			record,
@@ -293,7 +305,11 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 					sync: { status: "error", error: toSyncError(result.error) },
 				};
 				await deps.cache.save(state);
-				log("warn", "drive-sync-failed", `${result.error.kind}: ${result.error.message}`);
+				log(
+					"warn",
+					"drive-sync-failed",
+					`${result.error.kind}: ${result.error.message}`,
+				);
 				return err(fromRepositoryError(result.error));
 			}
 

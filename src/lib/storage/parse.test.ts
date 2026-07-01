@@ -45,7 +45,10 @@ describe("parseCachedState", () => {
 	});
 
 	it("rejects an unsupported schema version without throwing", () => {
-		const { state, problems } = parseCachedState({ schemaVersion: 99, bookmarks: [] });
+		const { state, problems } = parseCachedState({
+			schemaVersion: 99,
+			bookmarks: [],
+		});
 		expect(state.bookmarks.size).toBe(0);
 		expect(problems[0].kind).toBe("unsupported-schema");
 	});
@@ -53,7 +56,12 @@ describe("parseCachedState", () => {
 	it("quarantines malformed records but keeps the valid ones", () => {
 		const good = serializeBookmarkRecord(
 			bookmarksOf([
-				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+				{
+					url: "https://a.test/",
+					title: "A",
+					now: "2026-01-01T00:00:00Z",
+					id: "a",
+				},
 			]).toArray()[0],
 		);
 		const { state, problems } = parseCachedState({
@@ -111,11 +119,22 @@ describe("parseCachedState", () => {
 
 	it("round-trips deletion tombstones through serialize → parse", () => {
 		const live = bookmarksOf([
-			{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
-			{ url: "https://b.test/", title: "B", now: "2026-01-02T00:00:00Z", id: "b" },
+			{
+				url: "https://a.test/",
+				title: "A",
+				now: "2026-01-01T00:00:00Z",
+				id: "a",
+			},
+			{
+				url: "https://b.test/",
+				title: "B",
+				now: "2026-01-02T00:00:00Z",
+				id: "b",
+			},
 		]);
-		const canonicalB = live.toArray().find((r) => r.url === "https://b.test/")!
-			.canonicalUrl;
+		const canonicalB = live
+			.toArray()
+			.find((r) => r.url === "https://b.test/")!.canonicalUrl;
 		const original: CacheState = {
 			bookmarks: live.delete(canonicalB, isoTimestamp("2026-02-03T00:00:00Z")),
 			sync: { status: "synced" },
@@ -137,7 +156,12 @@ describe("parseCachedState", () => {
 	it("omits the tombstones field entirely when there are none", () => {
 		const serialized = serializeCacheState({
 			bookmarks: bookmarksOf([
-				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+				{
+					url: "https://a.test/",
+					title: "A",
+					now: "2026-01-01T00:00:00Z",
+					id: "a",
+				},
 			]),
 			sync: { status: "synced" },
 		});
@@ -146,7 +170,12 @@ describe("parseCachedState", () => {
 
 	it("round-trips the unsynced-mutation pending flag and omits it when false", () => {
 		const base = bookmarksOf([
-			{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+			{
+				url: "https://a.test/",
+				title: "A",
+				now: "2026-01-01T00:00:00Z",
+				id: "a",
+			},
 		]);
 
 		const pendingSerialized = serializeCacheState({
@@ -163,7 +192,9 @@ describe("parseCachedState", () => {
 			sync: { status: "synced" },
 		});
 		expect(syncedSerialized.sync.pending).toBeUndefined();
-		expect(parseCachedState(syncedSerialized).state.sync.pending).toBeUndefined();
+		expect(
+			parseCachedState(syncedSerialized).state.sync.pending,
+		).toBeUndefined();
 	});
 
 	it("treats a non-boolean or missing pending value as no pending changes", () => {
@@ -180,8 +211,18 @@ describe("parseCachedState", () => {
 	it("round-trips a full state through serialize → parse", () => {
 		const original: CacheState = {
 			bookmarks: bookmarksOf([
-				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
-				{ url: "https://b.test/", title: "B", now: "2026-01-02T00:00:00Z", id: "b" },
+				{
+					url: "https://a.test/",
+					title: "A",
+					now: "2026-01-01T00:00:00Z",
+					id: "a",
+				},
+				{
+					url: "https://b.test/",
+					title: "B",
+					now: "2026-01-02T00:00:00Z",
+					id: "b",
+				},
 			]),
 			location: {
 				folder: { id: "folder-1" as never, name: "bookmark-ai" },
@@ -191,7 +232,10 @@ describe("parseCachedState", () => {
 					revision: "rev-1" as never,
 				},
 			},
-			sync: { status: "synced", lastSyncedAt: isoTimestamp("2026-02-01T00:00:00Z") },
+			sync: {
+				status: "synced",
+				lastSyncedAt: isoTimestamp("2026-02-01T00:00:00Z"),
+			},
 		};
 
 		const { state, problems } = parseCachedState(serializeCacheState(original));

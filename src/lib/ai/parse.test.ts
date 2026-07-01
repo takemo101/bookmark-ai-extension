@@ -14,7 +14,9 @@ describe("parseAnalysis", () => {
 		);
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value.description).toBe("このページはGitHubのリポジトリです。");
+		expect(result.value.description).toBe(
+			"このページはGitHubのリポジトリです。",
+		);
 		expect(result.value.genre).toBe("開発ツール");
 		expect(result.value.tags).toEqual(["GitHub", "TypeScript", "拡張機能"]);
 	});

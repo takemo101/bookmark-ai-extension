@@ -179,7 +179,9 @@ export class Bookmarks {
 
 	/** The single entry a URL resolves to: a live record, a tombstone, or nothing. */
 	private entryFor(canonicalUrl: CanonicalUrl): Entry | undefined {
-		return this.byUrl.get(canonicalUrl) ?? this.tombstoneByUrl.get(canonicalUrl);
+		return (
+			this.byUrl.get(canonicalUrl) ?? this.tombstoneByUrl.get(canonicalUrl)
+		);
 	}
 
 	private with(record: BookmarkRecord): Bookmarks {
@@ -514,7 +516,9 @@ function resolveEntry(left?: Entry, right?: Entry): Entry | undefined {
 	if (!leftIsTombstone && !rightIsTombstone) {
 		return resolveConflict(left, right);
 	}
-	const tombstone = leftIsTombstone ? (left as Tombstone) : (right as Tombstone);
+	const tombstone = leftIsTombstone
+		? (left as Tombstone)
+		: (right as Tombstone);
 	const record = leftIsTombstone
 		? (right as BookmarkRecord)
 		: (left as BookmarkRecord);

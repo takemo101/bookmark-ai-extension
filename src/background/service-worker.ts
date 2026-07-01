@@ -6,7 +6,7 @@
  * or Prompt API parsing — see docs/implementation-principles.md.
  */
 chrome.runtime.onInstalled.addListener((details) => {
-  console.info('[bookmark-ai] service worker installed:', details.reason)
-})
+	console.info("[bookmark-ai] service worker installed:", details.reason);
+});
 
-export {}
+export {};

@@ -13,7 +13,9 @@ import { createChromeDriveRuntime } from "./drive-repository";
 type TokenCall = { interactive?: boolean };
 
 /** A fake identity that always grants a token and records the interactive flag. */
-function fakeIdentity(grant: boolean): ChromeIdentityApi & { calls: TokenCall[] } {
+function fakeIdentity(
+	grant: boolean,
+): ChromeIdentityApi & { calls: TokenCall[] } {
 	const calls: TokenCall[] = [];
 	return {
 		calls,
@@ -65,7 +67,11 @@ function fakeFetch(): typeof fetch {
 			});
 		}
 		// Bare metadata read for a file id.
-		return json({ id: "file-1", name: "bookmarks.jsonl", headRevisionId: "rev-1" });
+		return json({
+			id: "file-1",
+			name: "bookmarks.jsonl",
+			headRevisionId: "rev-1",
+		});
 	}) as typeof fetch;
 }
 
