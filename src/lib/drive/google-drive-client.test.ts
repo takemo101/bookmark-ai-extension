@@ -12,7 +12,12 @@ import type { DriveFileId, DriveFolderId } from "./types";
  * security invariant that the token never reaches a thrown error.
  */
 
-type CapturedRequest = { url: string; method: string; headers: Record<string, string>; body?: unknown };
+type CapturedRequest = {
+	url: string;
+	method: string;
+	headers: Record<string, string>;
+	body?: unknown;
+};
 
 const SECRET_TOKEN = "ya29.secret-token-value";
 
@@ -226,9 +231,9 @@ describe("createGoogleDriveClient", () => {
 			await client.getFileMetadata("file-1" as DriveFileId);
 			throw new Error("expected to throw");
 		} catch (error) {
-			expect(JSON.stringify({ m: String(error), s: (error as Error).stack })).not.toContain(
-				SECRET_TOKEN,
-			);
+			expect(
+				JSON.stringify({ m: String(error), s: (error as Error).stack }),
+			).not.toContain(SECRET_TOKEN);
 		}
 	});
 });

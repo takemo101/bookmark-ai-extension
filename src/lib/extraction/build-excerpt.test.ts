@@ -4,10 +4,7 @@ import {
 	parseBookmarkRecord,
 	serializeBookmarkRecord,
 } from "../bookmarks/index";
-import {
-	DEFAULT_EXCERPT_CHAR_CAP,
-	buildExcerpt,
-} from "./build-excerpt";
+import { DEFAULT_EXCERPT_CHAR_CAP, buildExcerpt } from "./build-excerpt";
 import { parseExtractedPage } from "./parse";
 import type { ExtractedPage } from "./types";
 
@@ -47,7 +44,9 @@ describe("buildExcerpt ordering", () => {
 		for (const marker of order) {
 			const index = text.indexOf(marker);
 			expect(index, `section "${marker}" present`).toBeGreaterThan(-1);
-			expect(index, `section "${marker}" after previous`).toBeGreaterThan(previous);
+			expect(index, `section "${marker}" after previous`).toBeGreaterThan(
+				previous,
+			);
 			previous = index;
 		}
 
@@ -110,7 +109,10 @@ describe("buildExcerpt truncation", () => {
 	});
 
 	it("is deterministic: identical input yields identical output", () => {
-		const blocks = Array.from({ length: 2000 }, (_, i) => `paragraph number ${i}`);
+		const blocks = Array.from(
+			{ length: 2000 },
+			(_, i) => `paragraph number ${i}`,
+		);
 		const a = buildExcerpt(page({ mainText: blocks }));
 		const b = buildExcerpt(page({ mainText: blocks }));
 		expect(a).toEqual(b);

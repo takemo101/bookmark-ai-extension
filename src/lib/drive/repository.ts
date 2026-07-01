@@ -25,10 +25,7 @@ import {
 	serializeJsonl,
 } from "../bookmarks/index";
 import type { DriveClient } from "./drive-client";
-import {
-	type RepositoryError,
-	toRepositoryError,
-} from "./errors";
+import { type RepositoryError, toRepositoryError } from "./errors";
 import { type Result, err, ok } from "./result";
 import {
 	type DriveFileMetadata,
@@ -60,7 +57,10 @@ export class DriveBookmarkRepository {
 	private readonly maxWriteAttempts: number;
 	private location: DriveLocation | null = null;
 
-	constructor(client: DriveClient, options: DriveBookmarkRepositoryOptions = {}) {
+	constructor(
+		client: DriveClient,
+		options: DriveBookmarkRepositoryOptions = {},
+	) {
 		this.client = client;
 		this.maxWriteAttempts = Math.max(1, options.maxWriteAttempts ?? 3);
 	}

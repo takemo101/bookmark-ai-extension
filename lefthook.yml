@@ -1,14 +1,15 @@
+---
 # Lefthook pre-commit baseline for the Bookmark AI Extension.
 #
 # Mirrors the root package scripts so contributors run the same checks locally
 # as the documented `just validate` baseline. Hooks call the stable package
-# scripts (`bun run typecheck`, `bun run test`) instead of duplicating their
-# internals.
+# scripts (`bun run format:check`, `bun run typecheck`, `bun run test`)
+# instead of duplicating their internals.
 #
-# `bun run check` is `typecheck && test`, so invoking `check` here in addition
-# to `typecheck`/`test` would run tsc and Vitest twice. To keep one stable
-# command surface without duplicated concurrent validations, the hook runs
-# typecheck then test sequentially (parallel: false).
+# `bun run check` is `format:check && typecheck && test`, so invoking `check`
+# here in addition to the individual commands would run validations twice. To
+# keep one stable command surface without duplicated concurrent validations, the
+# hook runs format, typecheck, then test sequentially (parallel: false).
 #
 # The extension build is intentionally excluded from the pre-commit hook: it
 # requires VITE_GOOGLE_OAUTH_CLIENT_ID and would block commits when unset. The
@@ -16,6 +17,8 @@
 pre-commit:
   parallel: false
   commands:
+    format:
+      run: bun run format:check
     typecheck:
       run: bun run typecheck
     test:

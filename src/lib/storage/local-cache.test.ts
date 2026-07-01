@@ -65,7 +65,12 @@ describe("createChromeLocalCache", () => {
 		const cache = createChromeLocalCache(area);
 		const state: CacheState = {
 			bookmarks: bookmarksOf([
-				{ url: "https://a.test/", title: "A", now: "2026-01-01T00:00:00Z", id: "a" },
+				{
+					url: "https://a.test/",
+					title: "A",
+					now: "2026-01-01T00:00:00Z",
+					id: "a",
+				},
 			]),
 			location: {
 				folder: { id: "folder-1" as never, name: "bookmark-ai" },
@@ -75,12 +80,17 @@ describe("createChromeLocalCache", () => {
 					revision: "rev-3" as never,
 				},
 			},
-			sync: { status: "synced", lastSyncedAt: isoTimestamp("2026-02-01T00:00:00Z") },
+			sync: {
+				status: "synced",
+				lastSyncedAt: isoTimestamp("2026-02-01T00:00:00Z"),
+			},
 		};
 
 		await cache.save(state);
 		// What lands in storage is the loose serialized shape, not the domain value.
-		const raw = (await area.get(CACHE_KEY))[CACHE_KEY] as { schemaVersion: number };
+		const raw = (await area.get(CACHE_KEY))[CACHE_KEY] as {
+			schemaVersion: number;
+		};
 		expect(raw.schemaVersion).toBe(1);
 
 		const reloaded = await cache.load();
@@ -102,7 +112,10 @@ describe("createChromeLocalCache", () => {
 	it("clears the stored entry", async () => {
 		const area = new FakeStorageArea();
 		const cache = createChromeLocalCache(area);
-		await cache.save({ bookmarks: Bookmarks.empty(), sync: { status: "idle" } });
+		await cache.save({
+			bookmarks: Bookmarks.empty(),
+			sync: { status: "idle" },
+		});
 		await cache.clear();
 		expect(area.store.has(CACHE_KEY)).toBe(false);
 	});

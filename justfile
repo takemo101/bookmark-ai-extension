@@ -37,11 +37,15 @@ typecheck:
 test:
     bun run test
 
-# Run the type-check + test baseline.
+# Run the format check + type-check + test baseline.
 check:
     bun run check
 
-# Apply safe formatter/lint fixes (no-op until such tooling is added).
+# Check repository formatting without writing changes.
+format-check:
+    bun run format:check
+
+# Apply repository-wide formatting.
 fix:
     bun run fix
 

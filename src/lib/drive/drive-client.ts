@@ -40,8 +40,5 @@ export interface DriveClient {
 	/** Download a file's text content together with its current metadata. */
 	downloadFile(fileId: DriveFileId): Promise<DriveDownload>;
 	/** Replace a file's content, returning the post-write metadata. */
-	uploadFile(
-		fileId: DriveFileId,
-		content: string,
-	): Promise<DriveFileMetadata>;
+	uploadFile(fileId: DriveFileId, content: string): Promise<DriveFileMetadata>;
 }

@@ -109,8 +109,7 @@ export function createChromeScriptingExtractor(
 		return {
 			error: {
 				field: "tab",
-				message:
-					"Open the page in the active tab to re-analyze it from here.",
+				message: "Open the page in the active tab to re-analyze it from here.",
 			},
 		};
 	}

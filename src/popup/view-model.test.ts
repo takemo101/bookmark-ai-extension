@@ -48,7 +48,10 @@ function recordOf(opts: {
 			tags: opts.tags,
 			aiError: opts.aiError,
 		},
-		{ id: bookmarkId(opts.id ?? "id-1"), now: isoTimestamp("2026-03-01T00:00:00Z") },
+		{
+			id: bookmarkId(opts.id ?? "id-1"),
+			now: isoTimestamp("2026-03-01T00:00:00Z"),
+		},
 	);
 	if (!res.ok) {
 		throw new Error(`bad fixture record: ${res.error.message}`);
@@ -61,7 +64,10 @@ function recordOf(opts: {
 function cacheOf(records: BookmarkRecord[]): CacheState {
 	return {
 		bookmarks: Bookmarks.from(records),
-		sync: { status: "synced", lastSyncedAt: isoTimestamp("2026-03-01T00:00:00Z") },
+		sync: {
+			status: "synced",
+			lastSyncedAt: isoTimestamp("2026-03-01T00:00:00Z"),
+		},
 	};
 }
 
@@ -86,7 +92,12 @@ class FakeUseCases implements PopupUseCases {
 	};
 	reAnalyzeResult: Result<SaveOutcome, AppError> | null = null;
 	syncResult: Result<CacheState, AppError> | null = null;
-	progressStages: SaveStage[] = ["saving", "extracting", "analyzing", "syncing"];
+	progressStages: SaveStage[] = [
+		"saving",
+		"extracting",
+		"analyzing",
+		"syncing",
+	];
 	saveCalls = 0;
 	reAnalyzeArgs: CanonicalUrl[] = [];
 
@@ -162,7 +173,10 @@ describe("createPopupController", () => {
 
 		it("renders without a tab when the active tab is unavailable", async () => {
 			const fake = new FakeUseCases();
-			fake.tab = { ok: false, error: { kind: "no-active-tab", message: "none" } };
+			fake.tab = {
+				ok: false,
+				error: { kind: "no-active-tab", message: "none" },
+			};
 			const controller = controllerWith(fake);
 
 			await controller.init();
@@ -250,7 +264,10 @@ describe("createPopupController", () => {
 		});
 
 		it("keeps a visible saved bookmark and marks analyzing failed on AI failure", async () => {
-			const record = recordOf({ aiStatus: "failed", aiError: "model returned no JSON" });
+			const record = recordOf({
+				aiStatus: "failed",
+				aiError: "model returned no JSON",
+			});
 			const fake = new FakeUseCases();
 			fake.saveResult = { ok: true, value: outcomeOf(record) };
 			fake.cache = cacheOf([record]);
@@ -290,7 +307,10 @@ describe("createPopupController", () => {
 			const fake = new FakeUseCases();
 			fake.saveResult = {
 				ok: true,
-				value: outcomeOf(record, false, { kind: "drive", message: "network down" }),
+				value: outcomeOf(record, false, {
+					kind: "drive",
+					message: "network down",
+				}),
 			};
 			fake.cache = cacheOf([record]);
 			const controller = controllerWith(fake);
@@ -392,7 +412,10 @@ describe("createPopupController", () => {
 			const fake = new FakeUseCases();
 			fake.cache = {
 				bookmarks: Bookmarks.empty(),
-				sync: { status: "error", error: { kind: "auth", message: "token expired" } },
+				sync: {
+					status: "error",
+					error: { kind: "auth", message: "token expired" },
+				},
 			};
 			fake.syncResult = {
 				ok: false,

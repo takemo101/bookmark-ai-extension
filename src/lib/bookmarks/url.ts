@@ -66,7 +66,9 @@ function parseHttpUrl(value: unknown, field: string): Result<URL, UrlError> {
 }
 
 /** Parse the user-visited URL for display/opening, applying standard URL normalization. */
-export function parseBookmarkUrl(value: unknown): Result<BookmarkUrl, UrlError> {
+export function parseBookmarkUrl(
+	value: unknown,
+): Result<BookmarkUrl, UrlError> {
 	const parsed = parseHttpUrl(value, "url");
 	if (!parsed.ok) {
 		return parsed;
@@ -75,7 +77,9 @@ export function parseBookmarkUrl(value: unknown): Result<BookmarkUrl, UrlError> 
 }
 
 /** Normalize any http(s) URL into the canonical dedup key. */
-export function canonicalizeUrl(value: unknown): Result<CanonicalUrl, UrlError> {
+export function canonicalizeUrl(
+	value: unknown,
+): Result<CanonicalUrl, UrlError> {
 	const parsed = parseHttpUrl(value, "canonicalUrl");
 	if (!parsed.ok) {
 		return parsed;

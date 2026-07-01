@@ -44,7 +44,11 @@ describe("createChromeScriptingExtractor", () => {
 			resolveActiveTab: async () => undefined,
 		});
 
-		const result = await extractor.extract({ url: URL, title: "Article", tabId: 7 });
+		const result = await extractor.extract({
+			url: URL,
+			title: "Article",
+			tabId: 7,
+		});
 
 		expect(scripting.calls).toEqual([{ tabId: 7 }]);
 		expect(result.ok).toBe(true);
@@ -57,8 +61,14 @@ describe("createChromeScriptingExtractor", () => {
 
 	it("re-analyze: injects into the active tab only when its URL matches", async () => {
 		const scripting = fakeScripting(RAW);
-		const resolveActiveTab: ActiveTabResolver = async () => ({ id: 42, url: URL });
-		const extractor = createChromeScriptingExtractor({ scripting, resolveActiveTab });
+		const resolveActiveTab: ActiveTabResolver = async () => ({
+			id: 42,
+			url: URL,
+		});
+		const extractor = createChromeScriptingExtractor({
+			scripting,
+			resolveActiveTab,
+		});
 
 		const result = await extractor.extract({ url: URL, title: "Article" });
 
@@ -93,7 +103,11 @@ describe("createChromeScriptingExtractor", () => {
 			resolveActiveTab: async () => undefined,
 		});
 
-		const result = await extractor.extract({ url: URL, title: "Article", tabId: 1 });
+		const result = await extractor.extract({
+			url: URL,
+			title: "Article",
+			tabId: 1,
+		});
 
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -109,7 +123,11 @@ describe("createChromeScriptingExtractor", () => {
 			resolveActiveTab: async () => undefined,
 		});
 
-		const result = await extractor.extract({ url: URL, title: "Article", tabId: 1 });
+		const result = await extractor.extract({
+			url: URL,
+			title: "Article",
+			tabId: 1,
+		});
 
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -123,7 +141,11 @@ describe("createChromeScriptingExtractor", () => {
 			resolveActiveTab: async () => ({ id: 1, url: URL }),
 		});
 
-		const result = await extractor.extract({ url: URL, title: "Article", tabId: 1 });
+		const result = await extractor.extract({
+			url: URL,
+			title: "Article",
+			tabId: 1,
+		});
 
 		expect(result.ok).toBe(false);
 		if (!result.ok) {

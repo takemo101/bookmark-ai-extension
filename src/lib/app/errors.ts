@@ -64,5 +64,9 @@ export function fromExtractionError(error: ExtractionError): AppError {
 
 /** Map a bookmark-domain {@link CollectionError} onto an `invalid-bookmark` error. */
 export function fromCollectionError(error: CollectionError): AppError {
-	return { kind: "invalid-bookmark", message: error.message, detail: error.field };
+	return {
+		kind: "invalid-bookmark",
+		message: error.message,
+		detail: error.field,
+	};
 }

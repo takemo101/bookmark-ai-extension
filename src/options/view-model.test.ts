@@ -112,7 +112,12 @@ class FakeUseCases implements OptionsUseCases {
 	}
 	async reAnalyzeBookmark(canonicalUrl: CanonicalUrl) {
 		this.reAnalyzeArgs.push(canonicalUrl);
-		return this.reAnalyzeResult ?? { ok: true as const, value: outcomeOf(this.cache.bookmarks.toArray()[0]!) };
+		return (
+			this.reAnalyzeResult ?? {
+				ok: true as const,
+				value: outcomeOf(this.cache.bookmarks.toArray()[0]!),
+			}
+		);
 	}
 }
 
@@ -408,7 +413,10 @@ describe("createOptionsController", () => {
 			fake.cache = cacheOf([ready]);
 			fake.reAnalyzeResult = {
 				ok: true,
-				value: outcomeOf(ready, false, { kind: "drive", message: "network down" }),
+				value: outcomeOf(ready, false, {
+					kind: "drive",
+					message: "network down",
+				}),
 			};
 			await controller.reAnalyze(url);
 
@@ -417,7 +425,11 @@ describe("createOptionsController", () => {
 
 		it("leaves the row unchanged and surfaces a safe error on the activeTab precondition (MIK-015)", async () => {
 			const fake = new FakeUseCases();
-			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "unavailable" });
+			const rec = recordOf({
+				id: "r",
+				title: "Stale",
+				aiStatus: "unavailable",
+			});
 			fake.cache = cacheOf([rec]);
 			const controller = controllerWith(fake);
 			await controller.init();
@@ -429,7 +441,8 @@ describe("createOptionsController", () => {
 				ok: false,
 				error: {
 					kind: "extraction",
-					message: "Open the page in the active tab to re-analyze it from here.",
+					message:
+						"Open the page in the active tab to re-analyze it from here.",
 					detail: "tab",
 				},
 			};

@@ -36,7 +36,9 @@ function valueError(field: string, message: string): ValueError {
 
 // --- BookmarkId -----------------------------------------------------------
 
-export function parseBookmarkId(value: unknown): Result<BookmarkId, ValueError> {
+export function parseBookmarkId(
+	value: unknown,
+): Result<BookmarkId, ValueError> {
 	if (typeof value !== "string") {
 		return err(valueError("id", "id must be a string"));
 	}
@@ -85,7 +87,9 @@ export function isoTimestamp(value: string): IsoTimestamp {
 
 export function isoTimestampFromDate(date: Date): IsoTimestamp {
 	if (Number.isNaN(date.getTime())) {
-		throw new BookmarkInvariantError("cannot build a timestamp from Invalid Date");
+		throw new BookmarkInvariantError(
+			"cannot build a timestamp from Invalid Date",
+		);
 	}
 	return date.toISOString() as IsoTimestamp;
 }
@@ -95,11 +99,17 @@ export function compareIsoTimestamp(a: IsoTimestamp, b: IsoTimestamp): number {
 	return Date.parse(a) - Date.parse(b);
 }
 
-export function maxIsoTimestamp(a: IsoTimestamp, b: IsoTimestamp): IsoTimestamp {
+export function maxIsoTimestamp(
+	a: IsoTimestamp,
+	b: IsoTimestamp,
+): IsoTimestamp {
 	return compareIsoTimestamp(a, b) >= 0 ? a : b;
 }
 
-export function minIsoTimestamp(a: IsoTimestamp, b: IsoTimestamp): IsoTimestamp {
+export function minIsoTimestamp(
+	a: IsoTimestamp,
+	b: IsoTimestamp,
+): IsoTimestamp {
 	return compareIsoTimestamp(a, b) <= 0 ? a : b;
 }
 

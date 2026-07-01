@@ -138,7 +138,11 @@ function parseLocation(
 	const folderId = nonEmptyString(value.folderId);
 	const fileId = nonEmptyString(value.fileId);
 	const revision = nonEmptyString(value.revision);
-	if (folderId === undefined || fileId === undefined || revision === undefined) {
+	if (
+		folderId === undefined ||
+		fileId === undefined ||
+		revision === undefined
+	) {
 		problems.push({
 			kind: "invalid-location",
 			message: "cached drive location is missing folderId, fileId, or revision",

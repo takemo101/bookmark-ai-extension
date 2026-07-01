@@ -1,6 +1,6 @@
-import { defineManifest } from '@crxjs/vite-plugin'
+import { defineManifest } from "@crxjs/vite-plugin";
 
-import pkg from './package.json' with { type: 'json' }
+import pkg from "./package.json" with { type: "json" };
 
 /**
  * Builds the MV3 manifest with the OAuth client ID injected at config time.
@@ -15,26 +15,26 @@ import pkg from './package.json' with { type: 'json' }
  * OAuth scope is `drive.file`.
  */
 export function createManifest(oauthClientId: string) {
-  return defineManifest({
-    manifest_version: 3,
-    name: 'Bookmark AI Extension',
-    description:
-      'Save the current tab as an AI-enriched bookmark stored as JSONL in your own Google Drive.',
-    version: pkg.version,
-    action: {
-      default_popup: 'src/popup/index.html',
-      default_title: 'Bookmark AI',
-    },
-    options_page: 'src/options/index.html',
-    background: {
-      service_worker: 'src/background/service-worker.ts',
-      type: 'module',
-    },
-    permissions: ['identity', 'storage', 'activeTab', 'scripting'],
-    host_permissions: ['https://www.googleapis.com/*'],
-    oauth2: {
-      client_id: oauthClientId,
-      scopes: ['https://www.googleapis.com/auth/drive.file'],
-    },
-  })
+	return defineManifest({
+		manifest_version: 3,
+		name: "Bookmark AI Extension",
+		description:
+			"Save the current tab as an AI-enriched bookmark stored as JSONL in your own Google Drive.",
+		version: pkg.version,
+		action: {
+			default_popup: "src/popup/index.html",
+			default_title: "Bookmark AI",
+		},
+		options_page: "src/options/index.html",
+		background: {
+			service_worker: "src/background/service-worker.ts",
+			type: "module",
+		},
+		permissions: ["identity", "storage", "activeTab", "scripting"],
+		host_permissions: ["https://www.googleapis.com/*"],
+		oauth2: {
+			client_id: oauthClientId,
+			scopes: ["https://www.googleapis.com/auth/drive.file"],
+		},
+	});
 }

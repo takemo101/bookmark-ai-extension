@@ -29,8 +29,7 @@ export const palette = {
 	danger: "#9a4b3f", // muted brick — failed/error
 } as const;
 
-export const fontStack =
-	'ui-serif, Georgia, "Times New Roman", serif';
+export const fontStack = 'ui-serif, Georgia, "Times New Roman", serif';
 
 export const surface: CSSProperties = {
 	width: 340,

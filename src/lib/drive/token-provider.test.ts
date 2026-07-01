@@ -130,6 +130,8 @@ describe("createChromeIdentityTokenProvider", () => {
 			identity: undefined,
 			getLastError: () => undefined,
 		});
-		await expect(provider.invalidateToken(SECRET_TOKEN)).resolves.toBeUndefined();
+		await expect(
+			provider.invalidateToken(SECRET_TOKEN),
+		).resolves.toBeUndefined();
 	});
 });

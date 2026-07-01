@@ -15,36 +15,36 @@
  * never used for an extension build (see {@link resolveOAuthClientId}).
  */
 export const DEV_FALLBACK_OAUTH_CLIENT_ID =
-  'dev-unconfigured.apps.googleusercontent.com'
+	"dev-unconfigured.apps.googleusercontent.com";
 
 export type ResolveOAuthClientIdOptions = {
-  /**
-   * When true, a missing client ID is a hard error instead of falling back to
-   * {@link DEV_FALLBACK_OAUTH_CLIENT_ID}. Set this for `vite build`.
-   */
-  requireForBuild: boolean
-}
+	/**
+	 * When true, a missing client ID is a hard error instead of falling back to
+	 * {@link DEV_FALLBACK_OAUTH_CLIENT_ID}. Set this for `vite build`.
+	 */
+	requireForBuild: boolean;
+};
 
 /**
  * Returns a usable OAuth client ID, or throws a clear error when one is
  * required for a build but not configured.
  */
 export function resolveOAuthClientId(
-  rawClientId: string | undefined,
-  options: ResolveOAuthClientIdOptions,
+	rawClientId: string | undefined,
+	options: ResolveOAuthClientIdOptions,
 ): string {
-  const clientId = rawClientId?.trim()
-  if (clientId) {
-    return clientId
-  }
+	const clientId = rawClientId?.trim();
+	if (clientId) {
+		return clientId;
+	}
 
-  if (options.requireForBuild) {
-    throw new Error(
-      'VITE_GOOGLE_OAUTH_CLIENT_ID is required for an extension build but is not set. ' +
-        'Add it to .env.local (see .env.example). ' +
-        'Production/extension builds must not fall back to a placeholder OAuth client.',
-    )
-  }
+	if (options.requireForBuild) {
+		throw new Error(
+			"VITE_GOOGLE_OAUTH_CLIENT_ID is required for an extension build but is not set. " +
+				"Add it to .env.local (see .env.example). " +
+				"Production/extension builds must not fall back to a placeholder OAuth client.",
+		);
+	}
 
-  return DEV_FALLBACK_OAUTH_CLIENT_ID
+	return DEV_FALLBACK_OAUTH_CLIENT_ID;
 }

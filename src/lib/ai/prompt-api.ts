@@ -75,7 +75,10 @@ function resolveNamespace(): PromptModelNamespace | null {
 		LanguageModel?: PromptModelNamespace;
 		ai?: { languageModel?: PromptModelNamespace };
 	};
-	if (scope.LanguageModel && typeof scope.LanguageModel.availability === "function") {
+	if (
+		scope.LanguageModel &&
+		typeof scope.LanguageModel.availability === "function"
+	) {
 		return scope.LanguageModel;
 	}
 	const legacy = scope.ai?.languageModel;

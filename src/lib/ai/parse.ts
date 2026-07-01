@@ -140,17 +140,27 @@ export function parseAnalysis(
 	}
 
 	if (decoded.description === undefined) {
-		return err(parseError("missing-field", "description is required", "description"));
+		return err(
+			parseError("missing-field", "description is required", "description"),
+		);
 	}
 	if (typeof decoded.description !== "string") {
 		return err(
-			parseError("invalid-field", "description must be a string", "description"),
+			parseError(
+				"invalid-field",
+				"description must be a string",
+				"description",
+			),
 		);
 	}
 	const description = decoded.description.trim();
 	if (description.length === 0) {
 		return err(
-			parseError("empty-description", "description must not be empty", "description"),
+			parseError(
+				"empty-description",
+				"description must not be empty",
+				"description",
+			),
 		);
 	}
 
@@ -167,8 +177,9 @@ export function parseAnalysis(
 		genre = decoded.genre.trim();
 	}
 
-	const analysis: PageAnalysis = genre === undefined
-		? { description, tags: tags.value }
-		: { description, genre, tags: tags.value };
+	const analysis: PageAnalysis =
+		genre === undefined
+			? { description, tags: tags.value }
+			: { description, genre, tags: tags.value };
 	return ok(analysis);
 }

@@ -210,7 +210,10 @@ describe("Bookmarks.delete", () => {
 
 	it("does not move an existing tombstone's deletedAt backward", () => {
 		const set = Bookmarks.from([record()]).delete(CANON_A, at);
-		const earlier = set.delete(CANON_A, isoTimestamp("2026-06-25T00:00:00.000Z"));
+		const earlier = set.delete(
+			CANON_A,
+			isoTimestamp("2026-06-25T00:00:00.000Z"),
+		);
 		expect(earlier.tombstones()[0].deletedAt).toBe("2026-06-26T00:00:00.000Z");
 	});
 
