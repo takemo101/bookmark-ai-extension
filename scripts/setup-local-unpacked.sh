@@ -122,9 +122,9 @@ write_env_client_id() {
 					print "VITE_GOOGLE_OAUTH_CLIENT_ID=" id
 				}
 			}
-		' "$ENV_FILE" > "$tmp"
+		' "$ENV_FILE" >"$tmp"
 	else
-		printf 'VITE_GOOGLE_OAUTH_CLIENT_ID=%s\n' "$client_id" > "$tmp"
+		printf 'VITE_GOOGLE_OAUTH_CLIENT_ID=%s\n' "$client_id" >"$tmp"
 	fi
 	mv "$tmp" "$ENV_FILE"
 }
@@ -132,39 +132,39 @@ write_env_client_id() {
 validate_client_id() {
 	local client_id="$1"
 	case "$client_id" in
-		*.apps.googleusercontent.com) return 0 ;;
-		*)
-			warn "OAuth Client ID は通常 .apps.googleusercontent.com で終わります。入力値を確認してください: $client_id"
-			return 0
-			;;
+	*.apps.googleusercontent.com) return 0 ;;
+	*)
+		warn "OAuth Client ID は通常 .apps.googleusercontent.com で終わります。入力値を確認してください: $client_id"
+		return 0
+		;;
 	esac
 }
 
 validate_extension_id() {
 	local extension_id="$1"
 	case "$extension_id" in
-		????????????????????????????????) return 0 ;;
-		*)
-			warn "Chrome 拡張 ID は通常 32 文字です。入力値を確認してください: $extension_id"
-			return 0
-			;;
+	????????????????????????????????) return 0 ;;
+	*)
+		warn "Chrome 拡張 ID は通常 32 文字です。入力値を確認してください: $extension_id"
+		return 0
+		;;
 	esac
 }
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		--no-open)
-			OPEN_BROWSER=0
-			shift
-			;;
-		-h | --help)
-			usage
-			exit 0
-			;;
-		*)
-			usage >&2
-			fail "不明なオプションです: $1"
-			;;
+	--no-open)
+		OPEN_BROWSER=0
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		usage >&2
+		fail "不明なオプションです: $1"
+		;;
 	esac
 done
 
