@@ -48,9 +48,10 @@ scripts/setup-local-unpacked.sh
 ```
 
 The script automates dependency installation, the dummy build, `.env.local`
-updates, and the real rebuild. It also opens the relevant Chrome and Google
-Cloud Console pages when possible. The following steps still require manual
-confirmation in Chrome or Google Cloud Console:
+updates, and the real rebuild. It prints detailed Japanese instructions for the
+Chrome and Google Cloud Console steps, including the OAuth consent screen and
+Test users setup. It also opens the relevant pages when possible. The following
+steps still require manual confirmation in Chrome or Google Cloud Console:
 
 - loading `dist/` with **Load unpacked**;
 - creating/configuring the Google Cloud OAuth client;
