@@ -245,6 +245,13 @@ Example desired output:
 }
 ```
 
+For the next AI analysis iteration, see
+[`ai-analysis-v2.md`](ai-analysis-v2.md). It extends the MVP design with
+long-form generated Markdown analysis, built-in and custom analysis skills,
+Drive-synced skill settings, and non-durable queue behavior while preserving the
+same privacy constraints: no external AI fallback and no persisted raw page
+excerpts.
+
 ## Drive Write and Conflict Strategy
 
 MVP write operation rewrites the full JSONL file, but with lightweight conflict protection.
