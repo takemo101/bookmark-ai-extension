@@ -45,7 +45,7 @@ EOF
 
 pause() {
 	local prompt="${1:-Press Enter to continue...}"
-	printf '\n%s' "$prompt"
+	printf '\n%b' "$prompt" >&2
 	if ! read -r _; then
 		fail "Input is required to continue. Re-run this script in an interactive shell."
 	fi
@@ -55,7 +55,7 @@ prompt_required() {
 	local prompt="$1"
 	local value=""
 	while [ -z "$value" ]; do
-		printf '%s' "$prompt"
+		printf '%b' "$prompt" >&2
 		if ! read -r value; then
 			fail "Input is required. Re-run this script in an interactive shell."
 		fi
