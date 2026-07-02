@@ -36,6 +36,8 @@ function recordOf(opts: {
 	aiError?: string;
 	id?: string;
 	updatedAt?: string;
+	analysisMarkdown?: string;
+	analysisProfileId?: string;
 }): BookmarkRecord {
 	seq += 1;
 	const url = opts.url ?? `https://example.test/p${seq}`;
@@ -48,6 +50,8 @@ function recordOf(opts: {
 			genre: opts.genre,
 			tags: opts.tags,
 			aiError: opts.aiError,
+			analysisMarkdown: opts.analysisMarkdown,
+			analysisProfileId: opts.analysisProfileId,
 		},
 		{
 			id: bookmarkId(opts.id ?? `id-${seq}`),
@@ -285,6 +289,8 @@ describe("createOptionsController", () => {
 					genre: "技術",
 					tags: ["a", "b"],
 					aiStatus: "ready",
+					analysisMarkdown: "## 概要\n\n分析本文。",
+					analysisProfileId: "github-repository",
 				}),
 			]);
 			const controller = controllerWith(fake);
@@ -299,6 +305,8 @@ describe("createOptionsController", () => {
 			expect(detail?.genre).toBe("技術");
 			expect(detail?.tags).toEqual(["a", "b"]);
 			expect(detail?.canReAnalyze).toBe(false);
+			expect(detail?.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(detail?.analysisProfileId).toBe("github-repository");
 			expect(controller.getView().rows[0].selected).toBe(true);
 		});
 

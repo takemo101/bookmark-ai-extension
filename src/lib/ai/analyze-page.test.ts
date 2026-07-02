@@ -28,12 +28,19 @@ function fakeClient(opts: {
 	};
 }
 
+const ANALYSIS_MARKDOWN = "## 概要\n\n分析本文。";
+
 describe("analyzePage status/error mapping", () => {
-	it("maps available + valid output to ready", async () => {
+	it("maps available + valid output to ready, attaching the selected profile id", async () => {
 		const client = fakeClient({
 			availability: "available",
 			prompt: async () =>
-				JSON.stringify({ description: "説明", genre: "技術", tags: ["A"] }),
+				JSON.stringify({
+					description: "説明",
+					genre: "技術",
+					tags: ["A"],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				}),
 		});
 		const outcome = await analyzePage(client, INPUT);
 		expect(outcome.status).toBe("ready");
@@ -41,6 +48,31 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.analysis.description).toBe("説明");
 		expect(outcome.analysis.genre).toBe("技術");
 		expect(outcome.analysis.tags).toEqual(["A"]);
+		expect(outcome.analysis.analysisMarkdown).toBe(ANALYSIS_MARKDOWN);
+		// example.com matches no built-in domain profile, so it falls back to generic.
+		expect(outcome.profileId).toBe("generic-page");
+	});
+
+	it("selects the GitHub repository profile for a github.com URL", async () => {
+		let seen = "";
+		const client = fakeClient({
+			prompt: async (input) => {
+				seen = input;
+				return JSON.stringify({
+					description: "説明",
+					tags: [],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				});
+			},
+		});
+		const outcome = await analyzePage(client, {
+			...INPUT,
+			url: "https://github.com/facebook/react",
+		});
+		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready") return;
+		expect(outcome.profileId).toBe("github-repository");
+		expect(seen).toContain("GitHub");
 	});
 
 	it("forwards the page excerpt and title into the prompt", async () => {
@@ -48,7 +80,11 @@ describe("analyzePage status/error mapping", () => {
 		const client = fakeClient({
 			prompt: async (input) => {
 				seen = input;
-				return JSON.stringify({ description: "説明", tags: [] });
+				return JSON.stringify({
+					description: "説明",
+					tags: [],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				});
 			},
 		});
 		await analyzePage(client, INPUT);

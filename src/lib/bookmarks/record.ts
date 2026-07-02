@@ -59,6 +59,10 @@ export type BookmarkRecordV1 = {
 	createdAt: string;
 	updatedAt: string;
 	lastAnalyzedAt?: string;
+	/** Long-form generated Markdown analysis. Never raw page excerpt text. */
+	analysisMarkdown?: string;
+	/** ID of the built-in analysis profile used for the latest ready analysis. */
+	analysisProfileId?: string;
 };
 
 /** Always-valid in-memory domain value. */
@@ -77,6 +81,8 @@ export type BookmarkRecord = {
 	readonly createdAt: IsoTimestamp;
 	readonly updatedAt: IsoTimestamp;
 	readonly lastAnalyzedAt?: IsoTimestamp;
+	readonly analysisMarkdown?: string;
+	readonly analysisProfileId?: string;
 };
 
 export type RecordError = { readonly field: string; readonly message: string };
@@ -219,6 +225,34 @@ export function parseBookmarkRecord(
 		lastAnalyzedAt = parsed.value;
 	}
 
+	if (
+		value.analysisMarkdown !== undefined &&
+		typeof value.analysisMarkdown !== "string"
+	) {
+		return err(
+			fieldError("analysisMarkdown", "analysisMarkdown must be a string"),
+		);
+	}
+	const analysisMarkdown =
+		typeof value.analysisMarkdown === "string" &&
+		value.analysisMarkdown.trim().length > 0
+			? value.analysisMarkdown.trim()
+			: undefined;
+
+	if (
+		value.analysisProfileId !== undefined &&
+		typeof value.analysisProfileId !== "string"
+	) {
+		return err(
+			fieldError("analysisProfileId", "analysisProfileId must be a string"),
+		);
+	}
+	const analysisProfileId =
+		typeof value.analysisProfileId === "string" &&
+		value.analysisProfileId.trim().length > 0
+			? value.analysisProfileId.trim()
+			: undefined;
+
 	return ok({
 		schemaVersion: CURRENT_SCHEMA_VERSION,
 		id: id.value,
@@ -234,6 +268,8 @@ export function parseBookmarkRecord(
 		createdAt: createdAt.value,
 		updatedAt: updatedAt.value,
 		lastAnalyzedAt,
+		analysisMarkdown,
+		analysisProfileId,
 	});
 }
 
@@ -259,6 +295,10 @@ export function serializeBookmarkRecord(
 	if (record.aiError !== undefined) serialized.aiError = record.aiError;
 	if (record.lastAnalyzedAt !== undefined)
 		serialized.lastAnalyzedAt = record.lastAnalyzedAt;
+	if (record.analysisMarkdown !== undefined)
+		serialized.analysisMarkdown = record.analysisMarkdown;
+	if (record.analysisProfileId !== undefined)
+		serialized.analysisProfileId = record.analysisProfileId;
 	return serialized;
 }
 
@@ -276,6 +316,8 @@ export type NewBookmarkInput = {
 	aiModel?: AiModel;
 	aiError?: string;
 	lastAnalyzedAt?: string;
+	analysisMarkdown?: string;
+	analysisProfileId?: string;
 };
 
 /**
@@ -301,6 +343,8 @@ export function createBookmarkRecord(
 		createdAt: context.now,
 		updatedAt: context.now,
 		lastAnalyzedAt: input.lastAnalyzedAt,
+		analysisMarkdown: input.analysisMarkdown,
+		analysisProfileId: input.analysisProfileId,
 	};
 	// title is optional on input but required by the parser; fall back to URL.
 	if (draft.title === undefined) {

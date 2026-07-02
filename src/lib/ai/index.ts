@@ -13,6 +13,7 @@
  *   - {@link analyzePage}             — orchestration (port → prompt → parse).
  *   - {@link parseAnalysis}           — pure boundary parser (no Chrome needed).
  *   - {@link buildAnalysisPrompt}     — Japanese structured-JSON prompt.
+ *   - {@link selectAnalysisProfile}   — built-in analysis profile selection.
  *   - {@link createChromePromptClient} — browser Prompt API adapter.
  */
 export type { Result, Ok, Err } from "./result";
@@ -36,8 +37,16 @@ export {
 	createChromePromptClient,
 } from "./prompt-api";
 
-export { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt } from "./prompt";
+export {
+	ANALYSIS_SYSTEM_PROMPT,
+	ANALYSIS_MARKDOWN_MIN_CHARS,
+	ANALYSIS_MARKDOWN_MAX_CHARS,
+	buildAnalysisPrompt,
+} from "./prompt";
 
 export { parseAnalysis } from "./parse";
+
+export type { AnalysisProfile } from "./profile";
+export { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 
 export { analyzePage } from "./analyze-page";

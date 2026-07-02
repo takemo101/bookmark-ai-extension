@@ -37,6 +37,8 @@ export type AiAnalysis = {
 	description?: string;
 	genre?: string;
 	tags?: string[];
+	analysisMarkdown?: string;
+	analysisProfileId?: string;
 };
 
 export type CollectionError =
@@ -70,6 +72,7 @@ function matchesQuery(record: BookmarkRecord, needle: string): boolean {
 		record.url,
 		record.description ?? "",
 		record.genre ?? "",
+		record.analysisMarkdown ?? "",
 		...record.tags,
 	];
 	return haystacks.some((field) => field.toLowerCase().includes(needle));
@@ -233,6 +236,9 @@ export class Bookmarks {
 				aiModel: input.aiModel ?? existing.aiModel,
 				aiError: input.aiError ?? existing.aiError,
 				lastAnalyzedAt: input.lastAnalyzedAt ?? existing.lastAnalyzedAt,
+				analysisMarkdown: input.analysisMarkdown ?? existing.analysisMarkdown,
+				analysisProfileId:
+					input.analysisProfileId ?? existing.analysisProfileId,
 			},
 			{ id: existing.id, now: updatedAt },
 		);
@@ -273,6 +279,10 @@ export class Bookmarks {
 				aiModel: "chrome-prompt-api",
 				aiError: undefined,
 				lastAnalyzedAt: updatedAt,
+				analysisMarkdown:
+					analysis.analysisMarkdown ?? existing.analysisMarkdown,
+				analysisProfileId:
+					analysis.analysisProfileId ?? existing.analysisProfileId,
 			},
 			{ id: existing.id, now: updatedAt },
 		);

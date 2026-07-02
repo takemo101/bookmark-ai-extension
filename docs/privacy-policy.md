@@ -22,6 +22,7 @@ When you click Save, the extension may process:
   - Japanese description.
   - Genre.
   - Tags.
+  - Long-form Japanese Markdown analysis.
   - AI generation status.
 
 ## Data Stored in Google Drive
@@ -40,6 +41,9 @@ Each record may include:
 - AI-generated Japanese description.
 - Genre.
 - Tags.
+- A long-form, AI-generated Japanese Markdown analysis (never a copy of the
+  page's raw text) and the ID of the built-in analysis profile used to
+  generate it.
 - Creation/update timestamps.
 - AI status such as `pending`, `ready`, `unavailable`, or `failed`.
 

@@ -177,9 +177,38 @@ export function parseAnalysis(
 		genre = decoded.genre.trim();
 	}
 
+	if (decoded.analysisMarkdown === undefined) {
+		return err(
+			parseError(
+				"missing-field",
+				"analysisMarkdown is required",
+				"analysisMarkdown",
+			),
+		);
+	}
+	if (typeof decoded.analysisMarkdown !== "string") {
+		return err(
+			parseError(
+				"invalid-field",
+				"analysisMarkdown must be a string",
+				"analysisMarkdown",
+			),
+		);
+	}
+	const analysisMarkdown = decoded.analysisMarkdown.trim();
+	if (analysisMarkdown.length === 0) {
+		return err(
+			parseError(
+				"empty-analysis-markdown",
+				"analysisMarkdown must not be empty",
+				"analysisMarkdown",
+			),
+		);
+	}
+
 	const analysis: PageAnalysis =
 		genre === undefined
-			? { description, tags: tags.value }
-			: { description, genre, tags: tags.value };
+			? { description, tags: tags.value, analysisMarkdown }
+			: { description, genre, tags: tags.value, analysisMarkdown };
 	return ok(analysis);
 }
