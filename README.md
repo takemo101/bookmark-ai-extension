@@ -10,6 +10,7 @@ Start here:
 
 - [`docs/handoff.md`](docs/handoff.md) — original conversation summary, decisions, MVP scope, open questions, and suggested next steps.
 - [`docs/design.md`](docs/design.md) — refined MVP design for implementation.
+- [`docs/ai-analysis-v2.md`](docs/ai-analysis-v2.md) — AI Analysis v2 plan for long-form Markdown analysis, analysis skills, and queue behavior.
 - [`docs/implementation-principles.md`](docs/implementation-principles.md) — implementation principles adapted from okite-ai skills.
 - [`docs/publication.md`](docs/publication.md) — Chrome Web Store publication and OAuth plan.
 - [`docs/privacy-policy.md`](docs/privacy-policy.md) — privacy policy draft for MVP/publication.
