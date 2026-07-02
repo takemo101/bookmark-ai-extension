@@ -38,6 +38,40 @@ Install or prepare:
 
 The AI-unavailable path can be tested on normal Chrome without Prompt API.
 
+## Guided setup script
+
+You can use the guided shell script for the build and prompt-driven parts of
+this setup:
+
+```sh
+scripts/setup-local-unpacked.sh
+```
+
+The script automates dependency installation, the dummy build, `.env.local`
+updates, and the real rebuild. It also opens the relevant Chrome and Google
+Cloud Console pages when possible. The following steps still require manual
+confirmation in Chrome or Google Cloud Console:
+
+- loading `dist/` with **Load unpacked**;
+- creating/configuring the Google Cloud OAuth client;
+- pasting the generated extension ID and OAuth client ID back into the script;
+- clicking the Chrome extension reload button.
+
+Use this when you want a guided flow. Use the manual steps below when you want
+to perform each command yourself.
+
+To print help without running setup steps:
+
+```sh
+scripts/setup-local-unpacked.sh --help
+```
+
+To avoid opening browser tabs automatically:
+
+```sh
+scripts/setup-local-unpacked.sh --no-open
+```
+
 ## Step 1: Install dependencies
 
 From the repository root:
