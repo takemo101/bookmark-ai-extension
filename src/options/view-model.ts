@@ -74,6 +74,10 @@ export type DetailView = {
 	readonly updatedAt: string;
 	readonly lastAnalyzedAt?: string;
 	readonly canReAnalyze: boolean;
+	/** Long-form generated Markdown analysis, rendered safely (docs/design.md "Options page"). */
+	readonly analysisMarkdown?: string;
+	/** ID of the built-in analysis profile that generated the current analysis. */
+	readonly analysisProfileId?: string;
 };
 
 export type SyncView = {
@@ -381,6 +385,8 @@ function toDetail(record: BookmarkRecord): DetailView {
 		updatedAt: record.updatedAt,
 		lastAnalyzedAt: record.lastAnalyzedAt,
 		canReAnalyze: record.aiStatus !== "ready",
+		analysisMarkdown: record.analysisMarkdown,
+		analysisProfileId: record.analysisProfileId,
 	};
 }
 

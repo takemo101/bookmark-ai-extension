@@ -103,7 +103,13 @@ function makeApp(mark: (event: string) => void) {
 			mark("analyze");
 			return {
 				status: "ready",
-				analysis: { description: "説明", genre: "開発", tags: ["a"] },
+				analysis: {
+					description: "説明",
+					genre: "開発",
+					tags: ["a"],
+					analysisMarkdown: "## 概要\n\n分析本文。",
+				},
+				profileId: "generic-page",
 			};
 		},
 	};

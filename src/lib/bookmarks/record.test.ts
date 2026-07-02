@@ -113,6 +113,44 @@ describe("parseBookmarkRecord", () => {
 				.ok,
 		).toBe(false);
 	});
+
+	it("parses analysisMarkdown and analysisProfileId when present", () => {
+		const result = parseBookmarkRecord(
+			validV1({
+				analysisMarkdown: "## 概要\n\n分析本文。",
+				analysisProfileId: "github-repository",
+			}),
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(result.value.analysisProfileId).toBe("github-repository");
+		}
+	});
+
+	it("parses an old record without analysisMarkdown/analysisProfileId (backward compatible)", () => {
+		const result = parseBookmarkRecord(validV1());
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.analysisMarkdown).toBeUndefined();
+			expect(result.value.analysisProfileId).toBeUndefined();
+		}
+	});
+
+	it("rejects a non-string analysisMarkdown", () => {
+		expect(
+			parseBookmarkRecord(validV1({ analysisMarkdown: 5 as unknown as string }))
+				.ok,
+		).toBe(false);
+	});
+
+	it("rejects a non-string analysisProfileId", () => {
+		expect(
+			parseBookmarkRecord(
+				validV1({ analysisProfileId: 5 as unknown as string }),
+			).ok,
+		).toBe(false);
+	});
 });
 
 describe("serializeBookmarkRecord", () => {
@@ -134,6 +172,26 @@ describe("serializeBookmarkRecord", () => {
 			expect("description" in serialized).toBe(false);
 			expect("genre" in serialized).toBe(false);
 			expect("lastAnalyzedAt" in serialized).toBe(false);
+			expect("analysisMarkdown" in serialized).toBe(false);
+			expect("analysisProfileId" in serialized).toBe(false);
+		}
+	});
+
+	it("round-trips analysisMarkdown and analysisProfileId", () => {
+		const parsed = parseBookmarkRecord(
+			validV1({
+				analysisMarkdown: "## 概要\n\n分析本文。",
+				analysisProfileId: "github-repository",
+			}),
+		);
+		expect(parsed.ok).toBe(true);
+		if (parsed.ok) {
+			const serialized = serializeBookmarkRecord(parsed.value);
+			expect(serialized.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(serialized.analysisProfileId).toBe("github-repository");
+			const reparsed = parseBookmarkRecord(serialized);
+			expect(reparsed.ok).toBe(true);
+			if (reparsed.ok) expect(reparsed.value).toEqual(parsed.value);
 		}
 	});
 });

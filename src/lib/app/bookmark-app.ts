@@ -193,6 +193,8 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				description: outcome.analysis.description,
 				genre: outcome.analysis.genre,
 				tags: [...outcome.analysis.tags],
+				analysisMarkdown: outcome.analysis.analysisMarkdown,
+				analysisProfileId: outcome.profileId,
 			};
 			return bookmarks.applyAiAnalysis(canonicalUrl, analysis, now);
 		}

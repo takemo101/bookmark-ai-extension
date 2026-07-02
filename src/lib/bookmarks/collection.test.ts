@@ -103,6 +103,33 @@ describe("Bookmarks.upsert", () => {
 		expect(saved?.updatedAt).toBe("2026-06-25T00:00:00.000Z");
 	});
 
+	it("preserves analysisMarkdown and analysisProfileId when re-saving a ready bookmark", () => {
+		const first = Bookmarks.empty().upsert(
+			{
+				url: "https://example.com/a",
+				title: "A",
+				aiStatus: "ready",
+				analysisMarkdown: "## 概要\n\n分析本文。",
+				analysisProfileId: "github-repository",
+			},
+			ctx("bm-1", "2026-06-25T00:00:00.000Z"),
+		);
+		if (!first.ok) throw new Error("first upsert failed");
+
+		// Re-save (e.g. the popup saving the same tab again) without passing AI
+		// fields — they must survive from the existing record, not be wiped.
+		const second = first.value.upsert(
+			{ url: "https://example.com/a", title: "A" },
+			ctx("bm-IGNORED", "2026-06-25T05:00:00.000Z"),
+		);
+		expect(second.ok).toBe(true);
+		if (second.ok) {
+			const saved = second.value.get(CANON_A);
+			expect(saved?.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(saved?.analysisProfileId).toBe("github-repository");
+		}
+	});
+
 	it("rejects an invalid URL", () => {
 		const result = Bookmarks.empty().upsert(
 			{ url: "not-a-url" },
@@ -119,7 +146,13 @@ describe("Bookmarks AI status transitions", () => {
 	it("applies AI analysis and moves to ready", () => {
 		const result = base.applyAiAnalysis(
 			CANON_A,
-			{ description: "説明", genre: "開発ツール", tags: ["GitHub"] },
+			{
+				description: "説明",
+				genre: "開発ツール",
+				tags: ["GitHub"],
+				analysisMarkdown: "## 概要\n\n分析本文。",
+				analysisProfileId: "github-repository",
+			},
 			later,
 		);
 		expect(result.ok).toBe(true);
@@ -133,6 +166,8 @@ describe("Bookmarks AI status transitions", () => {
 			expect(saved?.lastAnalyzedAt).toBe(later);
 			expect(saved?.updatedAt).toBe(later);
 			expect(saved?.createdAt).toBe("2026-06-25T00:00:00.000Z");
+			expect(saved?.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(saved?.analysisProfileId).toBe("github-repository");
 		}
 	});
 
@@ -409,6 +444,8 @@ describe("Bookmarks search and filter", () => {
 			genre: "開発ツール",
 			tags: ["TypeScript", "拡張機能"],
 			aiStatus: "ready",
+			analysisMarkdown:
+				"## 概要\n\nChrome拡張機能のソースコードを公開するリポジトリ。",
 		}),
 		record({
 			id: "bm-2",
@@ -442,6 +479,12 @@ describe("Bookmarks search and filter", () => {
 
 	it("searches by tag", () => {
 		expect(collection.search("typescript").map((r) => r.id)).toEqual(["bm-1"]);
+	});
+
+	it("searches by analysisMarkdown content", () => {
+		expect(collection.search("chrome拡張機能").map((r) => r.id)).toEqual([
+			"bm-1",
+		]);
 	});
 
 	it("returns all records for a blank query", () => {

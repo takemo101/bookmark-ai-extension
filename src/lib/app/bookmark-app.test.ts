@@ -188,7 +188,9 @@ const READY: AnalysisOutcome = {
 		description: "説明文",
 		genre: "開発ツール",
 		tags: ["GitHub", "TypeScript"],
+		analysisMarkdown: "## 概要\n\n分析本文。",
 	},
+	profileId: "github-repository",
 };
 
 type Harness = {
@@ -244,6 +246,10 @@ describe("createBookmarkApp", () => {
 			expect(result.value.record.description).toBe("説明文");
 			expect(result.value.record.genre).toBe("開発ツール");
 			expect(result.value.record.tags).toEqual(["GitHub", "TypeScript"]);
+			expect(result.value.record.analysisMarkdown).toBe(
+				"## 概要\n\n分析本文。",
+			);
+			expect(result.value.record.analysisProfileId).toBe("github-repository");
 			// Pending was written first (create/update pending → persist → analyze),
 			// so Drive was saved twice: once pending, once final.
 			expect(repo.saveCalls).toBe(2);

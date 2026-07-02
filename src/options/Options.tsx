@@ -12,6 +12,7 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 
+import { type MarkdownBlock, parseMarkdownBlocks } from "./markdown";
 import type {
 	FacetsView,
 	FiltersView,
@@ -413,6 +414,10 @@ function DetailPane({
 
 			{detail.genre ? <DetailField label="Genre" value={detail.genre} /> : null}
 
+			{detail.analysisProfileId ? (
+				<DetailField label="Profile" value={detail.analysisProfileId} />
+			) : null}
+
 			{detail.tags.length > 0 ? (
 				<div style={{ marginTop: 10 }}>
 					<p style={railLabel}>Tags</p>
@@ -424,6 +429,10 @@ function DetailPane({
 						))}
 					</div>
 				</div>
+			) : null}
+
+			{detail.analysisMarkdown ? (
+				<AnalysisMarkdown markdown={detail.analysisMarkdown} />
 			) : null}
 
 			{detail.aiError ? (
@@ -474,6 +483,38 @@ function DetailPane({
 			</div>
 		</aside>
 	);
+}
+
+/**
+ * Renders `analysisMarkdown` as plain React text nodes grouped by block type.
+ * Only {@link parseMarkdownBlocks}'s block text ever reaches JSX children —
+ * never `dangerouslySetInnerHTML` — so raw HTML/script content is inert,
+ * displayed as literal escaped text rather than interpreted markup.
+ */
+function AnalysisMarkdown({ markdown }: { markdown: string }) {
+	const blocks = parseMarkdownBlocks(markdown);
+	return (
+		<div style={{ marginTop: 10 }}>
+			<p style={railLabel}>Analysis</p>
+			<div style={{ fontSize: 13, color: palette.ink }}>
+				{blocks.map((block, i) => (
+					<AnalysisBlock key={i} block={block} />
+				))}
+			</div>
+		</div>
+	);
+}
+
+function AnalysisBlock({ block }: { block: MarkdownBlock }) {
+	if (block.type === "heading") {
+		return (
+			<p style={{ fontWeight: 700, margin: "10px 0 4px" }}>{block.text}</p>
+		);
+	}
+	if (block.type === "list-item") {
+		return <p style={{ margin: "2px 0", paddingLeft: 14 }}>• {block.text}</p>;
+	}
+	return <p style={{ margin: "6px 0" }}>{block.text}</p>;
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {

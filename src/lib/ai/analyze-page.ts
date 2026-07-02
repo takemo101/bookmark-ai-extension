@@ -16,6 +16,7 @@
  *   - valid output                    → `ready` with the parsed analysis.
  */
 import { parseAnalysis } from "./parse";
+import { selectAnalysisProfile } from "./profile";
 import { buildAnalysisPrompt } from "./prompt";
 import { type PromptClient, PromptApiUnavailableError } from "./prompt-api";
 import type { AnalysisInput, AnalysisOutcome } from "./types";
@@ -43,9 +44,11 @@ export async function analyzePage(
 		return { status: "unavailable", reason: `Prompt API ${availability}` };
 	}
 
+	const profile = selectAnalysisProfile(input.url);
+
 	let raw: string;
 	try {
-		raw = await client.prompt(buildAnalysisPrompt(input));
+		raw = await client.prompt(buildAnalysisPrompt(input, profile));
 	} catch (error) {
 		if (error instanceof PromptApiUnavailableError) {
 			return { status: "unavailable", reason: error.message };
@@ -60,5 +63,5 @@ export async function analyzePage(
 	if (!parsed.ok) {
 		return { status: "failed", error: parsed.error };
 	}
-	return { status: "ready", analysis: parsed.value };
+	return { status: "ready", analysis: parsed.value, profileId: profile.id };
 }

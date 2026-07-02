@@ -30,6 +30,8 @@ export type PageAnalysis = {
 	readonly description: string;
 	readonly genre?: string;
 	readonly tags: readonly string[];
+	/** Long-form generated Markdown analysis. Generated, never copied excerpt text. */
+	readonly analysisMarkdown: string;
 };
 
 /** Tags beyond this count are dropped rather than treated as malformed output. */
@@ -42,6 +44,7 @@ export type AnalysisParseErrorKind =
 	| "not-object"
 	| "missing-field"
 	| "empty-description"
+	| "empty-analysis-markdown"
 	| "invalid-field";
 
 /** A recoverable failure to parse raw Prompt API text into a {@link PageAnalysis}. */
@@ -67,11 +70,17 @@ export type AnalysisStatus = "ready" | "unavailable" | "failed";
 
 /**
  * Outcome of {@link analyzePage}. Each variant maps onto a bookmark `aiStatus`:
- *   - `ready`        → apply the analysis, status `ready`.
+ *   - `ready`        → apply the analysis, status `ready`. `profileId` identifies
+ *                      the built-in analysis profile selected for the page (see
+ *                      ./profile.ts), independent of the AI-produced JSON.
  *   - `unavailable`  → keep the bookmark, status `unavailable` (re-analyze later).
  *   - `failed`       → keep the bookmark, status `failed`, record the reason.
  */
 export type AnalysisOutcome =
-	| { readonly status: "ready"; readonly analysis: PageAnalysis }
+	| {
+			readonly status: "ready";
+			readonly analysis: PageAnalysis;
+			readonly profileId: string;
+	  }
 	| { readonly status: "unavailable"; readonly reason: string }
 	| { readonly status: "failed"; readonly error: AnalysisFailure };
