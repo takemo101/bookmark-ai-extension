@@ -59,18 +59,18 @@ type RawAvailability =
 	| "downloading"
 	| "available";
 
-interface PromptSession {
+export interface PromptSession {
 	prompt(input: string): Promise<string>;
 	destroy?(): void;
 }
 
-interface PromptModelNamespace {
+export interface PromptModelNamespace {
 	availability(options?: unknown): Promise<RawAvailability | string>;
 	create(options?: unknown): Promise<PromptSession>;
 }
 
 /** Locate the language-model namespace, tolerating both known global shapes. */
-function resolveNamespace(): PromptModelNamespace | null {
+export function resolveNamespace(): PromptModelNamespace | null {
 	const scope = globalThis as {
 		LanguageModel?: PromptModelNamespace;
 		ai?: { languageModel?: PromptModelNamespace };
