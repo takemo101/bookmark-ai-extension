@@ -65,7 +65,12 @@ function rowOf(overrides: Partial<RowView> = {}): RowView {
 function viewOf(overrides: Partial<OptionsView> = {}): OptionsView {
 	return {
 		loading: false,
-		sync: { status: "synced", pendingLocalChanges: false },
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+		},
 		filters: { query: "" },
 		facets: {
 			genres: [],
@@ -379,6 +384,8 @@ describe("Options Drive sync affordance (MIK-024)", () => {
 					status: "error",
 					pendingLocalChanges: true,
 					error: "Drive sync failed",
+					syncing: false,
+					writing: false,
 				},
 			}),
 		);
@@ -386,6 +393,101 @@ describe("Options Drive sync affordance (MIK-024)", () => {
 		expect(html).toContain("Drive sync failed");
 		expect(html).toContain("Local changes pending — will retry on next sync");
 		expect(html).toContain('aria-label="Sync with Google Drive"');
+		// A failed sync leaves the button clickable so the user can retry.
+		expect(html).not.toContain('aria-busy="true"');
+	});
+});
+
+describe("Options Drive sync progress feedback (MIK-026)", () => {
+	it("shows cached-loading progress and disables the floating sync button", () => {
+		const html = render(viewOf({ loading: true }));
+
+		expect(html).toContain("Loading cached bookmarks…");
+		expect(html).toContain("Loading your library…");
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("disabled");
+		expect(html).toContain("loading…");
+	});
+
+	it("shows Drive-syncing progress and blocks duplicate sync clicks", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				sync: {
+					status: "syncing",
+					pendingLocalChanges: false,
+					syncing: true,
+					writing: false,
+				},
+			}),
+		);
+
+		expect(html).toContain("Syncing with Google Drive…");
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("syncing…");
+		expect(html).not.toContain("Writing changes to Google Drive…");
+	});
+
+	it("shows Drive-writing progress distinct from syncing", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				busy: true,
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: false,
+					writing: true,
+				},
+			}),
+		);
+
+		expect(html).toContain("Writing changes to Google Drive…");
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("writing…");
+		expect(html).not.toContain("Syncing with Google Drive…");
+	});
+
+	it("keeps pending-local-changes visible while a write is failing over", () => {
+		const html = render(
+			viewOf({
+				sync: {
+					status: "error",
+					pendingLocalChanges: true,
+					error: "Drive sync failed",
+					syncing: false,
+					writing: false,
+				},
+			}),
+		);
+
+		expect(html).toContain("Local changes pending — will retry on next sync");
+		expect(html).toContain("Drive sync failed");
+		expect(html).not.toContain("Syncing with Google Drive…");
+		expect(html).not.toContain("Writing changes to Google Drive…");
+	});
+
+	it("renders no progress line and an enabled sync button when idle", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+		);
+
+		expect(html).not.toContain("Loading cached bookmarks…");
+		expect(html).not.toContain("Syncing with Google Drive…");
+		expect(html).not.toContain("Writing changes to Google Drive…");
+		expect(html).not.toContain("disabled");
+		expect(html).toContain("synced");
 	});
 });
 

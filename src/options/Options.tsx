@@ -146,6 +146,7 @@ export function Options({
 					</div>
 					<FloatingSyncButton
 						sync={view.sync}
+						loading={view.loading}
 						onRefresh={() => void controller.refresh()}
 					/>
 					{view.selected ? (
@@ -260,7 +261,7 @@ function LeftRail({
 				) : null}
 			</section>
 
-			<SyncPanel sync={view.sync} />
+			<SyncPanel sync={view.sync} loading={view.loading} />
 
 			<FilterFacets
 				facets={view.facets}
@@ -272,11 +273,35 @@ function LeftRail({
 }
 
 /**
+ * The one line of in-flight progress copy, or `undefined` when idle (MIK-026).
+ * Cached loading, a Drive pull, and a Drive write read differently so the user
+ * knows which slow thing is happening. Exported for tests only — pure view
+ * logic, no controller state.
+ */
+export function syncProgressText(
+	sync: Pick<SyncView, "syncing" | "writing">,
+	loading: boolean,
+): string | undefined {
+	if (loading) {
+		return "Loading cached bookmarks…";
+	}
+	if (sync.syncing) {
+		return "Syncing with Google Drive…";
+	}
+	if (sync.writing) {
+		return "Writing changes to Google Drive…";
+	}
+	return undefined;
+}
+
+/**
  * Left-rail Drive sync status readout (MIK-024): status, pending changes, last
  * synced time, and safe errors stay visible here, but the sync action itself
- * moved to {@link FloatingSyncButton} so the rail stays compact.
+ * moved to {@link FloatingSyncButton} so the rail stays compact. In-flight
+ * loading/syncing/writing progress renders as an explicit line (MIK-026).
  */
-function SyncPanel({ sync }: { sync: SyncView }) {
+function SyncPanel({ sync, loading }: { sync: SyncView; loading: boolean }) {
+	const progress = syncProgressText(sync, loading);
 	return (
 		<section style={panel}>
 			<p style={railLabel}>Drive sync</p>
@@ -292,6 +317,14 @@ function SyncPanel({ sync }: { sync: SyncView }) {
 				/>
 				<span style={{ fontSize: 13 }}>{sync.status}</span>
 			</div>
+			{progress ? (
+				<p
+					role="status"
+					style={{ fontSize: 12, color: palette.inkSoft, margin: "6px 0 0" }}
+				>
+					{progress}
+				</p>
+			) : null}
 			{sync.pendingLocalChanges ? (
 				<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
 					Local changes pending — will retry on next sync
@@ -314,20 +347,38 @@ function SyncPanel({ sync }: { sync: SyncView }) {
 /**
  * Floating Drive sync action (MIK-024): the always-reachable replacement for
  * the old rail "Sync now" button. Shows the current sync tone/status and
- * dispatches the existing {@link OptionsController.refresh} — no new sync
- * semantics (MIK-026 owns richer progress states).
+ * dispatches the existing {@link OptionsController.refresh}. While the cache
+ * is loading or a Drive pull/write is in flight the button is disabled and
+ * reads what is happening, so a slow sync can never be double-clicked into a
+ * second one (MIK-026; the controller drops duplicates too).
  */
 function FloatingSyncButton({
 	sync,
+	loading,
 	onRefresh,
 }: {
 	sync: SyncView;
+	loading: boolean;
 	onRefresh: () => void;
 }) {
+	const inFlight = loading || sync.syncing || sync.writing;
+	const detail = loading
+		? "loading…"
+		: sync.syncing
+			? "syncing…"
+			: sync.writing
+				? "writing…"
+				: sync.status;
 	return (
 		<button
 			type="button"
-			style={floatingSyncButton}
+			style={
+				inFlight
+					? { ...floatingSyncButton, ...disabledButton }
+					: floatingSyncButton
+			}
+			disabled={inFlight}
+			aria-busy={inFlight || undefined}
 			onClick={onRefresh}
 			aria-label="Sync with Google Drive"
 		>
@@ -342,7 +393,7 @@ function FloatingSyncButton({
 			/>
 			<span>Sync Drive</span>
 			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
-				{sync.status}
+				{detail}
 			</span>
 		</button>
 	);

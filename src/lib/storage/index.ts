@@ -17,6 +17,8 @@
  *   - {@link SettingsCache} + {@link createChromeSettingsCache} — the parallel
  *     cache for `bookmark-ai/settings.json`'s custom skills, under its own
  *     `chrome.storage.local` key (MIK-018).
+ *   - {@link OPTIONS_SYNC_REQUEST_KEY} — the token-free Manage-in-Options →
+ *     Options sync request marker key (MIK-026).
  */
 export type { Result, Ok, Err } from "./result";
 export { ok, err } from "./result";
@@ -63,3 +65,6 @@ export { serializeSettingsCacheState } from "./settings-serialize";
 
 export type { SettingsCache } from "./settings-local-cache";
 export { createChromeSettingsCache } from "./settings-local-cache";
+
+export type { OptionsSyncRequestMarker } from "./sync-request";
+export { OPTIONS_SYNC_REQUEST_KEY } from "./sync-request";
