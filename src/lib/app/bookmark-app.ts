@@ -40,6 +40,7 @@ import {
 	type CollectionError,
 	canonicalizeUrl,
 } from "../bookmarks/index";
+import type { AnalysisProfile } from "../ai/index";
 import type { DriveLocation } from "../drive/index";
 import {
 	type ExtractedPage,
@@ -169,6 +170,23 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
+	 * The currently-enabled custom analysis profiles (MIK-018), read from a fast
+	 * local cache (never Drive) through the optional `settingsProvider` port.
+	 * Degrades to `[]` when the port is absent or fails, so analysis is never
+	 * blocked on settings being unavailable — the built-ins still apply.
+	 */
+	async function currentCustomProfiles(): Promise<readonly AnalysisProfile[]> {
+		if (!deps.settingsProvider) {
+			return [];
+		}
+		try {
+			return await deps.settingsProvider.currentCustomProfiles();
+		} catch {
+			return [];
+		}
+	}
+
+	/**
 	 * The analysis tail once a page has been extracted: build the excerpt, ask the
 	 * analyzer, and apply the resulting status to the record through the domain.
 	 */
@@ -182,11 +200,15 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	): Promise<Result<Bookmarks, CollectionError>> {
 		const excerpt = buildExcerpt(page);
 		onProgress?.("analyzing");
-		const outcome = await deps.analyzer.analyze({
-			title: target.title,
-			url: target.url,
-			excerpt: excerpt.text,
-		});
+		const customProfiles = await currentCustomProfiles();
+		const outcome = await deps.analyzer.analyze(
+			{
+				title: target.title,
+				url: target.url,
+				excerpt: excerpt.text,
+			},
+			customProfiles,
+		);
 
 		if (outcome.status === "ready") {
 			const analysis: AiAnalysis = {

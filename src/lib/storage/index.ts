@@ -14,6 +14,9 @@
  *     parser and serializer (no Chrome needed).
  *   - {@link CacheState} and friends — the trusted in-memory view and its typed
  *     sync status/errors.
+ *   - {@link SettingsCache} + {@link createChromeSettingsCache} — the parallel
+ *     cache for `bookmark-ai/settings.json`'s custom skills, under its own
+ *     `chrome.storage.local` key (MIK-018).
  */
 export type { Result, Ok, Err } from "./result";
 export { ok, err } from "./result";
@@ -37,3 +40,26 @@ export { serializeCacheState } from "./serialize";
 
 export type { LocalCache, LocalCacheStorageArea } from "./local-cache";
 export { createChromeLocalCache } from "./local-cache";
+
+export type {
+	SettingsCacheState,
+	CachedSettingsStateV1,
+	CachedSettingsDriveLocationV1,
+	CachedSettingsSyncStateV1,
+	SettingsCacheProblem,
+	SettingsCacheProblemKind,
+	SettingsCacheParseResult,
+} from "./settings-types";
+export {
+	SETTINGS_CACHE_KEY,
+	SETTINGS_CACHE_SCHEMA_VERSION,
+} from "./settings-types";
+
+export {
+	parseCachedSettingsState,
+	emptySettingsCacheState,
+} from "./settings-parse";
+export { serializeSettingsCacheState } from "./settings-serialize";
+
+export type { SettingsCache } from "./settings-local-cache";
+export { createChromeSettingsCache } from "./settings-local-cache";

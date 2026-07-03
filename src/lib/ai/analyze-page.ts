@@ -14,9 +14,18 @@
  *   - any other `prompt` throw        → `failed` (client error).
  *   - malformed output                → `failed` (recoverable parse error).
  *   - valid output                    → `ready` with the parsed analysis.
+ *
+ * `customProfiles` (MIK-018, docs/ai-analysis-v2.md "Skill matching") are the
+ * caller's currently-enabled Drive-synced custom skills, already converted to
+ * {@link AnalysisProfile} by `ai/custom-profile.ts`. They are merged with the
+ * fixed built-ins before selection, so a higher-priority/more-specific custom
+ * skill can win, while the built-ins remain the fallback when nothing custom
+ * matches. Omitting the argument (or passing an empty array) reproduces the
+ * built-in-only Phase 1 behavior exactly.
  */
 import { parseAnalysis } from "./parse";
-import { selectAnalysisProfile } from "./profile";
+import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
+import type { AnalysisProfile } from "./profile";
 import { buildAnalysisPrompt } from "./prompt";
 import { type PromptClient, PromptApiUnavailableError } from "./prompt-api";
 import type { AnalysisInput, AnalysisOutcome } from "./types";
@@ -31,6 +40,7 @@ function describeError(error: unknown): string {
 export async function analyzePage(
 	client: PromptClient,
 	input: AnalysisInput,
+	customProfiles: readonly AnalysisProfile[] = [],
 ): Promise<AnalysisOutcome> {
 	let availability: Awaited<ReturnType<PromptClient["availability"]>>;
 	try {
@@ -44,7 +54,11 @@ export async function analyzePage(
 		return { status: "unavailable", reason: `Prompt API ${availability}` };
 	}
 
-	const profile = selectAnalysisProfile(input.url);
+	const profiles =
+		customProfiles.length > 0
+			? [...BUILT_IN_PROFILES, ...customProfiles]
+			: BUILT_IN_PROFILES;
+	const profile = selectAnalysisProfile(input.url, profiles);
 
 	let raw: string;
 	try {

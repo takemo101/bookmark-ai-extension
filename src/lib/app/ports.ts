@@ -23,7 +23,11 @@ import type {
 	Result as DriveResult,
 } from "../drive/index";
 import type { RepositorySnapshot } from "../drive/repository";
-import type { AnalysisInput, AnalysisOutcome } from "../ai/index";
+import type {
+	AnalysisInput,
+	AnalysisOutcome,
+	AnalysisProfile,
+} from "../ai/index";
 import type {
 	ExtractedPage,
 	ExtractionError,
@@ -46,9 +50,29 @@ export interface BookmarkRepositoryPort {
 	): Promise<DriveResult<RepositorySnapshot, RepositoryError>>;
 }
 
-/** The AI analyzer, reduced to a single "analyze this excerpt" call. */
+/**
+ * The AI analyzer, reduced to a single "analyze this excerpt" call.
+ * `customProfiles` (MIK-018), when supplied, are the caller's currently
+ * enabled Drive-synced custom skills, already converted to
+ * {@link AnalysisProfile}; the analyzer merges them with the fixed built-ins
+ * before selecting a profile (`ai/analyze-page.ts`).
+ */
 export interface AnalyzerPort {
-	analyze(input: AnalysisInput): Promise<AnalysisOutcome>;
+	analyze(
+		input: AnalysisInput,
+		customProfiles?: readonly AnalysisProfile[],
+	): Promise<AnalysisOutcome>;
+}
+
+/**
+ * Supplies the currently-enabled custom analysis skills, already converted to
+ * {@link AnalysisProfile}, for merging with the built-ins at analysis time
+ * (MIK-018). Implementations must degrade to `[]` on any failure — analysis
+ * must never block on settings being unavailable (docs/ai-analysis-v2.md
+ * "Settings file").
+ */
+export interface SettingsProviderPort {
+	currentCustomProfiles(): Promise<readonly AnalysisProfile[]>;
 }
 
 /**
@@ -135,4 +159,11 @@ export type AppDeps = {
 	readonly ids: IdGenerator;
 	readonly logger?: Logger;
 	readonly redactor?: Redactor;
+	/**
+	 * Optional source of currently-enabled custom analysis skills (MIK-018).
+	 * Omitted entirely (as every pre-existing caller/test does) reproduces the
+	 * built-in-only behavior exactly; when present, a failure degrades to `[]`
+	 * rather than blocking analysis.
+	 */
+	readonly settingsProvider?: SettingsProviderPort;
 };

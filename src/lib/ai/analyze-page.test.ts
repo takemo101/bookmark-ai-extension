@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { analyzePage } from "./analyze-page";
+import type { AnalysisProfile } from "./profile";
 import {
 	type PromptApiAvailability,
 	type PromptClient,
@@ -164,5 +165,57 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.status).toBe("unavailable");
 		if (outcome.status !== "unavailable") return;
 		expect(outcome.reason).toContain("probe blew up");
+	});
+
+	it("prefers a higher-priority custom profile over a matching built-in", async () => {
+		const client = fakeClient({
+			prompt: async () =>
+				JSON.stringify({
+					description: "説明",
+					tags: [],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				}),
+		});
+		const custom: AnalysisProfile = {
+			id: "custom-github",
+			name: "Custom GitHub",
+			priority: 100,
+			urlPatterns: ["github.com/*"],
+			instruction: "Custom emphasis.",
+		};
+		const outcome = await analyzePage(
+			client,
+			{ ...INPUT, url: "https://github.com/facebook/react" },
+			[custom],
+		);
+		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready") return;
+		expect(outcome.profileId).toBe("custom-github");
+	});
+
+	it("falls back to a built-in profile when no custom profile matches", async () => {
+		const client = fakeClient({
+			prompt: async () =>
+				JSON.stringify({
+					description: "説明",
+					tags: [],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				}),
+		});
+		const custom: AnalysisProfile = {
+			id: "custom-unrelated",
+			name: "Custom Unrelated",
+			priority: 100,
+			urlPatterns: ["unrelated.example/*"],
+			instruction: "Custom emphasis.",
+		};
+		const outcome = await analyzePage(
+			client,
+			{ ...INPUT, url: "https://github.com/facebook/react" },
+			[custom],
+		);
+		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready") return;
+		expect(outcome.profileId).toBe("github-repository");
 	});
 });

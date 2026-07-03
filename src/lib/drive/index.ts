@@ -15,6 +15,9 @@
  *     and its fetch-based adapter.
  *   - {@link DriveBookmarkRepository} — bootstrap, load, and conflict-safe save,
  *     delegating record merge to {@link Bookmarks}.
+ *   - {@link DriveSettingsRepository} — the same bootstrap/load/save shape for
+ *     `bookmark-ai/settings.json`, with file-level `updatedAt`
+ *     last-writer-wins in place of a per-record merge (MIK-018).
  *   - Typed values, metadata shapes, and the {@link RepositoryError} taxonomy.
  */
 export type { Result, Ok, Err } from "./result";
@@ -30,6 +33,7 @@ export {
 	type DriveLocation,
 	FOLDER_NAME,
 	FILE_NAME,
+	SETTINGS_FILE_NAME,
 	FOLDER_MIME_TYPE,
 	JSONL_MIME_TYPE,
 } from "./types";
@@ -63,3 +67,9 @@ export {
 	type DriveBookmarkRepositoryOptions,
 	DriveBookmarkRepository,
 } from "./repository";
+
+export {
+	type SettingsRepositorySnapshot,
+	type DriveSettingsRepositoryOptions,
+	DriveSettingsRepository,
+} from "./settings-repository";

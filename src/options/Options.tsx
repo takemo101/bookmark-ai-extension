@@ -10,9 +10,17 @@
  * boundaries"). All wiring is injected via the `controller` prop, so the
  * component is trivially renderable with a fake in tests.
  */
+import type { ChangeEvent } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { type MarkdownBlock, parseMarkdownBlocks } from "./markdown";
+import type {
+	BuiltInSkillView,
+	CustomSkillRowView,
+	SkillFormValues,
+	SkillsController,
+	SkillsView,
+} from "./skills-view-model";
 import type {
 	FacetsView,
 	FiltersView,
@@ -44,7 +52,14 @@ import {
 	truncate,
 } from "./styles";
 
-export function Options({ controller }: { controller: OptionsController }) {
+export function Options({
+	controller,
+	skillsController,
+}: {
+	controller: OptionsController;
+	/** Optional so existing tests/embeds can render without the skills panel. */
+	skillsController?: SkillsController;
+}) {
 	const view = useSyncExternalStore(controller.subscribe, controller.getView);
 
 	useEffect(() => {
@@ -58,6 +73,9 @@ export function Options({ controller }: { controller: OptionsController }) {
 				<CenterList view={view} controller={controller} />
 				<DetailPane view={view} controller={controller} />
 			</div>
+			{skillsController ? (
+				<SkillsSection skillsController={skillsController} />
+			) : null}
 		</main>
 	);
 }
@@ -482,6 +500,296 @@ function DetailPane({
 				</button>
 			</div>
 		</aside>
+	);
+}
+
+/**
+ * "Analysis skills" panel (MIK-018, docs/ai-analysis-v2.md "Settings file"): a
+ * pure projection of {@link SkillsController.getView}. Shows the fixed
+ * built-in profiles read-only, plus full CRUD over Drive-synced custom
+ * skills. Never computes matching/priority itself — that stays inside
+ * `ai/profile.ts`'s `selectAnalysisProfile`.
+ */
+function SkillsSection({
+	skillsController,
+}: {
+	skillsController: SkillsController;
+}) {
+	const view = useSyncExternalStore(
+		skillsController.subscribe,
+		skillsController.getView,
+	);
+
+	useEffect(() => {
+		void skillsController.init();
+	}, [skillsController]);
+
+	return (
+		<section
+			style={{
+				maxWidth: 1200,
+				margin: "0 auto",
+				padding: "0 24px 32px",
+			}}
+		>
+			<div style={panel}>
+				<div
+					style={{
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "center",
+						marginBottom: 10,
+					}}
+				>
+					<h2 style={{ fontSize: 15, margin: 0 }}>Analysis skills</h2>
+					{!view.formOpen ? (
+						<button
+							type="button"
+							style={subtleButton}
+							onClick={() => skillsController.startCreate()}
+						>
+							Add custom skill
+						</button>
+					) : null}
+				</div>
+
+				{view.actionError ? (
+					<p
+						style={{ fontSize: 12, color: palette.danger, margin: "0 0 10px" }}
+					>
+						{view.actionError}
+					</p>
+				) : null}
+
+				{view.formOpen ? (
+					<SkillForm view={view} skillsController={skillsController} />
+				) : null}
+
+				<div
+					style={{
+						display: "grid",
+						gridTemplateColumns: "1fr 1fr",
+						gap: 16,
+						marginTop: 14,
+					}}
+				>
+					<div>
+						<p style={railLabel}>Built-in (read-only)</p>
+						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+							{view.builtIns.map((skill) => (
+								<BuiltInSkillRow key={skill.id} skill={skill} />
+							))}
+						</ul>
+					</div>
+					<div>
+						<p style={railLabel}>Custom (Drive-synced)</p>
+						{view.custom.length === 0 ? (
+							<p style={{ fontSize: 12, color: palette.inkFaint }}>
+								No custom skills yet.
+							</p>
+						) : (
+							<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+								{view.custom.map((skill) => (
+									<CustomSkillRow
+										key={skill.id}
+										skill={skill}
+										busy={view.busy}
+										onEdit={() => skillsController.startEdit(skill.id)}
+										onDelete={() => void skillsController.remove(skill.id)}
+										onToggle={(enabled) =>
+											void skillsController.setEnabled(skill.id, enabled)
+										}
+									/>
+								))}
+							</ul>
+						)}
+					</div>
+				</div>
+			</div>
+		</section>
+	);
+}
+
+function BuiltInSkillRow({ skill }: { skill: BuiltInSkillView }) {
+	return (
+		<li
+			style={{
+				fontSize: 12,
+				color: palette.inkSoft,
+				padding: "6px 0",
+				borderBottom: `1px solid ${palette.border}`,
+			}}
+		>
+			<strong style={{ color: palette.ink }}>{skill.name}</strong>{" "}
+			<span style={{ color: palette.inkFaint }}>
+				priority {skill.priority} · {skill.urlPatterns.join(", ")}
+			</span>
+		</li>
+	);
+}
+
+function CustomSkillRow({
+	skill,
+	busy,
+	onEdit,
+	onDelete,
+	onToggle,
+}: {
+	skill: CustomSkillRowView;
+	busy: boolean;
+	onEdit: () => void;
+	onDelete: () => void;
+	onToggle: (enabled: boolean) => void;
+}) {
+	return (
+		<li
+			style={{
+				fontSize: 12,
+				padding: "6px 0",
+				borderBottom: `1px solid ${palette.border}`,
+			}}
+		>
+			<div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+				<span style={{ color: palette.ink }}>
+					<strong>{skill.name}</strong>{" "}
+					<span style={{ color: palette.inkFaint }}>
+						priority {skill.priority}
+					</span>
+					{!skill.enabled ? (
+						<span style={{ color: palette.warn }}> · disabled</span>
+					) : null}
+				</span>
+				<span style={{ display: "flex", gap: 6 }}>
+					<button
+						type="button"
+						style={busy ? { ...subtleButton, ...disabledButton } : subtleButton}
+						disabled={busy}
+						onClick={() => onToggle(!skill.enabled)}
+					>
+						{skill.enabled ? "Disable" : "Enable"}
+					</button>
+					<button
+						type="button"
+						style={busy ? { ...subtleButton, ...disabledButton } : subtleButton}
+						disabled={busy}
+						onClick={onEdit}
+					>
+						Edit
+					</button>
+					<button
+						type="button"
+						style={busy ? { ...dangerButton, ...disabledButton } : dangerButton}
+						disabled={busy}
+						onClick={onDelete}
+					>
+						Delete
+					</button>
+				</span>
+			</div>
+			{skill.domains.length > 0 || skill.urlPatterns.length > 0 ? (
+				<p style={{ margin: "2px 0 0", color: palette.inkFaint }}>
+					{[...skill.domains, ...skill.urlPatterns].join(", ")}
+				</p>
+			) : null}
+		</li>
+	);
+}
+
+function SkillForm({
+	view,
+	skillsController,
+}: {
+	view: SkillsView;
+	skillsController: SkillsController;
+}) {
+	function set<K extends keyof SkillFormValues>(field: K) {
+		return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+			skillsController.setFormField(
+				field,
+				e.target.value as SkillFormValues[K],
+			);
+	}
+
+	return (
+		<form
+			style={{
+				...panel,
+				background: palette.paperInset,
+				marginBottom: 4,
+				display: "flex",
+				flexDirection: "column",
+				gap: 8,
+			}}
+			onSubmit={(e) => {
+				e.preventDefault();
+				void skillsController.submit();
+			}}
+		>
+			<p style={railLabel}>
+				{view.editingId ? "Edit custom skill" : "New custom skill"}
+			</p>
+			<label style={{ fontSize: 12 }}>
+				Name
+				<input
+					style={searchInput}
+					value={view.form.name}
+					onChange={set("name")}
+					required
+				/>
+			</label>
+			<label style={{ fontSize: 12 }}>
+				Priority
+				<input
+					style={searchInput}
+					type="number"
+					value={view.form.priority}
+					onChange={set("priority")}
+				/>
+			</label>
+			<label style={{ fontSize: 12 }}>
+				Domains (comma-separated, e.g. github.com)
+				<input
+					style={searchInput}
+					value={view.form.domains}
+					onChange={set("domains")}
+				/>
+			</label>
+			<label style={{ fontSize: 12 }}>
+				URL patterns (comma-separated, `*` wildcard, e.g. example.com/docs/*)
+				<input
+					style={searchInput}
+					value={view.form.urlPatterns}
+					onChange={set("urlPatterns")}
+				/>
+			</label>
+			<label style={{ fontSize: 12 }}>
+				Instruction
+				<textarea
+					style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
+					value={view.form.instruction}
+					onChange={set("instruction")}
+					required
+				/>
+			</label>
+			<div style={{ display: "flex", gap: 8 }}>
+				<button
+					type="submit"
+					style={
+						view.busy ? { ...primaryButton, ...disabledButton } : primaryButton
+					}
+					disabled={view.busy}
+				>
+					{view.editingId ? "Save changes" : "Create skill"}
+				</button>
+				<button
+					type="button"
+					style={subtleButton}
+					onClick={() => skillsController.cancelEdit()}
+				>
+					Cancel
+				</button>
+			</div>
+		</form>
 	);
 }
 
