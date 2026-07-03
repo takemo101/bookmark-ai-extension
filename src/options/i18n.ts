@@ -53,6 +53,7 @@ export type OptionsMessages = {
 	readonly detailPending: string;
 	readonly detailNoDescription: string;
 	readonly profileLabel: string;
+	readonly editProfileAria: (name: string) => string;
 	readonly analysisLabel: string;
 	readonly createdLabel: string;
 	readonly updatedLabel: string;
@@ -140,6 +141,7 @@ const EN: OptionsMessages = {
 	detailPending: "AI analysis has not finished for this bookmark yet.",
 	detailNoDescription: "No AI description yet.",
 	profileLabel: "Profile",
+	editProfileAria: (name) => `Edit analysis skill ${name}`,
 	analysisLabel: "Analysis",
 	createdLabel: "Created",
 	updatedLabel: "Updated",
@@ -248,6 +250,7 @@ const JA: OptionsMessages = {
 	detailPending: "このブックマークのAI分析はまだ完了していません。",
 	detailNoDescription: "AIによる説明はまだありません。",
 	profileLabel: "プロファイル",
+	editProfileAria: (name) => `分析スキル「${name}」を編集`,
 	analysisLabel: "分析",
 	createdLabel: "作成",
 	updatedLabel: "更新",

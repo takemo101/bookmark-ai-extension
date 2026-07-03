@@ -100,6 +100,7 @@ function detailOf(overrides: Partial<PopupDetailView> = {}): PopupDetailView {
 		updatedAt: "2026-03-01T00:00:00Z",
 		analysisMarkdown: "## 概要\n\n分析本文。",
 		analysisProfileId: "github-repository",
+		analysisProfileName: "GitHubリポジトリ",
 		...overrides,
 	};
 }
@@ -193,7 +194,9 @@ describe("Popup", () => {
 			expect(html).not.toContain("## 概要");
 			// The link opens in a new tab without a referrer.
 			expect(html).toContain('rel="noreferrer"');
-			expect(html).toContain("github-repository");
+			// The resolved profile name renders instead of the raw id (MIK-031).
+			expect(html).toContain("GitHubリポジトリ");
+			expect(html).not.toContain("github-repository");
 		});
 
 		it("keeps raw HTML in the analysis inert (no execution path)", () => {

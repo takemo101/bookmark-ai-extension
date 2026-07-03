@@ -308,6 +308,22 @@ export const floatingSyncButton: CSSProperties = {
 	cursor: "pointer",
 };
 
+/**
+ * Link-like detail profile label for a custom analysis skill (MIK-031): the
+ * name reads as body text but is clickable, opening the skill's edit modal.
+ */
+export const profileEditButton: CSSProperties = {
+	margin: 0,
+	padding: 0,
+	fontFamily: fontStack,
+	fontSize: 13,
+	color: palette.accent,
+	background: "transparent",
+	border: "none",
+	textDecoration: "underline",
+	cursor: "pointer",
+};
+
 export const truncate: CSSProperties = {
 	overflow: "hidden",
 	textOverflow: "ellipsis",

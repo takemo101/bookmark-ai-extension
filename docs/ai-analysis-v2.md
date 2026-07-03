@@ -351,7 +351,14 @@ is kept for historical reference only.
 - The detail sheet offers Open, Delete, and Close only; it does not trigger
   re-analysis (MIK-024).
 - Search includes `analysisMarkdown`.
-- Show which `analysisProfileId` generated the current analysis.
+- Show which analysis profile generated the current analysis as a readable
+  name resolved from `analysisProfileId` (MIK-031): built-in profiles show
+  their built-in names, custom profiles show the custom skill name from
+  settings, and an unknown id falls back to the raw id. In the detail sheet a
+  custom profile name is clickable and opens Analysis skills with that
+  skill's edit modal; built-in and unknown labels stay read-only text. The
+  popup detail shows built-in names only (custom/unknown ids fall back to the
+  raw id) and offers no edit navigation.
 - Provide custom skill CRUD on a dedicated top-level "Analysis skills"
   settings screen (MIK-025), not below the bookmark list:
   - add / edit via a modal form with Close/Cancel (Escape and backdrop click

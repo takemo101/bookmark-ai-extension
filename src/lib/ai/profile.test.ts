@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	BUILT_IN_PROFILES,
 	type AnalysisProfile,
+	resolveAnalysisProfileDisplay,
 	selectAnalysisProfile,
 } from "./profile";
 
@@ -101,5 +102,48 @@ describe("selectAnalysisProfile", () => {
 	it("every built-in profile id is unique", () => {
 		const ids = BUILT_IN_PROFILES.map((p) => p.id);
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
+describe("resolveAnalysisProfileDisplay", () => {
+	it("resolves a built-in profile id to its built-in name", () => {
+		expect(resolveAnalysisProfileDisplay("github-repository")).toEqual({
+			id: "github-repository",
+			name: "GitHubリポジトリ",
+			kind: "built-in",
+		});
+	});
+
+	it("resolves a custom profile id to the supplied custom skill name", () => {
+		expect(
+			resolveAnalysisProfileDisplay("skill-123", [
+				{ id: "skill-999", name: "Other" },
+				{ id: "skill-123", name: "Docs deep dive" },
+			]),
+		).toEqual({ id: "skill-123", name: "Docs deep dive", kind: "custom" });
+	});
+
+	it("prefers the built-in name when a custom entry shadows a built-in id", () => {
+		const display = resolveAnalysisProfileDisplay("generic-page", [
+			{ id: "generic-page", name: "Shadowed" },
+		]);
+		expect(display.kind).toBe("built-in");
+		expect(display.name).toBe("汎用ページ");
+	});
+
+	it("falls back to the raw id for an unknown profile id", () => {
+		expect(resolveAnalysisProfileDisplay("mystery-profile")).toEqual({
+			id: "mystery-profile",
+			name: "mystery-profile",
+			kind: "unknown",
+		});
+	});
+
+	it("falls back to the raw id when no custom entry matches", () => {
+		expect(
+			resolveAnalysisProfileDisplay("skill-999", [
+				{ id: "skill-123", name: "Docs deep dive" },
+			]),
+		).toEqual({ id: "skill-999", name: "skill-999", kind: "unknown" });
 	});
 });

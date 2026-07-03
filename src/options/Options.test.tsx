@@ -710,6 +710,67 @@ describe("Options top-level navigation (MIK-025)", () => {
 	});
 });
 
+describe("Detail profile name and edit navigation (MIK-031)", () => {
+	function selectedView(analysisProfileId: string): OptionsView {
+		return viewOf({
+			rows: [rowOf({ selected: true, analysisProfileId })],
+			totalCount: 1,
+			filteredCount: 1,
+			empty: false,
+			selected: detailOf({ analysisProfileId }),
+		});
+	}
+
+	const customSkillsView = skillsViewOf({
+		custom: [
+			{
+				id: "s1",
+				name: "Docs deep dive",
+				enabled: true,
+				priority: 25,
+				domains: ["example.com"],
+				urlPatterns: ["example.com/docs/*"],
+				instruction: "Focus on X.",
+				updatedAt: "2026-03-01T00:00:00Z",
+			},
+		],
+	});
+
+	it("shows the built-in profile name as read-only text, never an edit button", () => {
+		const html = renderWithSkills(
+			selectedView("github-repository"),
+			customSkillsView,
+		);
+
+		expect(html).toContain("GitHubリポジトリ");
+		expect(html).not.toContain("Edit analysis skill");
+	});
+
+	it("shows the custom skill name as a button targeting skill editing", () => {
+		const html = renderWithSkills(selectedView("s1"), customSkillsView);
+
+		expect(html).toContain("Docs deep dive");
+		expect(html).toContain('aria-label="Edit analysis skill Docs deep dive"');
+	});
+
+	it("falls back to the raw id as read-only text for an unknown profile", () => {
+		const html = renderWithSkills(
+			selectedView("mystery-profile"),
+			customSkillsView,
+		);
+
+		expect(html).toContain("mystery-profile");
+		expect(html).not.toContain("Edit analysis skill");
+	});
+
+	it("renders an unresolvable custom id as plain text without a skills controller", () => {
+		const html = render(selectedView("s1"));
+
+		expect(html).toContain(">s1<");
+		expect(html).not.toContain("Edit analysis skill");
+	});
+});
+
 describe("Analysis skills settings screen (MIK-025)", () => {
 	function renderSkills(skillsView: SkillsView): string {
 		return renderWithSkills(viewOf(), skillsView, "analysis-skills");

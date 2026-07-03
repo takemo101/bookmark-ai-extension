@@ -659,7 +659,9 @@ function RecentDetail({
 
 			<p style={{ fontSize: 10, color: palette.inkFaint, margin: "10px 0 0" }}>
 				{m.updated(formatDate(detail.updatedAt))}
-				{detail.analysisProfileId ? ` · ${detail.analysisProfileId}` : ""}
+				{/* Readable profile name (MIK-031); the controller falls back to the
+				    raw id when the profile is unknown here. */}
+				{detail.analysisProfileName ? ` · ${detail.analysisProfileName}` : ""}
 			</p>
 		</section>
 	);

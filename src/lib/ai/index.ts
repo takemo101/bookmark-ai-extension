@@ -53,8 +53,17 @@ export {
 
 export { parseAnalysis } from "./parse";
 
-export type { AnalysisProfile } from "./profile";
-export { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
+export type {
+	AnalysisProfile,
+	AnalysisProfileDisplay,
+	AnalysisProfileDisplayKind,
+	CustomProfileName,
+} from "./profile";
+export {
+	BUILT_IN_PROFILES,
+	resolveAnalysisProfileDisplay,
+	selectAnalysisProfile,
+} from "./profile";
 
 export { toAnalysisProfile } from "./custom-profile";
 

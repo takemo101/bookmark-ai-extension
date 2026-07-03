@@ -8,15 +8,20 @@
  * and a detail side sheet overlay (MIK-022, MIK-024) — and the Analysis
  * skills settings screen, where the custom skill create/edit form opens as a
  * modal with authoring guidance. It dispatches user intent back through the
- * controllers and imports only the controllers, view types, and style tokens;
- * no Drive client, Prompt API client, JSONL parser, or merge internals appear
- * here (AGENTS.md "Architecture boundaries"). All wiring is injected via the
+ * controllers and imports only the controllers, view types, style tokens, and
+ * the pure profile-display resolver (MIK-031); no Drive client, Prompt API
+ * client, JSONL parser, or merge internals appear here (AGENTS.md
+ * "Architecture boundaries"). All wiring is injected via the
  * `controller`/`skillsController` props, so the component is trivially
  * renderable with fakes in tests.
  */
 import type { ChangeEvent } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
+import {
+	type AnalysisProfileDisplay,
+	resolveAnalysisProfileDisplay,
+} from "../lib/ai/index";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
@@ -57,6 +62,7 @@ import {
 	palette,
 	panel,
 	primaryButton,
+	profileEditButton,
 	rail,
 	railLabel,
 	row as rowStyle,
@@ -85,6 +91,12 @@ import {
  */
 export type OptionsScreen = "library" | "analysis-skills";
 
+// Stable no-op store bindings so the optional skills-view subscription can be
+// called unconditionally (hooks may not be conditional) when no skills
+// controller is provided.
+const noSkillsSubscribe = () => () => {};
+const noSkillsView = () => undefined;
+
 export function Options({
 	controller,
 	skillsController,
@@ -108,12 +120,27 @@ export function Options({
 		controller.getView,
 		controller.getView,
 	);
+	// Subscribed at the top level (not only inside the skills screen) because
+	// the library detail sheet resolves custom profile names from the skills
+	// view (MIK-031). `undefined` when no skills controller is provided.
+	const skillsView = useSyncExternalStore(
+		skillsController?.subscribe ?? noSkillsSubscribe,
+		skillsController?.getView ?? noSkillsView,
+		skillsController?.getView ?? noSkillsView,
+	);
 	const [screen, setScreen] = useState<OptionsScreen>(initialScreen);
 	const m = optionsMessages(language ?? detectUiLanguage());
 
 	useEffect(() => {
 		void controller.init();
 	}, [controller]);
+
+	useEffect(() => {
+		// Settings load on mount rather than on the first skills-screen visit:
+		// the detail sheet needs custom skill names for profile labels (MIK-031),
+		// and screen switches no longer re-trigger a settings Drive pull.
+		void skillsController?.init();
+	}, [skillsController]);
 
 	useLockBodyScroll(view.selected !== undefined);
 
@@ -126,6 +153,20 @@ export function Options({
 		// the skill form draft are preserved.
 		controller.clearSelection();
 		setScreen(next);
+	}
+
+	/**
+	 * A custom profile label in the detail sheet opens Analysis skills with
+	 * that skill's edit modal (MIK-031). If the skill vanished meanwhile
+	 * (deleted on another device), `startEdit` no-ops and the user still lands
+	 * on the Analysis skills screen.
+	 */
+	function openCustomProfileEdit(id: string): void {
+		if (!skillsController) {
+			return;
+		}
+		skillsController.startEdit(id);
+		switchScreen("analysis-skills");
 	}
 
 	const showLibrary = screen === "library" || !skillsController;
@@ -163,9 +204,20 @@ export function Options({
 					{view.selected ? (
 						<DetailSheet
 							detail={view.selected}
+							profile={
+								view.selected.analysisProfileId
+									? resolveAnalysisProfileDisplay(
+											view.selected.analysisProfileId,
+											skillsView?.custom ?? [],
+										)
+									: undefined
+							}
 							busy={view.busy}
 							m={m}
 							controller={controller}
+							onEditCustomProfile={
+								skillsController ? openCustomProfileEdit : undefined
+							}
 						/>
 					) : null}
 				</>
@@ -787,17 +839,26 @@ function useIsNarrowViewport(): boolean {
  * (MIK-024 — a later explicit flow owns re-analysis). While an action is busy
  * Delete is disabled but Open and Close stay available, and Delete closes the
  * sheet once the record disappears (the controller drops the selection).
+ *
+ * The profile label shows the resolved display name (MIK-031): a custom
+ * profile renders as a button that opens its edit modal via
+ * `onEditCustomProfile`; built-in and unknown profiles render as read-only
+ * text (unknown falls back to the raw id).
  */
 function DetailSheet({
 	detail,
+	profile,
 	busy,
 	m,
 	controller,
+	onEditCustomProfile,
 }: {
 	detail: DetailView;
+	profile?: AnalysisProfileDisplay;
 	busy: boolean;
 	m: OptionsMessages;
 	controller: OptionsController;
+	onEditCustomProfile?: (id: string) => void;
 }) {
 	const isNarrow = useIsNarrowViewport();
 
@@ -887,11 +948,22 @@ function DetailSheet({
 						<DetailField label={m.genre} value={detail.genre} />
 					) : null}
 
-					{detail.analysisProfileId ? (
-						<DetailField
-							label={m.profileLabel}
-							value={detail.analysisProfileId}
-						/>
+					{profile ? (
+						profile.kind === "custom" && onEditCustomProfile ? (
+							<div style={{ marginTop: 10 }}>
+								<p style={railLabel}>{m.profileLabel}</p>
+								<button
+									type="button"
+									style={profileEditButton}
+									aria-label={m.editProfileAria(profile.name)}
+									onClick={() => onEditCustomProfile(profile.id)}
+								>
+									{profile.name}
+								</button>
+							</div>
+						) : (
+							<DetailField label={m.profileLabel} value={profile.name} />
+						)
 					) : null}
 
 					{detail.tags.length > 0 ? (
@@ -1014,9 +1086,8 @@ function SkillsScreen({
 		skillsController.getView,
 	);
 
-	useEffect(() => {
-		void skillsController.init();
-	}, [skillsController]);
+	// No init effect here: the Options root already initializes the skills
+	// controller on mount (MIK-031), so screen switches never re-pull settings.
 
 	useLockBodyScroll(view.formOpen);
 
