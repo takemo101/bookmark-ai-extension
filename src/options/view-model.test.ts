@@ -93,15 +93,27 @@ class FakeUseCases implements OptionsUseCases {
 	reAnalyzeArgs: CanonicalUrl[] = [];
 	/** When set, `reAnalyzeBookmark` awaits this before resolving (foreground timing tests). */
 	reAnalyzeGate: Promise<void> | null = null;
+	/** When set, `syncFromDrive` awaits this before resolving (progress timing tests). */
+	syncGate: Promise<void> | null = null;
+	/** When set, `deleteBookmark` awaits this before resolving (progress timing tests). */
+	deleteGate: Promise<void> | null = null;
+	syncCalls = 0;
 
 	async loadCachedState() {
 		return this.cache;
 	}
 	async syncFromDrive() {
+		this.syncCalls += 1;
+		if (this.syncGate) {
+			await this.syncGate;
+		}
 		return this.syncResult ?? { ok: true as const, value: this.cache };
 	}
 	async deleteBookmark(canonicalUrl: CanonicalUrl) {
 		this.deleteArgs.push(canonicalUrl);
+		if (this.deleteGate) {
+			await this.deleteGate;
+		}
 		if (this.deleteResult) {
 			return this.deleteResult;
 		}
@@ -584,6 +596,143 @@ describe("createOptionsController", () => {
 			expect(controller.getView().busy).toBe(false);
 			expect(controller.getView().rows[0].aiStatus).toBe("ready");
 			expect(controller.getView().actionNotice).toBeUndefined();
+		});
+	});
+
+	describe("sync/write progress (MIK-026)", () => {
+		it("marks sync.syncing for the whole Drive pull and clears it after", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ id: "a", title: "Alpha" })]);
+			const controller = controllerWith(fake);
+			await controller.init();
+			expect(controller.getView().sync.syncing).toBe(false);
+
+			let finishSync!: () => void;
+			fake.syncGate = new Promise((resolve) => {
+				finishSync = resolve;
+			});
+			const refresh = controller.refresh();
+			// The Drive pull has not resolved yet: the view says a sync is running.
+			expect(controller.getView().sync.syncing).toBe(true);
+			expect(controller.getView().sync.writing).toBe(false);
+
+			finishSync();
+			await refresh;
+
+			expect(controller.getView().sync.syncing).toBe(false);
+		});
+
+		it("drops duplicate refresh calls while a sync is in flight", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ id: "a", title: "Alpha" })]);
+			const controller = controllerWith(fake);
+			await controller.init();
+			expect(fake.syncCalls).toBe(1); // init's own refresh
+
+			let finishSync!: () => void;
+			fake.syncGate = new Promise((resolve) => {
+				finishSync = resolve;
+			});
+			const first = controller.refresh();
+			const second = controller.refresh(); // double click — must not stack
+			finishSync();
+			await Promise.all([first, second]);
+
+			expect(fake.syncCalls).toBe(2);
+		});
+
+		it("clears syncing after a failed pull while keeping the safe error", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ id: "a", title: "Cached" })], {
+				status: "error",
+				error: { kind: "drive", message: "network down" },
+				pending: true,
+			});
+			fake.syncResult = {
+				ok: false,
+				error: { kind: "drive", message: "network down" },
+			};
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			await controller.refresh();
+			const view = controller.getView();
+
+			expect(view.sync.syncing).toBe(false);
+			expect(view.sync.status).toBe("error");
+			expect(view.sync.error).toBe("network down");
+			// Failed writes stay visible as pending local changes.
+			expect(view.sync.pendingLocalChanges).toBe(true);
+		});
+
+		it("marks sync.writing for the whole delete write and clears it after", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ id: "d", title: "Doomed" })]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			let finishDelete!: () => void;
+			fake.deleteGate = new Promise((resolve) => {
+				finishDelete = resolve;
+			});
+			const url = controller.getView().rows[0].canonicalUrl;
+			const action = controller.deleteBookmark(url);
+			// The Drive write has not resolved yet: the view says a write is running.
+			expect(controller.getView().sync.writing).toBe(true);
+			expect(controller.getView().busy).toBe(true);
+			expect(controller.getView().sync.syncing).toBe(false);
+
+			finishDelete();
+			await action;
+
+			expect(controller.getView().sync.writing).toBe(false);
+			expect(controller.getView().busy).toBe(false);
+		});
+
+		it("marks sync.writing during a foreground re-analyze", async () => {
+			const fake = new FakeUseCases();
+			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "failed" });
+			fake.cache = cacheOf([rec]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const url = controller.getView().rows[0].canonicalUrl;
+			const ready = recordOf({ id: "r", title: "Stale", aiStatus: "ready" });
+			let finishAnalysis!: () => void;
+			fake.reAnalyzeGate = new Promise((resolve) => {
+				finishAnalysis = resolve;
+			});
+			fake.reAnalyzeResult = { ok: true, value: outcomeOf(ready) };
+
+			const action = controller.reAnalyze(url);
+			expect(controller.getView().sync.writing).toBe(true);
+
+			fake.cache = cacheOf([ready]);
+			finishAnalysis();
+			await action;
+
+			expect(controller.getView().sync.writing).toBe(false);
+		});
+
+		it("drops a refresh requested while a write is in flight", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ id: "d", title: "Doomed" })]);
+			const controller = controllerWith(fake);
+			await controller.init();
+			expect(fake.syncCalls).toBe(1); // init's own refresh
+
+			let finishDelete!: () => void;
+			fake.deleteGate = new Promise((resolve) => {
+				finishDelete = resolve;
+			});
+			const url = controller.getView().rows[0].canonicalUrl;
+			const action = controller.deleteBookmark(url);
+			await controller.refresh(); // e.g. a Manage-triggered request mid-write
+
+			expect(fake.syncCalls).toBe(1);
+
+			finishDelete();
+			await action;
 		});
 	});
 

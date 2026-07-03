@@ -92,6 +92,10 @@ export type SyncView = {
 	 * surfaces so the user knows a retry is still owed (MIK-014).
 	 */
 	readonly pendingLocalChanges: boolean;
+	/** A Drive pull/merge refresh is in flight (MIK-026). */
+	readonly syncing: boolean;
+	/** A delete/re-analyze Drive write is in flight (MIK-026). */
+	readonly writing: boolean;
 };
 
 /** The complete immutable snapshot the React component renders. */
@@ -121,7 +125,12 @@ export interface OptionsController {
 	subscribe(listener: () => void): () => void;
 	/** Load the cached list, then best-effort pull the authoritative store. */
 	init(): Promise<void>;
-	/** Pull the authoritative store from Drive and refresh list + sync badge. */
+	/**
+	 * Pull the authoritative store from Drive and refresh list + sync badge.
+	 * Calls while a sync or write is already in flight are dropped, not queued,
+	 * so the floating button and Manage-triggered requests never stack Drive
+	 * pulls (MIK-026).
+	 */
 	refresh(): Promise<void>;
 	setQuery(query: string): void;
 	setGenre(genre: string | undefined): void;
@@ -136,7 +145,10 @@ export interface OptionsController {
 	reAnalyze(canonicalUrl: string): Promise<void>;
 }
 
-const INITIAL_SYNC: SyncView = { status: "idle", pendingLocalChanges: false };
+const INITIAL_SYNC: Omit<SyncView, "syncing" | "writing"> = {
+	status: "idle",
+	pendingLocalChanges: false,
+};
 
 export function createOptionsController(
 	useCases: OptionsUseCases,
@@ -144,6 +156,10 @@ export function createOptionsController(
 	let state: CacheState | undefined;
 	let loading = true;
 	let busy = false;
+	// Distinct in-flight flags so the UI can phrase what is slow: a Drive
+	// pull/merge (`syncing`) vs a delete/re-analyze write (`writing`) (MIK-026).
+	let syncing = false;
+	let writing = false;
 	let filters: FiltersView = { query: "" };
 	let selectedDisplay: string | undefined;
 	let actionError: string | undefined;
@@ -185,13 +201,15 @@ export function createOptionsController(
 
 	function syncView(snapshot: CacheState | undefined): SyncView {
 		if (!snapshot) {
-			return INITIAL_SYNC;
+			return { ...INITIAL_SYNC, syncing, writing };
 		}
 		return {
 			status: snapshot.sync.status,
 			lastSyncedAt: snapshot.sync.lastSyncedAt,
 			error: snapshot.sync.error?.message,
 			pendingLocalChanges: snapshot.sync.pending === true,
+			syncing,
+			writing,
 		};
 	}
 
@@ -252,6 +270,7 @@ export function createOptionsController(
 			return;
 		}
 		busy = true;
+		writing = true;
 		actionError = undefined;
 		actionNotice = undefined;
 		notify();
@@ -259,6 +278,7 @@ export function createOptionsController(
 			await op(branded);
 		} finally {
 			busy = false;
+			writing = false;
 			notify();
 		}
 	}
@@ -282,15 +302,25 @@ export function createOptionsController(
 		},
 
 		async refresh() {
-			const result = await useCases.syncFromDrive();
-			if (result.ok) {
-				setState(result.value);
-				notify();
+			// One Drive operation at a time: duplicate sync clicks and Manage-
+			// triggered requests are dropped while a pull or write is in flight.
+			if (syncing || busy) {
 				return;
 			}
-			// Keep the list; surface the safe sync error from the refreshed cache.
-			setState(await useCases.loadCachedState());
+			syncing = true;
 			notify();
+			try {
+				const result = await useCases.syncFromDrive();
+				if (result.ok) {
+					setState(result.value);
+					return;
+				}
+				// Keep the list; surface the safe sync error from the refreshed cache.
+				setState(await useCases.loadCachedState());
+			} finally {
+				syncing = false;
+				notify();
+			}
 		},
 
 		setQuery(query) {

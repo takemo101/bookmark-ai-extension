@@ -411,7 +411,12 @@ Popup responsibilities:
 - Save current tab.
 - Show progress: extracting, saving pending record, analyzing, syncing.
 - Show recent saved bookmarks.
-- Link to options page.
+- Link to options page. `Manage in Options` also requests an Options Drive
+  sync (MIK-026): it best-effort writes a token-free request marker (a
+  timestamp only, under `bookmark-ai:options-sync-request` in
+  `chrome.storage.local`) before calling `chrome.runtime.openOptionsPage()`,
+  so the options page pulls Drive instead of showing stale cache. A missing or
+  failing storage API never blocks opening the options page.
 
 The popup should behave like a save receipt:
 
@@ -435,6 +440,9 @@ Options page responsibilities:
 - Delete bookmarks — via a per-row quick delete and from the detail sheet.
 - Show Drive sync status and errors, with the sync action as a floating
   button.
+- Show visible progress for slow Drive operations, distinguishing cached
+  loading, a Drive pull, a Drive write, and failed-sync pending local changes
+  (MIK-026).
 - Manage Analysis skills from a separate top-level settings screen (MIK-025).
 
 The Options UI does not offer re-analysis (MIK-024): the detail sheet is a
@@ -489,7 +497,11 @@ Use a two-zone ledger layout with a row-click detail sheet:
 - Floating sync action: a fixed bottom-right `Sync Drive` button shows the
   current sync tone/status and triggers the existing refresh path. The left
   rail keeps the sync status/pending/error readout but no longer contains a
-  `Sync now` button.
+  `Sync now` button. While the cache is loading or a Drive pull/write is in
+  flight the button is disabled and reads the in-flight state
+  (`loading…` / `syncing…` / `writing…`), and the controller drops duplicate
+  refresh calls, so a slow sync can never be stacked into a second one
+  (MIK-026).
 - Detail side sheet: clicking a row opens a right-side modal sheet (fullscreen
   on narrow viewports) showing the full bookmark detail — description, genre,
   tags, profile, URL, timestamps, the full `analysisMarkdown` note — and the
@@ -509,6 +521,28 @@ Detail sheet behavior:
 - While an action is busy the sheet keeps Open and Close enabled, disables
   Delete, and shows a keep-this-page-open note. Delete is immediate and closes
   the sheet once the bookmark is gone.
+
+Drive sync progress feedback (MIK-026):
+
+- The left-rail sync panel shows one explicit progress line while something
+  slow is happening: `Loading cached bookmarks…` during the initial cached
+  load, `Syncing with Google Drive…` while a Drive pull/merge is in flight,
+  and `Writing changes to Google Drive…` while a delete/re-analyze write
+  runs. When a Drive write fails, the existing pending readout (`Local
+  changes pending — will retry on next sync`) plus the safe sync error stay
+  visible, so the user can tell "sync failed but my change is kept" apart
+  from "still working".
+- The options view model exposes these as `sync.syncing` / `sync.writing`
+  alongside the existing `loading`, `sync.pendingLocalChanges`, and safe
+  error strings; the React layer stays a pure projection of that view.
+- Manage in Options sync requests arrive through a token-free
+  `chrome.storage.local` marker (`bookmark-ai:options-sync-request`, a
+  request timestamp only — never a URL, title, excerpt, token, or bookmark
+  data). A freshly opened options page just consumes (removes) the marker —
+  its init already pulls Drive — while an already-open options page observes
+  the write via `chrome.storage.onChanged` and re-runs the Drive refresh.
+  There is no background durable sync queue; the marker only upgrades
+  freshness of an open/opening options page.
 
 MVP search is normal local-cache text search plus filters. Semantic search is out of scope.
 
