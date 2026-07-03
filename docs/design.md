@@ -448,11 +448,28 @@ This matches the manual posture documented in
 [`smoke-checklist.md`](smoke-checklist.md) (section 5 and its re-analysis note);
 re-analyze from the page's own tab, or save it again.
 
-Use a ledger layout:
+Use a two-zone ledger layout with a row-click detail sheet:
 
 - Left rail: search, genre filters, tag filters, sync state.
-- Center list: dense bookmark rows with title, short AI summary, status, and updated time.
-- Right detail pane: selected bookmark description, genre, tags, URL, timestamps, open/delete/re-analyze actions.
+- Center list: scannable bookmark rows with title, a short clamped AI summary,
+  genre/tags/profile metadata, status, and updated time.
+- Detail side sheet: clicking a row opens a right-side modal sheet (fullscreen
+  on narrow viewports) showing the full bookmark detail — description, genre,
+  tags, profile, URL, timestamps, the full `analysisMarkdown` note — and the
+  open/delete/re-analyze actions. There is no always-visible right detail pane.
+
+Detail sheet behavior:
+
+- The sheet closes via its Close buttons, the Escape key, or a backdrop click;
+  closing only clears the selection and never resets search/filter state.
+- The row highlight reflects the currently open sheet.
+- `analysisMarkdown` is rendered through `react-markdown` + `remark-gfm` with
+  raw HTML kept inert (no `rehype-raw`, no `dangerouslySetInnerHTML`); rendered
+  links open in a new tab with `rel="noreferrer"`.
+- During a foreground re-analyze the sheet stays open and shows a
+  keep-this-page-open warning; Open and Close remain enabled while Re-analyze
+  and Delete are disabled. Delete is immediate and closes the sheet once the
+  bookmark is gone.
 
 MVP search is normal local-cache text search plus filters. Semantic search is out of scope.
 

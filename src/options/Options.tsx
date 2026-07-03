@@ -2,18 +2,19 @@
  * Research Ledger options page (docs/design.md "Options page: Research Ledger").
  *
  * A pure projection of {@link OptionsController.getView}: it renders the
- * three-pane ledger — left rail (search, sync state, genre/tag/status filters),
- * center bookmark rows, right detail pane with open/delete/re-analyze actions —
- * and dispatches user intent back through the controller. It imports only the
- * controller, view types, and style tokens; no Drive client, Prompt API client,
- * JSONL parser, or merge internals appear here (AGENTS.md "Architecture
+ * two-zone ledger — left rail (search, sync state, genre/tag/status filters)
+ * and the center bookmark rows — plus a detail side sheet overlay that a row
+ * click opens with open/delete/re-analyze actions (MIK-022). It dispatches
+ * user intent back through the controller and imports only the controller,
+ * view types, and style tokens; no Drive client, Prompt API client, JSONL
+ * parser, or merge internals appear here (AGENTS.md "Architecture
  * boundaries"). All wiring is injected via the `controller` prop, so the
  * component is trivially renderable with a fake in tests.
  */
 import type { ChangeEvent } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { type MarkdownBlock, parseMarkdownBlocks } from "./markdown";
+import { AnalysisMarkdown } from "./markdown";
 import type {
 	BuiltInSkillView,
 	CustomSkillRowView,
@@ -22,6 +23,7 @@ import type {
 	SkillsView,
 } from "./skills-view-model";
 import type {
+	DetailView,
 	FacetsView,
 	FiltersView,
 	OptionsController,
@@ -46,8 +48,15 @@ import {
 	row as rowStyle,
 	rowSelected,
 	searchInput,
+	sheet,
+	sheetBackdrop,
+	sheetBody,
+	sheetFooter,
+	sheetFullscreen,
+	sheetHeader,
 	statusColor,
 	subtleButton,
+	summaryClamp,
 	syncTone,
 	truncate,
 } from "./styles";
@@ -60,7 +69,11 @@ export function Options({
 	/** Optional so existing tests/embeds can render without the skills panel. */
 	skillsController?: SkillsController;
 }) {
-	const view = useSyncExternalStore(controller.subscribe, controller.getView);
+	const view = useSyncExternalStore(
+		controller.subscribe,
+		controller.getView,
+		controller.getView,
+	);
 
 	useEffect(() => {
 		void controller.init();
@@ -71,8 +84,14 @@ export function Options({
 			<div style={ledger}>
 				<LeftRail view={view} controller={controller} />
 				<CenterList view={view} controller={controller} />
-				<DetailPane view={view} controller={controller} />
 			</div>
+			{view.selected ? (
+				<DetailSheet
+					detail={view.selected}
+					busy={view.busy}
+					controller={controller}
+				/>
+			) : null}
 			{skillsController ? (
 				<SkillsSection skillsController={skillsController} />
 			) : null}
@@ -327,27 +346,41 @@ function CenterList({
 	);
 }
 
+/**
+ * A richer (but still scannable) ledger row: clicking it opens the detail
+ * sheet, and the selected highlight only reflects the currently open sheet
+ * (MIK-022). The summary gets two clamped lines now that the right pane is
+ * gone; genre/tags/profile stay as compact metadata under it.
+ */
 function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 	return (
 		<button
 			type="button"
 			style={row.selected ? rowSelected : rowStyle}
 			onClick={onSelect}
+			aria-expanded={row.selected}
 		>
 			<div style={{ minWidth: 0, flex: 1 }}>
 				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
 					{row.title}
 				</div>
-				<div style={{ fontSize: 12, color: palette.inkSoft, ...truncate }}>
+				<div
+					style={{
+						fontSize: 12,
+						color: palette.inkSoft,
+						marginTop: 2,
+						...summaryClamp,
+					}}
+				>
 					{row.summary}
 				</div>
-				{row.genre || row.tags.length > 0 ? (
+				{row.genre || row.tags.length > 0 || row.analysisProfileId ? (
 					<div
 						style={{
 							display: "flex",
 							flexWrap: "wrap",
 							gap: 6,
-							marginTop: 4,
+							marginTop: 5,
 							alignItems: "center",
 						}}
 					>
@@ -361,6 +394,11 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 								#{t}
 							</span>
 						))}
+						{row.analysisProfileId ? (
+							<span style={{ fontSize: 11, color: palette.inkFaint }}>
+								· {row.analysisProfileId}
+							</span>
+						) : null}
 					</div>
 				) : null}
 			</div>
@@ -381,132 +419,244 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 	);
 }
 
-function DetailPane({
-	view,
+/** Media query below which the detail sheet goes fullscreen. */
+const NARROW_VIEWPORT_QUERY = "(max-width: 720px)";
+
+function subscribeToNarrowViewport(onChange: () => void): () => void {
+	const media = window.matchMedia(NARROW_VIEWPORT_QUERY);
+	media.addEventListener("change", onChange);
+	return () => media.removeEventListener("change", onChange);
+}
+
+/**
+ * Whether the viewport is too narrow for a partial-width side sheet. Options-
+ * local by design; the server snapshot (`false`) only matters for static
+ * rendering in tests.
+ */
+function useIsNarrowViewport(): boolean {
+	return useSyncExternalStore(
+		subscribeToNarrowViewport,
+		() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches,
+		() => false,
+	);
+}
+
+/**
+ * The row-click detail side sheet (MIK-022): the single reading surface for a
+ * bookmark's full detail and its long-form `analysisMarkdown`. Closes via the
+ * Close buttons, Escape, and backdrop click — closing only clears the
+ * selection, never the filters. While a foreground re-analyze is busy the
+ * mutating actions (Re-analyze, Delete) are disabled but Open and Close stay
+ * available; the warning tells the user to keep the page (not the sheet) open.
+ */
+function DetailSheet({
+	detail,
+	busy,
 	controller,
 }: {
-	view: OptionsView;
+	detail: DetailView;
+	busy: boolean;
 	controller: OptionsController;
 }) {
-	const detail = view.selected;
-	if (!detail) {
-		return (
-			<aside style={panel}>
-				<p style={{ fontSize: 12, color: palette.inkFaint, margin: 0 }}>
-					Select a bookmark to see its details.
-				</p>
-			</aside>
-		);
-	}
+	const isNarrow = useIsNarrowViewport();
+
+	useEffect(() => {
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				controller.clearSelection();
+			}
+		}
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [controller]);
+
 	return (
-		<aside style={{ ...panel, position: "sticky", top: 20 }}>
-			<div
-				style={{
-					display: "flex",
-					alignItems: "center",
-					gap: 6,
-					marginBottom: 6,
-				}}
+		<div
+			style={sheetBackdrop}
+			onClick={(event) => {
+				// Only a true backdrop click closes; clicks inside the sheet bubble up
+				// with a different target and are ignored.
+				if (event.target === event.currentTarget) {
+					controller.clearSelection();
+				}
+			}}
+		>
+			<section
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="bookmark-detail-title"
+				style={isNarrow ? sheetFullscreen : sheet}
 			>
-				<StatusPill status={detail.aiStatus} />
-			</div>
-			<h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{detail.title}</h2>
-			<a
-				href={detail.url}
-				target="_blank"
-				rel="noreferrer"
-				style={{ fontSize: 12, color: palette.accent, wordBreak: "break-all" }}
-			>
-				{detail.url}
-			</a>
-
-			{detail.description ? (
-				<p style={{ fontSize: 13, color: palette.ink, margin: "10px 0 0" }}>
-					{detail.description}
-				</p>
-			) : (
-				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "10px 0 0" }}>
-					{detail.aiStatus === "pending"
-						? "AI analysis has not finished for this bookmark. Re-analyze it while its page is the active tab."
-						: "No AI description yet."}
-				</p>
-			)}
-
-			{detail.genre ? <DetailField label="Genre" value={detail.genre} /> : null}
-
-			{detail.analysisProfileId ? (
-				<DetailField label="Profile" value={detail.analysisProfileId} />
-			) : null}
-
-			{detail.tags.length > 0 ? (
-				<div style={{ marginTop: 10 }}>
-					<p style={railLabel}>Tags</p>
-					<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-						{detail.tags.map((t) => (
-							<span key={t} style={{ fontSize: 12, color: palette.inkSoft }}>
-								#{t}
-							</span>
-						))}
-					</div>
-				</div>
-			) : null}
-
-			{detail.analysisMarkdown ? (
-				<AnalysisMarkdown markdown={detail.analysisMarkdown} />
-			) : null}
-
-			{detail.aiError ? (
-				<p style={{ fontSize: 12, color: palette.danger, margin: "10px 0 0" }}>
-					{detail.aiError}
-				</p>
-			) : null}
-
-			<dl style={{ margin: "12px 0 0", fontSize: 11, color: palette.inkFaint }}>
-				<TimeRow label="Created" value={detail.createdAt} />
-				<TimeRow label="Updated" value={detail.updatedAt} />
-				{detail.lastAnalyzedAt ? (
-					<TimeRow label="Analyzed" value={detail.lastAnalyzedAt} />
-				) : null}
-			</dl>
-
-			<div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-				<a
-					href={detail.url}
-					target="_blank"
-					rel="noreferrer"
-					style={primaryButton}
-				>
-					Open
-				</a>
-				{detail.canReAnalyze ? (
-					<button
-						type="button"
-						style={
-							view.busy ? { ...subtleButton, ...disabledButton } : subtleButton
-						}
-						disabled={view.busy}
-						onClick={() => void controller.reAnalyze(detail.canonicalUrl)}
+				<header style={sheetHeader}>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "space-between",
+							gap: 8,
+						}}
 					>
-						{view.busy ? "Analyzing…" : "Re-analyze"}
-					</button>
-				) : null}
-				<button
-					type="button"
-					style={
-						view.busy ? { ...dangerButton, ...disabledButton } : dangerButton
-					}
-					disabled={view.busy}
-					onClick={() => void controller.deleteBookmark(detail.canonicalUrl)}
-				>
-					Delete
-				</button>
-			</div>
-			{view.busy ? (
-				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
-					Analyzing in the foreground — keep this page open until it finishes.
-				</p>
-			) : null}
-		</aside>
+						<StatusPill status={detail.aiStatus} />
+						<button
+							type="button"
+							style={subtleButton}
+							onClick={() => controller.clearSelection()}
+							aria-label="Close details"
+							// Best-effort focus management: land keyboard focus inside the
+							// dialog when it opens.
+							autoFocus
+						>
+							✕
+						</button>
+					</div>
+					<h2
+						id="bookmark-detail-title"
+						style={{ fontSize: 17, margin: "6px 0 4px" }}
+					>
+						{detail.title}
+					</h2>
+					<a
+						href={detail.url}
+						target="_blank"
+						rel="noreferrer"
+						style={{
+							fontSize: 12,
+							color: palette.accent,
+							wordBreak: "break-all",
+						}}
+					>
+						{detail.url}
+					</a>
+				</header>
+
+				<div style={sheetBody}>
+					{detail.description ? (
+						<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
+							{detail.description}
+						</p>
+					) : (
+						<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
+							{detail.aiStatus === "pending"
+								? "AI analysis has not finished for this bookmark. Re-analyze it while its page is the active tab."
+								: "No AI description yet."}
+						</p>
+					)}
+
+					{detail.genre ? (
+						<DetailField label="Genre" value={detail.genre} />
+					) : null}
+
+					{detail.analysisProfileId ? (
+						<DetailField label="Profile" value={detail.analysisProfileId} />
+					) : null}
+
+					{detail.tags.length > 0 ? (
+						<div style={{ marginTop: 10 }}>
+							<p style={railLabel}>Tags</p>
+							<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+								{detail.tags.map((t) => (
+									<span
+										key={t}
+										style={{ fontSize: 12, color: palette.inkSoft }}
+									>
+										#{t}
+									</span>
+								))}
+							</div>
+						</div>
+					) : null}
+
+					{detail.analysisMarkdown ? (
+						<div style={{ marginTop: 12 }}>
+							<p style={railLabel}>Analysis</p>
+							<AnalysisMarkdown markdown={detail.analysisMarkdown} />
+						</div>
+					) : null}
+
+					{detail.aiError ? (
+						<p
+							style={{
+								fontSize: 12,
+								color: palette.danger,
+								margin: "10px 0 0",
+							}}
+						>
+							{detail.aiError}
+						</p>
+					) : null}
+
+					<dl
+						style={{
+							margin: "14px 0 0",
+							fontSize: 11,
+							color: palette.inkFaint,
+						}}
+					>
+						<TimeRow label="Created" value={detail.createdAt} />
+						<TimeRow label="Updated" value={detail.updatedAt} />
+						{detail.lastAnalyzedAt ? (
+							<TimeRow label="Analyzed" value={detail.lastAnalyzedAt} />
+						) : null}
+					</dl>
+				</div>
+
+				<footer style={sheetFooter}>
+					<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+						<a
+							href={detail.url}
+							target="_blank"
+							rel="noreferrer"
+							style={primaryButton}
+						>
+							Open
+						</a>
+						{detail.canReAnalyze ? (
+							<button
+								type="button"
+								style={
+									busy ? { ...subtleButton, ...disabledButton } : subtleButton
+								}
+								disabled={busy}
+								onClick={() => void controller.reAnalyze(detail.canonicalUrl)}
+							>
+								{busy ? "Analyzing…" : "Re-analyze"}
+							</button>
+						) : null}
+						<button
+							type="button"
+							style={
+								busy ? { ...dangerButton, ...disabledButton } : dangerButton
+							}
+							disabled={busy}
+							onClick={() =>
+								void controller.deleteBookmark(detail.canonicalUrl)
+							}
+						>
+							Delete
+						</button>
+						<button
+							type="button"
+							style={subtleButton}
+							onClick={() => controller.clearSelection()}
+						>
+							Close
+						</button>
+					</div>
+					{busy ? (
+						<p
+							style={{
+								fontSize: 11,
+								color: palette.inkFaint,
+								margin: "8px 0 0",
+							}}
+						>
+							Analyzing in the foreground — keep this page open until it
+							finishes.
+						</p>
+					) : null}
+				</footer>
+			</section>
+		</div>
 	);
 }
 
@@ -798,38 +948,6 @@ function SkillForm({
 			</div>
 		</form>
 	);
-}
-
-/**
- * Renders `analysisMarkdown` as plain React text nodes grouped by block type.
- * Only {@link parseMarkdownBlocks}'s block text ever reaches JSX children —
- * never `dangerouslySetInnerHTML` — so raw HTML/script content is inert,
- * displayed as literal escaped text rather than interpreted markup.
- */
-function AnalysisMarkdown({ markdown }: { markdown: string }) {
-	const blocks = parseMarkdownBlocks(markdown);
-	return (
-		<div style={{ marginTop: 10 }}>
-			<p style={railLabel}>Analysis</p>
-			<div style={{ fontSize: 13, color: palette.ink }}>
-				{blocks.map((block, i) => (
-					<AnalysisBlock key={i} block={block} />
-				))}
-			</div>
-		</div>
-	);
-}
-
-function AnalysisBlock({ block }: { block: MarkdownBlock }) {
-	if (block.type === "heading") {
-		return (
-			<p style={{ fontWeight: 700, margin: "10px 0 4px" }}>{block.text}</p>
-		);
-	}
-	if (block.type === "list-item") {
-		return <p style={{ margin: "2px 0", paddingLeft: 14 }}>• {block.text}</p>;
-	}
-	return <p style={{ margin: "6px 0" }}>{block.text}</p>;
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
