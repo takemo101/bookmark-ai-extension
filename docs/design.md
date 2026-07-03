@@ -240,7 +240,9 @@ If AI is unavailable or fails:
 
 - Still save the bookmark with URL/title and metadata.
 - Set `aiStatus` to `unavailable` or `failed`.
-- Allow later re-analysis from the options page.
+- Keep the record recoverable for later re-analysis: saving the page again
+  from the popup re-runs analysis. The Options detail sheet no longer offers a
+  Re-analyze action (MIK-024).
 
 ## Page Extraction
 
@@ -430,16 +432,19 @@ Options page responsibilities:
 - Show full bookmark list.
 - Text search over title, URL, description, genre, and tags.
 - Filter by genre and tags.
-- Delete bookmarks.
-- Re-analyze bookmarks with `pending`, `unavailable`, or `failed` status, subject
-  to the activeTab constraint below.
-- Show Drive sync status and errors.
+- Delete bookmarks — via a per-row quick delete and from the detail sheet.
+- Show Drive sync status and errors, with the sync action as a floating
+  button.
 
-Re-analyze is bound by the same `activeTab` + `scripting` posture as the save
-flow: re-extraction only works when the target page **is the active tab in the
-current window**. The extension never reaches for an arbitrary tab (no `tabs`
-permission, no host permissions). When a re-analyze is requested from an
-unrelated active tab, the app surfaces a safe action error
+The Options UI does not offer re-analysis (MIK-024): the detail sheet is a
+reading/opening/deletion surface. A `pending`, `unavailable`, or `failed`
+record stays recoverable — saving the page again from the popup re-runs
+analysis, and a later explicit re-analysis flow may return (MIK-027). Any
+re-analysis remains bound by the same `activeTab` + `scripting` posture as the
+save flow: re-extraction only works when the target page **is the active tab
+in the current window**. The extension never reaches for an arbitrary tab (no
+`tabs` permission, no host permissions). When a re-analyze is requested from
+an unrelated active tab, the app surfaces a safe action error
 (`Open the page in the active tab to re-analyze it from here.`) and leaves the
 existing bookmark record unchanged — it is **not** flipped to `pending` or
 `failed`, and no Drive write is made. A genuine extraction/AI failure *after* a
@@ -450,26 +455,39 @@ re-analyze from the page's own tab, or save it again.
 
 Use a two-zone ledger layout with a row-click detail sheet:
 
-- Left rail: search, genre filters, tag filters, sync state.
+- Left rail: search, genre filters, tag filters, sync state. The TAGS facet
+  shows a capped set of chips (12) with a `Show all N tags` / `Show fewer
+  tags` toggle; the expanded list scrolls inside a max-height container so a
+  large tag set never makes the rail taller than the viewport, and the active
+  tag filter stays visible even while collapsed.
 - Center list: scannable bookmark rows with title, a short clamped AI summary,
-  genre/tags/profile metadata, status, and updated time.
+  genre/tags/profile metadata, status, updated time, and a small quick delete
+  button. Quick delete goes through the existing delete use case, is disabled
+  while an action is busy, and stops event propagation so it never opens the
+  detail sheet.
+- Floating sync action: a fixed bottom-right `Sync Drive` button shows the
+  current sync tone/status and triggers the existing refresh path. The left
+  rail keeps the sync status/pending/error readout but no longer contains a
+  `Sync now` button.
 - Detail side sheet: clicking a row opens a right-side modal sheet (fullscreen
   on narrow viewports) showing the full bookmark detail — description, genre,
   tags, profile, URL, timestamps, the full `analysisMarkdown` note — and the
-  open/delete/re-analyze actions. There is no always-visible right detail pane.
+  Open/Delete/Close actions (no Re-analyze). There is no always-visible right
+  detail pane.
 
 Detail sheet behavior:
 
+- While the sheet is open the underlying page scroll is locked (body overflow
+  hidden, restored on close); the sheet body scrolls independently.
 - The sheet closes via its Close buttons, the Escape key, or a backdrop click;
   closing only clears the selection and never resets search/filter state.
 - The row highlight reflects the currently open sheet.
 - `analysisMarkdown` is rendered through `react-markdown` + `remark-gfm` with
   raw HTML kept inert (no `rehype-raw`, no `dangerouslySetInnerHTML`); rendered
   links open in a new tab with `rel="noreferrer"`.
-- During a foreground re-analyze the sheet stays open and shows a
-  keep-this-page-open warning; Open and Close remain enabled while Re-analyze
-  and Delete are disabled. Delete is immediate and closes the sheet once the
-  bookmark is gone.
+- While an action is busy the sheet keeps Open and Close enabled, disables
+  Delete, and shows a keep-this-page-open note. Delete is immediate and closes
+  the sheet once the bookmark is gone.
 
 MVP search is normal local-cache text search plus filters. Semantic search is out of scope.
 

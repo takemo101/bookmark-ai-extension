@@ -3,8 +3,9 @@
  *
  * A pure projection of {@link OptionsController.getView}: it renders the
  * two-zone ledger — left rail (search, sync state, genre/tag/status filters)
- * and the center bookmark rows — plus a detail side sheet overlay that a row
- * click opens with open/delete/re-analyze actions (MIK-022). It dispatches
+ * and the center bookmark rows with per-row quick delete — plus a floating
+ * Drive sync action and a detail side sheet overlay that a row click opens
+ * with open/delete actions (MIK-022, MIK-024). It dispatches
  * user intent back through the controller and imports only the controller,
  * view types, and style tokens; no Drive client, Prompt API client, JSONL
  * parser, or merge internals appear here (AGENTS.md "Architecture
@@ -12,7 +13,7 @@
  * component is trivially renderable with a fake in tests.
  */
 import type { ChangeEvent } from "react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { AnalysisMarkdown } from "./markdown";
 import type {
@@ -38,6 +39,7 @@ import {
 	chipActive,
 	dangerButton,
 	disabledButton,
+	floatingSyncButton,
 	ledger,
 	page,
 	palette,
@@ -46,6 +48,8 @@ import {
 	rail,
 	railLabel,
 	row as rowStyle,
+	rowDeleteButton,
+	rowOpenButton,
 	rowSelected,
 	searchInput,
 	sheet,
@@ -58,6 +62,7 @@ import {
 	subtleButton,
 	summaryClamp,
 	syncTone,
+	tagListExpanded,
 	truncate,
 } from "./styles";
 
@@ -79,12 +84,18 @@ export function Options({
 		void controller.init();
 	}, [controller]);
 
+	useLockBodyScroll(view.selected !== undefined);
+
 	return (
 		<main style={page}>
 			<div style={ledger}>
 				<LeftRail view={view} controller={controller} />
 				<CenterList view={view} controller={controller} />
 			</div>
+			<FloatingSyncButton
+				sync={view.sync}
+				onRefresh={() => void controller.refresh()}
+			/>
 			{view.selected ? (
 				<DetailSheet
 					detail={view.selected}
@@ -97,6 +108,36 @@ export function Options({
 			) : null}
 		</main>
 	);
+}
+
+/** The minimal element shape {@link lockScroll} needs; lets tests use a fake. */
+type ScrollLockTarget = { style: { overflow: string } };
+
+/**
+ * Hide a scroll container's overflow and return a restore function. Exported
+ * only so the scroll-lock behavior stays unit-testable without a DOM
+ * (tests run in node, not jsdom).
+ */
+export function lockScroll(target: ScrollLockTarget): () => void {
+	const previous = target.style.overflow;
+	target.style.overflow = "hidden";
+	return () => {
+		target.style.overflow = previous;
+	};
+}
+
+/**
+ * Lock the underlying page scroll while the detail sheet is open (MIK-024) so
+ * scrolling the sheet body never scrolls the ledger behind it. Restores the
+ * previous body overflow on close/unmount.
+ */
+function useLockBodyScroll(locked: boolean): void {
+	useEffect(() => {
+		if (!locked) {
+			return;
+		}
+		return lockScroll(document.body);
+	}, [locked]);
 }
 
 function LeftRail({
@@ -145,7 +186,7 @@ function LeftRail({
 				) : null}
 			</section>
 
-			<SyncPanel sync={view.sync} onRefresh={() => void controller.refresh()} />
+			<SyncPanel sync={view.sync} />
 
 			<FilterFacets
 				facets={view.facets}
@@ -156,13 +197,12 @@ function LeftRail({
 	);
 }
 
-function SyncPanel({
-	sync,
-	onRefresh,
-}: {
-	sync: SyncView;
-	onRefresh: () => void;
-}) {
+/**
+ * Left-rail Drive sync status readout (MIK-024): status, pending changes, last
+ * synced time, and safe errors stay visible here, but the sync action itself
+ * moved to {@link FloatingSyncButton} so the rail stays compact.
+ */
+function SyncPanel({ sync }: { sync: SyncView }) {
 	return (
 		<section style={panel}>
 			<p style={railLabel}>Drive sync</p>
@@ -193,15 +233,69 @@ function SyncPanel({
 					{sync.error}
 				</p>
 			) : null}
-			<button
-				type="button"
-				style={{ ...subtleButton, marginTop: 8 }}
-				onClick={onRefresh}
-			>
-				Sync now
-			</button>
 		</section>
 	);
+}
+
+/**
+ * Floating Drive sync action (MIK-024): the always-reachable replacement for
+ * the old rail "Sync now" button. Shows the current sync tone/status and
+ * dispatches the existing {@link OptionsController.refresh} — no new sync
+ * semantics (MIK-026 owns richer progress states).
+ */
+function FloatingSyncButton({
+	sync,
+	onRefresh,
+}: {
+	sync: SyncView;
+	onRefresh: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			style={floatingSyncButton}
+			onClick={onRefresh}
+			aria-label="Sync with Google Drive"
+		>
+			<span
+				aria-hidden
+				style={{
+					width: 8,
+					height: 8,
+					borderRadius: 999,
+					background: statusColor(syncTone(sync.status)),
+				}}
+			/>
+			<span>Sync Drive</span>
+			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
+				{sync.status}
+			</span>
+		</button>
+	);
+}
+
+/** How many tag chips the rail shows before collapsing behind "Show all". */
+const TAG_FACET_CAP = 12;
+
+/**
+ * The tags to render given the expansion state (MIK-024): collapsed shows the
+ * first {@link TAG_FACET_CAP} chips, but the active tag filter always stays
+ * visible so a filter picked while expanded never disappears on collapse.
+ * Exported for tests only — view logic, no controller state.
+ */
+export function visibleTagFacets(
+	tags: readonly string[],
+	activeTag: string | undefined,
+	expanded: boolean,
+): readonly string[] {
+	if (expanded || tags.length <= TAG_FACET_CAP) {
+		return tags;
+	}
+	const capped = tags.slice(0, TAG_FACET_CAP);
+	if (activeTag !== undefined && !capped.includes(activeTag)) {
+		capped.push(activeTag);
+	}
+	return capped;
 }
 
 function FilterFacets({
@@ -213,6 +307,11 @@ function FilterFacets({
 	filters: FiltersView;
 	controller: OptionsController;
 }) {
+	// Expansion is view-only UI state; it never touches the controller.
+	const [tagsExpanded, setTagsExpanded] = useState(false);
+	const tags = visibleTagFacets(facets.tags, filters.tag, tagsExpanded);
+	const overflowCount = facets.tags.length - TAG_FACET_CAP;
+
 	return (
 		<section style={panel}>
 			<p style={railLabel}>AI status</p>
@@ -258,8 +357,19 @@ function FilterFacets({
 			{facets.tags.length > 0 ? (
 				<>
 					<p style={{ ...railLabel, marginTop: 14 }}>Tags</p>
-					<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-						{facets.tags.map((tag) => (
+					<div
+						style={
+							tagsExpanded
+								? {
+										display: "flex",
+										flexWrap: "wrap",
+										gap: 6,
+										...tagListExpanded,
+									}
+								: { display: "flex", flexWrap: "wrap", gap: 6 }
+						}
+					>
+						{tags.map((tag) => (
 							<button
 								key={tag}
 								type="button"
@@ -272,6 +382,17 @@ function FilterFacets({
 							</button>
 						))}
 					</div>
+					{overflowCount > 0 ? (
+						<button
+							type="button"
+							style={{ ...subtleButton, marginTop: 8 }}
+							onClick={() => setTagsExpanded((expanded) => !expanded)}
+						>
+							{tagsExpanded
+								? "Show fewer tags"
+								: `Show all ${facets.tags.length} tags`}
+						</button>
+					) : null}
 				</>
 			) : null}
 		</section>
@@ -337,7 +458,9 @@ function CenterList({
 					<li key={item.canonicalUrl}>
 						<LedgerRow
 							row={item}
+							busy={view.busy}
 							onSelect={() => controller.select(item.canonicalUrl)}
+							onDelete={() => void controller.deleteBookmark(item.canonicalUrl)}
 						/>
 					</li>
 				))}
@@ -351,16 +474,27 @@ function CenterList({
  * sheet, and the selected highlight only reflects the currently open sheet
  * (MIK-022). The summary gets two clamped lines now that the right pane is
  * gone; genre/tags/profile stay as compact metadata under it.
+ *
+ * The row container is a flex `<div>` (not a `<button>`) so the quick delete
+ * button can legally live inside it (MIK-024): the main content stays a real
+ * button for keyboard users (its Enter/Space click bubbles to the container's
+ * select handler), while quick delete stops propagation so deleting never
+ * opens the sheet.
  */
-function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
+function LedgerRow({
+	row,
+	busy,
+	onSelect,
+	onDelete,
+}: {
+	row: RowView;
+	busy: boolean;
+	onSelect: () => void;
+	onDelete: () => void;
+}) {
 	return (
-		<button
-			type="button"
-			style={row.selected ? rowSelected : rowStyle}
-			onClick={onSelect}
-			aria-expanded={row.selected}
-		>
-			<div style={{ minWidth: 0, flex: 1 }}>
+		<div style={row.selected ? rowSelected : rowStyle} onClick={onSelect}>
+			<button type="button" style={rowOpenButton} aria-expanded={row.selected}>
 				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
 					{row.title}
 				</div>
@@ -401,7 +535,7 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 						) : null}
 					</div>
 				) : null}
-			</div>
+			</button>
 			<div
 				style={{
 					display: "flex",
@@ -414,8 +548,24 @@ function LedgerRow({ row, onSelect }: { row: RowView; onSelect: () => void }) {
 				<span style={{ fontSize: 10, color: palette.inkFaint }}>
 					{formatTime(row.updatedAt)}
 				</span>
+				<button
+					type="button"
+					style={
+						busy ? { ...rowDeleteButton, ...disabledButton } : rowDeleteButton
+					}
+					disabled={busy}
+					aria-label={`Delete ${row.title}`}
+					title="Delete bookmark"
+					onClick={(event) => {
+						// Quick delete must never open the detail sheet behind it.
+						event.stopPropagation();
+						onDelete();
+					}}
+				>
+					✕
+				</button>
 			</div>
-		</button>
+		</div>
 	);
 }
 
@@ -445,9 +595,11 @@ function useIsNarrowViewport(): boolean {
  * The row-click detail side sheet (MIK-022): the single reading surface for a
  * bookmark's full detail and its long-form `analysisMarkdown`. Closes via the
  * Close buttons, Escape, and backdrop click — closing only clears the
- * selection, never the filters. While a foreground re-analyze is busy the
- * mutating actions (Re-analyze, Delete) are disabled but Open and Close stay
- * available; the warning tells the user to keep the page (not the sheet) open.
+ * selection, never the filters. Actions are Open, Delete, and Close only; the
+ * sheet is a reading/deletion surface and no longer offers Re-analyze
+ * (MIK-024 — a later explicit flow owns re-analysis). While an action is busy
+ * Delete is disabled but Open and Close stay available, and Delete closes the
+ * sheet once the record disappears (the controller drops the selection).
  */
 function DetailSheet({
 	detail,
@@ -537,7 +689,7 @@ function DetailSheet({
 					) : (
 						<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
 							{detail.aiStatus === "pending"
-								? "AI analysis has not finished for this bookmark. Re-analyze it while its page is the active tab."
+								? "AI analysis has not finished for this bookmark yet."
 								: "No AI description yet."}
 						</p>
 					)}
@@ -610,18 +762,6 @@ function DetailSheet({
 						>
 							Open
 						</a>
-						{detail.canReAnalyze ? (
-							<button
-								type="button"
-								style={
-									busy ? { ...subtleButton, ...disabledButton } : subtleButton
-								}
-								disabled={busy}
-								onClick={() => void controller.reAnalyze(detail.canonicalUrl)}
-							>
-								{busy ? "Analyzing…" : "Re-analyze"}
-							</button>
-						) : null}
 						<button
 							type="button"
 							style={
@@ -650,8 +790,7 @@ function DetailSheet({
 								margin: "8px 0 0",
 							}}
 						>
-							Analyzing in the foreground — keep this page open until it
-							finishes.
+							Working — keep this page open until it finishes.
 						</p>
 					) : null}
 				</footer>
