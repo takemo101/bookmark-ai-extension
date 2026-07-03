@@ -46,6 +46,7 @@ import {
 	err as appErr,
 } from "../lib/app/index";
 import { createChromePromptClient } from "../lib/ai/index";
+import { detectUiLanguage } from "../lib/i18n/index";
 import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
@@ -81,6 +82,9 @@ export function createRuntimeUseCases(): OptionsUseCases {
 		clock: createSystemClock(),
 		ids: createCryptoIdGenerator(),
 		settingsProvider: createSettingsProviderPort(settingsCache),
+		// The browser UI language, the analyzer's fallback output language when a
+		// page's own text is ambiguous (MIK-029).
+		fallbackLanguage: detectUiLanguage(),
 	});
 	return createOptionsUseCases(app);
 }

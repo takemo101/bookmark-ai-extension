@@ -1,8 +1,9 @@
 /**
  * `ai/*` boundary.
  *
- * Owns Chrome Built-in AI / Prompt API availability checks, the Japanese
- * analysis prompt, response parsing, and analyzer orchestration. It returns
+ * Owns Chrome Built-in AI / Prompt API availability checks, the
+ * English/Japanese analysis prompt (MIK-029), response parsing, and analyzer
+ * orchestration. It returns
  * parsed analysis results or typed errors and must not persist data directly.
  * It depends only on its own pure types and the {@link PromptClient} port — no
  * Drive, storage, UI, or bookmark-domain imports. No external AI API / API-key
@@ -14,7 +15,7 @@
  *                                        optionally merging Drive-synced custom
  *                                        profiles with the built-ins (MIK-018).
  *   - {@link parseAnalysis}           — pure boundary parser (no Chrome needed).
- *   - {@link buildAnalysisPrompt}     — Japanese structured-JSON prompt.
+ *   - {@link buildAnalysisPrompt}     — English/Japanese structured-JSON prompt.
  *   - {@link selectAnalysisProfile}   — built-in analysis profile selection.
  *   - {@link toAnalysisProfile}       — converts a settings-domain `CustomSkill`
  *                                        into an `AnalysisProfile`.
@@ -45,6 +46,8 @@ export {
 	ANALYSIS_SYSTEM_PROMPT,
 	ANALYSIS_MARKDOWN_MIN_CHARS,
 	ANALYSIS_MARKDOWN_MAX_CHARS,
+	ANALYSIS_MARKDOWN_CHAR_RANGE,
+	analysisSystemPrompt,
 	buildAnalysisPrompt,
 } from "./prompt";
 

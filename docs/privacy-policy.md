@@ -19,10 +19,10 @@ When you click Save, the extension may process:
 - Page metadata such as description and headings.
 - A temporary excerpt of visible page text.
 - AI-generated bookmark information:
-  - Japanese description.
+  - Description (Japanese or English, auto-selected per page).
   - Genre.
   - Tags.
-  - Long-form Japanese Markdown analysis.
+  - Long-form Markdown analysis (Japanese or English).
   - AI generation status.
 
 ## Data Stored in Google Drive
@@ -38,11 +38,12 @@ Each record may include:
 - URL.
 - Canonical URL.
 - Page title.
-- AI-generated Japanese description.
+- AI-generated description (Japanese or English).
 - Genre.
 - Tags.
-- A long-form, AI-generated Japanese Markdown analysis (never a copy of the
-  page's raw text) and the ID of the analysis profile used to generate it.
+- A long-form, AI-generated Markdown analysis in Japanese or English (never a
+  copy of the page's raw text) and the ID of the analysis profile used to
+  generate it.
 - Creation/update timestamps.
 - AI status such as `pending`, `ready`, `unavailable`, or `failed`.
 

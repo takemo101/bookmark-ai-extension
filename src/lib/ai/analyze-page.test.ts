@@ -167,6 +167,89 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.reason).toContain("probe blew up");
 	});
 
+	it("infers an English output language and threads it to the client (MIK-029)", async () => {
+		const availabilityLanguages: unknown[] = [];
+		const promptLanguages: unknown[] = [];
+		let seen = "";
+		const client: PromptClient = {
+			availability: async (language) => {
+				availabilityLanguages.push(language);
+				return "available";
+			},
+			prompt: async (input, language) => {
+				promptLanguages.push(language);
+				seen = input;
+				return JSON.stringify({
+					description: "desc",
+					tags: [],
+					analysisMarkdown: "## Overview\n\nBody.",
+				});
+			},
+		};
+		const outcome = await analyzePage(client, {
+			title: "A practical guide to Chrome extensions",
+			url: "https://example.com",
+			excerpt:
+				"This article walks through building a Chrome extension with bookmarks, storage, and AI summaries.",
+		});
+		expect(outcome.status).toBe("ready");
+		expect(availabilityLanguages).toEqual(["en"]);
+		expect(promptLanguages).toEqual(["en"]);
+		expect(seen).toContain("in English");
+		expect(seen).not.toContain("日本語");
+	});
+
+	it("keeps Japanese output for a clearly Japanese page even with an English fallback", async () => {
+		const promptLanguages: unknown[] = [];
+		let seen = "";
+		const client: PromptClient = {
+			availability: async () => "available",
+			prompt: async (input, language) => {
+				promptLanguages.push(language);
+				seen = input;
+				return JSON.stringify({
+					description: "説明",
+					tags: [],
+					analysisMarkdown: ANALYSIS_MARKDOWN,
+				});
+			},
+		};
+		const outcome = await analyzePage(client, {
+			title: "Chrome拡張の作り方",
+			url: "https://example.com",
+			excerpt:
+				"この記事ではChrome拡張機能の設計と実装手順を日本語で解説します。",
+			fallbackLanguage: "en",
+		});
+		expect(outcome.status).toBe("ready");
+		expect(promptLanguages).toEqual(["ja"]);
+		expect(seen).toContain("日本語");
+	});
+
+	it("uses the fallback language when the page text is ambiguous", async () => {
+		const promptLanguages: unknown[] = [];
+		const client: PromptClient = {
+			availability: async () => "available",
+			prompt: async (_input, language) => {
+				promptLanguages.push(language);
+				return JSON.stringify({
+					description: "desc",
+					tags: [],
+					analysisMarkdown: "## Overview\n\nBody.",
+				});
+			},
+		};
+		// Too short to carry any script signal → fallback decides.
+		const ambiguous = { title: "?", url: "https://example.com", excerpt: "!" };
+		await analyzePage(client, { ...ambiguous, fallbackLanguage: "en" });
+		expect(promptLanguages).toEqual(["en"]);
+		await analyzePage(client, { ...ambiguous, fallbackLanguage: "ja" });
+		expect(promptLanguages).toEqual(["en", "ja"]);
+		// Omitted fallback preserves the historical Japanese default.
+		await analyzePage(client, ambiguous);
+		expect(promptLanguages).toEqual(["en", "ja", "ja"]);
+	});
+
 	it("prefers a higher-priority custom profile over a matching built-in", async () => {
 		const client = fakeClient({
 			prompt: async () =>

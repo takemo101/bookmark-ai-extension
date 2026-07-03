@@ -17,12 +17,14 @@
  *   - `namespace.create(options)` resolves to a session with
  *     `prompt(text): Promise<string>` and an optional `destroy()`.
  *   - `namespace.availability(options)` and `namespace.create(options)` accept
- *     `expectedOutputs`; this adapter requests Japanese text output to match the
- *     product's AI contract and avoid Chrome's missing-output-language warning.
+ *     `expectedOutputs`; this adapter requests text output in the caller's
+ *     target language (Japanese by default, MIK-029) to match the product's AI
+ *     contract and avoid Chrome's missing-output-language warning.
  * If a future Chrome changes these, only this file moves — callers keep using
  * {@link PromptClient}. The namespace can also be injected for tests.
  */
-import { ANALYSIS_SYSTEM_PROMPT } from "./prompt";
+import type { SupportedLanguage } from "../i18n/index";
+import { analysisSystemPrompt } from "./prompt";
 
 /** Normalized availability reported by the adapter. */
 export type PromptApiAvailability =
@@ -36,10 +38,16 @@ export type PromptApiAvailability =
  * test needs; the real Chrome global never appears in analyzer tests.
  */
 export interface PromptClient {
-	/** Whether the Prompt API can currently run a prompt. */
-	availability(): Promise<PromptApiAvailability>;
-	/** Run one prompt and return the raw model text. */
-	prompt(input: string): Promise<string>;
+	/**
+	 * Whether the Prompt API can currently run a prompt. `language`, when given,
+	 * is the target output language the probe should request (default Japanese).
+	 */
+	availability(language?: SupportedLanguage): Promise<PromptApiAvailability>;
+	/**
+	 * Run one prompt and return the raw model text. `language`, when given, is
+	 * the output language requested from the session (default Japanese).
+	 */
+	prompt(input: string, language?: SupportedLanguage): Promise<string>;
 }
 
 /**
@@ -72,7 +80,10 @@ export interface PromptModelNamespace {
 	create(options?: unknown): Promise<PromptSession>;
 }
 
-const JAPANESE_TEXT_OUTPUT = [{ type: "text", languages: ["ja"] }] as const;
+/** `expectedOutputs` for one target language (MIK-029). */
+function expectedTextOutputs(language: SupportedLanguage) {
+	return [{ type: "text", languages: [language] }] as const;
+}
 
 /** Locate the language-model namespace, tolerating both known global shapes. */
 export function resolveNamespace(): PromptModelNamespace | null {
@@ -124,27 +135,34 @@ export function createChromePromptClient(
 	namespace: PromptModelNamespace | null = resolveNamespace(),
 ): PromptClient {
 	return {
-		async availability(): Promise<PromptApiAvailability> {
+		async availability(
+			language: SupportedLanguage = "ja",
+		): Promise<PromptApiAvailability> {
 			if (!namespace) {
 				return "unavailable";
 			}
 			try {
 				return normalizeAvailability(
 					await namespace.availability({
-						expectedOutputs: JAPANESE_TEXT_OUTPUT,
+						expectedOutputs: expectedTextOutputs(language),
 					}),
 				);
 			} catch {
 				return "unavailable";
 			}
 		},
-		async prompt(input: string): Promise<string> {
+		async prompt(
+			input: string,
+			language: SupportedLanguage = "ja",
+		): Promise<string> {
 			if (!namespace) {
 				throw new PromptApiUnavailableError();
 			}
 			const session = await namespace.create({
-				initialPrompts: [{ role: "system", content: ANALYSIS_SYSTEM_PROMPT }],
-				expectedOutputs: JAPANESE_TEXT_OUTPUT,
+				initialPrompts: [
+					{ role: "system", content: analysisSystemPrompt(language) },
+				],
+				expectedOutputs: expectedTextOutputs(language),
 			});
 			try {
 				return await session.prompt(input);

@@ -28,6 +28,7 @@ import type {
 	AnalysisOutcome,
 	AnalysisProfile,
 } from "../ai/index";
+import type { SupportedLanguage } from "../i18n/index";
 import type {
 	ExtractedPage,
 	ExtractionError,
@@ -166,4 +167,11 @@ export type AppDeps = {
 	 * rather than blocking analysis.
 	 */
 	readonly settingsProvider?: SettingsProviderPort;
+	/**
+	 * The UI/browser language, used as the analyzer's fallback output language
+	 * when a page's own text is ambiguous (MIK-029). Resolved once at the
+	 * composition root (Chrome-free here); omitted reproduces the historical
+	 * Japanese-fallback behavior exactly.
+	 */
+	readonly fallbackLanguage?: SupportedLanguage;
 };

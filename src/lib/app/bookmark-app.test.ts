@@ -245,6 +245,7 @@ function makeHarness(
 		settingsProvider?: {
 			currentCustomProfiles(): Promise<readonly AnalysisProfile[]>;
 		};
+		fallbackLanguage?: "ja" | "en";
 	} = {},
 ): Harness {
 	const tab =
@@ -266,6 +267,7 @@ function makeHarness(
 		clock: fakeClock(),
 		ids: fakeIds(),
 		settingsProvider: opts.settingsProvider,
+		fallbackLanguage: opts.fallbackLanguage,
 	});
 	return { app, repo, analyzer, extractor, cache };
 }
@@ -344,6 +346,21 @@ describe("createBookmarkApp", () => {
 				cache.state.bookmarks.get(saved.value.record.canonicalUrl)?.aiStatus,
 			).toBe("ready");
 			expect(cache.state.sync.status).toBe("synced");
+		});
+
+		it("threads the configured fallback language into the analysis input (MIK-029)", async () => {
+			const { app, analyzer } = makeHarness({ fallbackLanguage: "en" });
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			expect(analyzer.calls).toHaveLength(1);
+			expect(analyzer.calls[0]?.fallbackLanguage).toBe("en");
+		});
+
+		it("leaves the analyzer fallback language undefined when not configured", async () => {
+			const { app, analyzer } = makeHarness();
+			const saved = await app.saveCurrentTab();
+			expect(saved.ok).toBe(true);
+			expect(analyzer.calls[0]?.fallbackLanguage).toBeUndefined();
 		});
 
 		it("returns an error when there is no active tab", async () => {

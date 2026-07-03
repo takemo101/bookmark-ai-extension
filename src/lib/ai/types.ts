@@ -12,17 +12,23 @@
  * module depending on `bookmarks/*`. {@link AnalysisStatus} is likewise a subset
  * of the bookmark domain's `AiStatus`.
  */
+import type { SupportedLanguage } from "../i18n/index";
 
 /**
  * Input to a single analysis call. `excerpt` is the bounded, transient page
  * excerpt text produced by `extraction/*` (`PageExcerpt.text`). It is an AI
  * input only and is never persisted — see docs/privacy-policy.md "Page Text
  * Excerpts".
+ *
+ * `fallbackLanguage` (MIK-029) is the caller's UI/browser language: the
+ * analyzer infers the output language from the page text itself and uses this
+ * only when the text is ambiguous, defaulting to Japanese when omitted.
  */
 export type AnalysisInput = {
 	readonly title: string;
 	readonly url: string;
 	readonly excerpt: string;
+	readonly fallbackLanguage?: SupportedLanguage;
 };
 
 /** Always-valid parsed analysis. Produced only by the parser. */

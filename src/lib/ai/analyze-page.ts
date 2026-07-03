@@ -23,6 +23,7 @@
  * matches. Omitting the argument (or passing an empty array) reproduces the
  * built-in-only Phase 1 behavior exactly.
  */
+import { DEFAULT_LANGUAGE, inferOutputLanguage } from "../i18n/index";
 import { parseAnalysis } from "./parse";
 import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 import type { AnalysisProfile } from "./profile";
@@ -42,9 +43,18 @@ export async function analyzePage(
 	input: AnalysisInput,
 	customProfiles: readonly AnalysisProfile[] = [],
 ): Promise<AnalysisOutcome> {
+	// The output language is inferred from the page's own text (title +
+	// excerpt), falling back to the caller's UI/browser language, then Japanese
+	// (MIK-029). Resolved before the availability probe so the probe can request
+	// the same language-specific expected outputs the session will use.
+	const language = inferOutputLanguage(
+		`${input.title}\n${input.excerpt}`,
+		input.fallbackLanguage ?? DEFAULT_LANGUAGE,
+	);
+
 	let availability: Awaited<ReturnType<PromptClient["availability"]>>;
 	try {
-		availability = await client.availability();
+		availability = await client.availability(language);
 	} catch (error) {
 		// A throwing availability probe means we cannot run AI — preserve the
 		// bookmark rather than marking it failed.
@@ -62,7 +72,10 @@ export async function analyzePage(
 
 	let raw: string;
 	try {
-		raw = await client.prompt(buildAnalysisPrompt(input, profile));
+		raw = await client.prompt(
+			buildAnalysisPrompt(input, profile, language),
+			language,
+		);
 	} catch (error) {
 		if (error instanceof PromptApiUnavailableError) {
 			return { status: "unavailable", reason: error.message };

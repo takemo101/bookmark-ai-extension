@@ -17,6 +17,8 @@
 import type { ChangeEvent } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
+import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
+import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
 import type {
 	BuiltInSkillView,
@@ -87,12 +89,19 @@ export function Options({
 	controller,
 	skillsController,
 	initialScreen = "library",
+	language,
 }: {
 	controller: OptionsController;
 	/** Optional so existing tests/embeds can render without the skills screen. */
 	skillsController?: SkillsController;
 	/** Test/embed hook: which screen renders first. Runtime starts on Library. */
 	initialScreen?: OptionsScreen;
+	/**
+	 * UI language override (MIK-029). Tests/embeds inject it for determinism;
+	 * the runtime omits it and the browser UI language decides (Japanese
+	 * fallback).
+	 */
+	language?: SupportedLanguage;
 }) {
 	const view = useSyncExternalStore(
 		controller.subscribe,
@@ -100,6 +109,7 @@ export function Options({
 		controller.getView,
 	);
 	const [screen, setScreen] = useState<OptionsScreen>(initialScreen);
+	const m = optionsMessages(language ?? detectUiLanguage());
 
 	useEffect(() => {
 		void controller.init();
@@ -124,14 +134,14 @@ export function Options({
 		<main style={page}>
 			{skillsController ? (
 				<header style={appHeader}>
-					<nav aria-label="Options screens" style={{ display: "flex", gap: 8 }}>
+					<nav aria-label={m.navAria} style={{ display: "flex", gap: 8 }}>
 						<NavTab
-							label="Library"
+							label={m.library}
 							active={showLibrary}
 							onClick={() => switchScreen("library")}
 						/>
 						<NavTab
-							label="Analysis skills"
+							label={m.analysisSkills}
 							active={!showLibrary}
 							onClick={() => switchScreen("analysis-skills")}
 						/>
@@ -141,24 +151,26 @@ export function Options({
 			{showLibrary ? (
 				<>
 					<div style={ledger}>
-						<LeftRail view={view} controller={controller} />
-						<CenterList view={view} controller={controller} />
+						<LeftRail view={view} m={m} controller={controller} />
+						<CenterList view={view} m={m} controller={controller} />
 					</div>
 					<FloatingSyncButton
 						sync={view.sync}
 						loading={view.loading}
+						m={m}
 						onRefresh={() => void controller.refresh()}
 					/>
 					{view.selected ? (
 						<DetailSheet
 							detail={view.selected}
 							busy={view.busy}
+							m={m}
 							controller={controller}
 						/>
 					) : null}
 				</>
 			) : skillsController ? (
-				<SkillsScreen skillsController={skillsController} />
+				<SkillsScreen skillsController={skillsController} m={m} />
 			) : null}
 		</main>
 	);
@@ -217,9 +229,11 @@ function useLockBodyScroll(locked: boolean): void {
 
 function LeftRail({
 	view,
+	m,
 	controller,
 }: {
 	view: OptionsView;
+	m: OptionsMessages;
 	controller: OptionsController;
 }) {
 	const hasFilters =
@@ -234,22 +248,22 @@ function LeftRail({
 			<header>
 				<h1 style={{ fontSize: 18, margin: "0 0 2px" }}>Bookmark AI</h1>
 				<p style={{ fontSize: 11, margin: 0, color: palette.inkFaint }}>
-					Research Ledger
+					{m.researchLedger}
 				</p>
 			</header>
 
 			<section style={panel}>
-				<p style={railLabel}>Search</p>
+				<p style={railLabel}>{m.search}</p>
 				<input
 					type="search"
 					value={view.filters.query}
-					placeholder="Title, URL, summary, tags…"
+					placeholder={m.searchPlaceholder}
 					onChange={(e) => controller.setQuery(e.target.value)}
 					style={searchInput}
-					aria-label="Search bookmarks"
+					aria-label={m.searchAria}
 				/>
 				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
-					{view.filteredCount} of {view.totalCount} shown
+					{m.shownOf(view.filteredCount, view.totalCount)}
 				</p>
 				{hasFilters ? (
 					<button
@@ -257,16 +271,17 @@ function LeftRail({
 						style={{ ...subtleButton, marginTop: 8 }}
 						onClick={() => controller.clearFilters()}
 					>
-						Clear filters
+						{m.clearFilters}
 					</button>
 				) : null}
 			</section>
 
-			<SyncPanel sync={view.sync} loading={view.loading} />
+			<SyncPanel sync={view.sync} loading={view.loading} m={m} />
 
 			<FilterFacets
 				facets={view.facets}
 				filters={view.filters}
+				m={m}
 				controller={controller}
 			/>
 		</aside>
@@ -282,15 +297,16 @@ function LeftRail({
 export function syncProgressText(
 	sync: Pick<SyncView, "syncing" | "writing">,
 	loading: boolean,
+	m: Pick<OptionsMessages, "loadingCached" | "syncingDrive" | "writingDrive">,
 ): string | undefined {
 	if (loading) {
-		return "Loading cached bookmarks…";
+		return m.loadingCached;
 	}
 	if (sync.syncing) {
-		return "Syncing with Google Drive…";
+		return m.syncingDrive;
 	}
 	if (sync.writing) {
-		return "Writing changes to Google Drive…";
+		return m.writingDrive;
 	}
 	return undefined;
 }
@@ -301,11 +317,19 @@ export function syncProgressText(
  * moved to {@link FloatingSyncButton} so the rail stays compact. In-flight
  * loading/syncing/writing progress renders as an explicit line (MIK-026).
  */
-function SyncPanel({ sync, loading }: { sync: SyncView; loading: boolean }) {
-	const progress = syncProgressText(sync, loading);
+function SyncPanel({
+	sync,
+	loading,
+	m,
+}: {
+	sync: SyncView;
+	loading: boolean;
+	m: OptionsMessages;
+}) {
+	const progress = syncProgressText(sync, loading, m);
 	return (
 		<section style={panel}>
-			<p style={railLabel}>Drive sync</p>
+			<p style={railLabel}>{m.driveSync}</p>
 			<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
 				<span
 					aria-hidden
@@ -328,12 +352,12 @@ function SyncPanel({ sync, loading }: { sync: SyncView; loading: boolean }) {
 			) : null}
 			{sync.pendingLocalChanges ? (
 				<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
-					Local changes pending — will retry on next sync
+					{m.pendingLocal}
 				</p>
 			) : null}
 			{sync.lastSyncedAt ? (
 				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}>
-					Last synced {formatTime(sync.lastSyncedAt)}
+					{m.lastSynced(formatTime(sync.lastSyncedAt))}
 				</p>
 			) : null}
 			{sync.error ? (
@@ -356,19 +380,21 @@ function SyncPanel({ sync, loading }: { sync: SyncView; loading: boolean }) {
 function FloatingSyncButton({
 	sync,
 	loading,
+	m,
 	onRefresh,
 }: {
 	sync: SyncView;
 	loading: boolean;
+	m: OptionsMessages;
 	onRefresh: () => void;
 }) {
 	const inFlight = loading || sync.syncing || sync.writing;
 	const detail = loading
-		? "loading…"
+		? m.syncDetail.loading
 		: sync.syncing
-			? "syncing…"
+			? m.syncDetail.syncing
 			: sync.writing
-				? "writing…"
+				? m.syncDetail.writing
 				: sync.status;
 	return (
 		<button
@@ -381,7 +407,7 @@ function FloatingSyncButton({
 			disabled={inFlight}
 			aria-busy={inFlight || undefined}
 			onClick={onRefresh}
-			aria-label="Sync with Google Drive"
+			aria-label={m.syncAria}
 		>
 			<span
 				aria-hidden
@@ -392,7 +418,7 @@ function FloatingSyncButton({
 					background: statusColor(syncTone(sync.status)),
 				}}
 			/>
-			<span>Sync Drive</span>
+			<span>{m.syncButton}</span>
 			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
 				{detail}
 			</span>
@@ -435,18 +461,20 @@ function FacetGroup<T extends string>({
 	label,
 	values,
 	active,
+	m,
 	onToggle,
 	format = (value) => value,
-	unit = "items",
+	unit = "tags",
 	cappable = false,
 }: {
 	label: string;
 	values: readonly T[];
 	active: T | undefined;
+	m: OptionsMessages;
 	onToggle: (value: T | undefined) => void;
 	format?: (value: T) => string;
-	/** Plural noun for the Show all/fewer copy of a cappable facet. */
-	unit?: string;
+	/** Which plural noun the Show all/fewer copy of a cappable facet uses. */
+	unit?: FacetUnit;
 	cappable?: boolean;
 }) {
 	// Expansion is view-only UI state; it never touches the controller.
@@ -486,9 +514,7 @@ function FacetGroup<T extends string>({
 					style={{ ...subtleButton, marginTop: 8 }}
 					onClick={() => setExpanded((current) => !current)}
 				>
-					{expanded
-						? `Show fewer ${unit}`
-						: `Show all ${values.length} ${unit}`}
+					{expanded ? m.showFewer(unit) : m.showAll(values.length, unit)}
 				</button>
 			) : null}
 		</div>
@@ -504,45 +530,51 @@ function FacetGroup<T extends string>({
 function FilterFacets({
 	facets,
 	filters,
+	m,
 	controller,
 }: {
 	facets: FacetsView;
 	filters: FiltersView;
+	m: OptionsMessages;
 	controller: OptionsController;
 }) {
 	return (
 		<section
 			style={{ ...panel, display: "flex", flexDirection: "column", gap: 14 }}
-			aria-label="Bookmark filters"
+			aria-label={m.filtersAria}
 		>
-			<p style={{ ...railLabel, margin: 0 }}>Filters</p>
+			<p style={{ ...railLabel, margin: 0 }}>{m.filters}</p>
 			<FacetGroup
-				label="Domain"
+				label={m.domain}
 				values={facets.domains}
 				active={filters.domain}
+				m={m}
 				onToggle={(domain) => controller.setDomain(domain)}
 				unit="domains"
 				cappable
 			/>
 			<FacetGroup
-				label="Genre"
+				label={m.genre}
 				values={facets.genres}
 				active={filters.genre}
+				m={m}
 				onToggle={(genre) => controller.setGenre(genre)}
 			/>
 			<FacetGroup
-				label="Tags"
+				label={m.tags}
 				values={facets.tags}
 				active={filters.tag}
+				m={m}
 				onToggle={(tag) => controller.setTag(tag)}
 				format={(tag) => `#${tag}`}
 				unit="tags"
 				cappable
 			/>
 			<FacetGroup
-				label="AI status"
+				label={m.aiStatus}
 				values={facets.statuses}
 				active={filters.aiStatus}
+				m={m}
 				onToggle={(status) => controller.setStatus(status)}
 			/>
 		</section>
@@ -551,22 +583,24 @@ function FilterFacets({
 
 function CenterList({
 	view,
+	m,
 	controller,
 }: {
 	view: OptionsView;
+	m: OptionsMessages;
 	controller: OptionsController;
 }) {
 	if (view.loading) {
 		return (
 			<section>
-				<Notice text="Loading your library…" />
+				<Notice text={m.loadingLibrary} />
 			</section>
 		);
 	}
 	if (view.empty) {
 		return (
 			<section>
-				<Notice text="No bookmarks yet. Save the current tab from the popup to start your ledger." />
+				<Notice text={m.emptyLibrary} />
 			</section>
 		);
 	}
@@ -587,7 +621,7 @@ function CenterList({
 		return (
 			<section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 				{banners}
-				<Notice text="No bookmarks match the current search and filters." />
+				<Notice text={m.noMatches} />
 			</section>
 		);
 	}
@@ -609,6 +643,7 @@ function CenterList({
 						<LedgerRow
 							row={item}
 							busy={view.busy}
+							m={m}
 							onSelect={() => controller.select(item.canonicalUrl)}
 							onDelete={() => void controller.deleteBookmark(item.canonicalUrl)}
 						/>
@@ -634,11 +669,13 @@ function CenterList({
 function LedgerRow({
 	row,
 	busy,
+	m,
 	onSelect,
 	onDelete,
 }: {
 	row: RowView;
 	busy: boolean;
+	m: OptionsMessages;
 	onSelect: () => void;
 	onDelete: () => void;
 }) {
@@ -704,8 +741,8 @@ function LedgerRow({
 						busy ? { ...rowDeleteButton, ...disabledButton } : rowDeleteButton
 					}
 					disabled={busy}
-					aria-label={`Delete ${row.title}`}
-					title="Delete bookmark"
+					aria-label={m.deleteRowAria(row.title)}
+					title={m.deleteRowTitle}
 					onClick={(event) => {
 						// Quick delete must never open the detail sheet behind it.
 						event.stopPropagation();
@@ -754,10 +791,12 @@ function useIsNarrowViewport(): boolean {
 function DetailSheet({
 	detail,
 	busy,
+	m,
 	controller,
 }: {
 	detail: DetailView;
 	busy: boolean;
+	m: OptionsMessages;
 	controller: OptionsController;
 }) {
 	const isNarrow = useIsNarrowViewport();
@@ -803,7 +842,7 @@ function DetailSheet({
 							type="button"
 							style={subtleButton}
 							onClick={() => controller.clearSelection()}
-							aria-label="Close details"
+							aria-label={m.closeDetailsAria}
 							// Best-effort focus management: land keyboard focus inside the
 							// dialog when it opens.
 							autoFocus
@@ -839,22 +878,25 @@ function DetailSheet({
 					) : (
 						<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
 							{detail.aiStatus === "pending"
-								? "AI analysis has not finished for this bookmark yet."
-								: "No AI description yet."}
+								? m.detailPending
+								: m.detailNoDescription}
 						</p>
 					)}
 
 					{detail.genre ? (
-						<DetailField label="Genre" value={detail.genre} />
+						<DetailField label={m.genre} value={detail.genre} />
 					) : null}
 
 					{detail.analysisProfileId ? (
-						<DetailField label="Profile" value={detail.analysisProfileId} />
+						<DetailField
+							label={m.profileLabel}
+							value={detail.analysisProfileId}
+						/>
 					) : null}
 
 					{detail.tags.length > 0 ? (
 						<div style={{ marginTop: 10 }}>
-							<p style={railLabel}>Tags</p>
+							<p style={railLabel}>{m.tags}</p>
 							<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
 								{detail.tags.map((t) => (
 									<span
@@ -870,7 +912,7 @@ function DetailSheet({
 
 					{detail.analysisMarkdown ? (
 						<div style={{ marginTop: 12 }}>
-							<p style={railLabel}>Analysis</p>
+							<p style={railLabel}>{m.analysisLabel}</p>
 							<AnalysisMarkdown markdown={detail.analysisMarkdown} />
 						</div>
 					) : null}
@@ -894,10 +936,10 @@ function DetailSheet({
 							color: palette.inkFaint,
 						}}
 					>
-						<TimeRow label="Created" value={detail.createdAt} />
-						<TimeRow label="Updated" value={detail.updatedAt} />
+						<TimeRow label={m.createdLabel} value={detail.createdAt} />
+						<TimeRow label={m.updatedLabel} value={detail.updatedAt} />
 						{detail.lastAnalyzedAt ? (
-							<TimeRow label="Analyzed" value={detail.lastAnalyzedAt} />
+							<TimeRow label={m.analyzedLabel} value={detail.lastAnalyzedAt} />
 						) : null}
 					</dl>
 				</div>
@@ -910,7 +952,7 @@ function DetailSheet({
 							rel="noreferrer"
 							style={primaryButton}
 						>
-							Open
+							{m.open}
 						</a>
 						<button
 							type="button"
@@ -922,14 +964,14 @@ function DetailSheet({
 								void controller.deleteBookmark(detail.canonicalUrl)
 							}
 						>
-							Delete
+							{m.deleteAction}
 						</button>
 						<button
 							type="button"
 							style={subtleButton}
 							onClick={() => controller.clearSelection()}
 						>
-							Close
+							{m.close}
 						</button>
 					</div>
 					{busy ? (
@@ -940,7 +982,7 @@ function DetailSheet({
 								margin: "8px 0 0",
 							}}
 						>
-							Working — keep this page open until it finishes.
+							{m.busyNotice}
 						</p>
 					) : null}
 				</footer>
@@ -961,8 +1003,10 @@ function DetailSheet({
  */
 function SkillsScreen({
 	skillsController,
+	m,
 }: {
 	skillsController: SkillsController;
+	m: OptionsMessages;
 }) {
 	const view = useSyncExternalStore(
 		skillsController.subscribe,
@@ -977,17 +1021,18 @@ function SkillsScreen({
 	useLockBodyScroll(view.formOpen);
 
 	return (
-		<section style={settingsScreen} aria-label="Analysis skills settings">
+		<section style={settingsScreen} aria-label={m.skillsScreenAria}>
 			<header>
-				<h2 style={{ fontSize: 18, margin: 0 }}>Analysis skills</h2>
+				<h2 style={{ fontSize: 18, margin: 0 }}>{m.analysisSkills}</h2>
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "4px 0 0" }}>
-					Custom skills tune the Japanese analysis for matching pages. They are
-					stored in <code>bookmark-ai/settings.json</code> in your Google Drive.
+					{m.skillsIntro.before}
+					<code>bookmark-ai/settings.json</code>
+					{m.skillsIntro.after}
 				</p>
 			</header>
 
 			<section style={panel}>
-				<p style={railLabel}>Settings sync</p>
+				<p style={railLabel}>{m.settingsSync}</p>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 					<span
 						aria-hidden
@@ -1007,12 +1052,12 @@ function SkillsScreen({
 						disabled={view.busy}
 						onClick={() => void skillsController.refresh()}
 					>
-						Refresh settings
+						{m.refreshSettings}
 					</button>
 				</div>
 				{view.sync.pendingLocalChanges ? (
 					<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
-						Local changes pending — will retry on next sync
+						{m.pendingLocal}
 					</p>
 				) : null}
 			</section>
@@ -1022,7 +1067,7 @@ function SkillsScreen({
 			) : null}
 
 			{view.loading ? (
-				<Notice text="Loading analysis skills…" />
+				<Notice text={m.loadingSkills} />
 			) : (
 				<div
 					style={{
@@ -1032,10 +1077,10 @@ function SkillsScreen({
 					}}
 				>
 					<div style={panel}>
-						<p style={railLabel}>Built-in (read-only)</p>
+						<p style={railLabel}>{m.builtIn}</p>
 						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 							{view.builtIns.map((skill) => (
-								<BuiltInSkillRow key={skill.id} skill={skill} />
+								<BuiltInSkillRow key={skill.id} skill={skill} m={m} />
 							))}
 						</ul>
 					</div>
@@ -1048,18 +1093,18 @@ function SkillsScreen({
 								marginBottom: 8,
 							}}
 						>
-							<p style={{ ...railLabel, margin: 0 }}>Custom (Drive-synced)</p>
+							<p style={{ ...railLabel, margin: 0 }}>{m.custom}</p>
 							<button
 								type="button"
 								style={subtleButton}
 								onClick={() => skillsController.startCreate()}
 							>
-								Add custom skill
+								{m.addCustom}
 							</button>
 						</div>
 						{view.custom.length === 0 ? (
 							<p style={{ fontSize: 12, color: palette.inkFaint }}>
-								No custom skills yet.
+								{m.noCustom}
 							</p>
 						) : (
 							<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -1068,6 +1113,7 @@ function SkillsScreen({
 										key={skill.id}
 										skill={skill}
 										busy={view.busy}
+										m={m}
 										onEdit={() => skillsController.startEdit(skill.id)}
 										onDelete={() => void skillsController.remove(skill.id)}
 										onToggle={(enabled) =>
@@ -1082,7 +1128,7 @@ function SkillsScreen({
 			)}
 
 			{view.formOpen ? (
-				<SkillFormModal view={view} skillsController={skillsController} />
+				<SkillFormModal view={view} skillsController={skillsController} m={m} />
 			) : null}
 		</section>
 	);
@@ -1098,9 +1144,11 @@ function SkillsScreen({
 function SkillFormModal({
 	view,
 	skillsController,
+	m,
 }: {
 	view: SkillsView;
 	skillsController: SkillsController;
+	m: OptionsMessages;
 }) {
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
@@ -1131,13 +1179,13 @@ function SkillFormModal({
 			>
 				<header style={modalHeader}>
 					<h3 id="skill-form-title" style={{ fontSize: 15, margin: 0 }}>
-						{view.editingId ? "Edit custom skill" : "New custom skill"}
+						{view.editingId ? m.editSkill : m.newSkill}
 					</h3>
 					<button
 						type="button"
 						style={subtleButton}
 						onClick={() => skillsController.cancelEdit()}
-						aria-label="Close skill form"
+						aria-label={m.closeSkillFormAria}
 						// Best-effort focus management: land keyboard focus inside the
 						// dialog when it opens.
 						autoFocus
@@ -1149,8 +1197,8 @@ function SkillFormModal({
 					{view.actionError ? (
 						<Banner tone="danger" text={view.actionError} />
 					) : null}
-					<SkillForm view={view} skillsController={skillsController} />
-					<InstructionGuidance />
+					<SkillForm view={view} skillsController={skillsController} m={m} />
+					<InstructionGuidance m={m} />
 				</div>
 			</section>
 		</div>
@@ -1163,62 +1211,48 @@ function SkillFormModal({
  * explanation of domain/pattern/priority matching. Static content — mirrors
  * the constraints in docs/ai-analysis-v2.md and docs/privacy-policy.md.
  */
-function InstructionGuidance() {
+function InstructionGuidance({ m }: { m: OptionsMessages }) {
 	return (
-		<aside style={guidanceBox} aria-label="Instruction writing guidance">
+		<aside style={guidanceBox} aria-label={m.guidance.aria}>
 			<p style={{ margin: 0, fontWeight: 600, color: palette.ink }}>
-				Writing a good instruction
+				{m.guidance.title}
 			</p>
-			<p style={{ margin: "6px 0 0" }}>
-				The instruction refines what the Japanese analysis emphasizes for
-				matching pages. It cannot change what is stored, the output format, or
-				where your data goes.
-			</p>
+			<p style={{ margin: "6px 0 0" }}>{m.guidance.intro}</p>
 			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
-				Examples
+				{m.guidance.examplesHeading}
 			</p>
 			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-				<li>
-					GitHub repository: “Emphasize architecture, key APIs, setup steps, and
-					adoption risks.”
-				</li>
-				<li>
-					Technical article: “Summarize the main claims, prerequisites, and
-					caveats.”
-				</li>
-				<li>
-					Official docs: “Highlight the covered version, concrete steps, and
-					integration constraints.”
-				</li>
+				{m.guidance.examples.map((example) => (
+					<li key={example}>{example}</li>
+				))}
 			</ul>
 			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.warn }}>
-				Never write instructions that
+				{m.guidance.neverHeading}
 			</p>
 			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-				<li>request secrets, tokens, or credentials;</li>
-				<li>ask to persist raw page content or excerpts;</li>
-				<li>ask to call external APIs or AI providers;</li>
-				<li>try to change the output schema or the privacy contract.</li>
+				{m.guidance.never.map((item) => (
+					<li key={item}>{item}</li>
+				))}
 			</ul>
 			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
-				How matching works
+				{m.guidance.matchingHeading}
 			</p>
 			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-				<li>Domains match the page’s host (e.g. github.com).</li>
-				<li>
-					URL patterns narrow matches with * wildcards (e.g.
-					example.com/docs/*).
-				</li>
-				<li>
-					When several skills match, the higher priority wins first, then the
-					more specific match.
-				</li>
+				{m.guidance.matching.map((item) => (
+					<li key={item}>{item}</li>
+				))}
 			</ul>
 		</aside>
 	);
 }
 
-function BuiltInSkillRow({ skill }: { skill: BuiltInSkillView }) {
+function BuiltInSkillRow({
+	skill,
+	m,
+}: {
+	skill: BuiltInSkillView;
+	m: OptionsMessages;
+}) {
 	return (
 		<li
 			style={{
@@ -1230,7 +1264,7 @@ function BuiltInSkillRow({ skill }: { skill: BuiltInSkillView }) {
 		>
 			<strong style={{ color: palette.ink }}>{skill.name}</strong>{" "}
 			<span style={{ color: palette.inkFaint }}>
-				priority {skill.priority} · {skill.urlPatterns.join(", ")}
+				{m.priority(skill.priority)} · {skill.urlPatterns.join(", ")}
 			</span>
 		</li>
 	);
@@ -1239,12 +1273,14 @@ function BuiltInSkillRow({ skill }: { skill: BuiltInSkillView }) {
 function CustomSkillRow({
 	skill,
 	busy,
+	m,
 	onEdit,
 	onDelete,
 	onToggle,
 }: {
 	skill: CustomSkillRowView;
 	busy: boolean;
+	m: OptionsMessages;
 	onEdit: () => void;
 	onDelete: () => void;
 	onToggle: (enabled: boolean) => void;
@@ -1261,10 +1297,10 @@ function CustomSkillRow({
 				<span style={{ color: palette.ink }}>
 					<strong>{skill.name}</strong>{" "}
 					<span style={{ color: palette.inkFaint }}>
-						priority {skill.priority}
+						{m.priority(skill.priority)}
 					</span>
 					{!skill.enabled ? (
-						<span style={{ color: palette.warn }}> · disabled</span>
+						<span style={{ color: palette.warn }}> · {m.disabledMark}</span>
 					) : null}
 				</span>
 				<span style={{ display: "flex", gap: 6 }}>
@@ -1274,7 +1310,7 @@ function CustomSkillRow({
 						disabled={busy}
 						onClick={() => onToggle(!skill.enabled)}
 					>
-						{skill.enabled ? "Disable" : "Enable"}
+						{skill.enabled ? m.disable : m.enable}
 					</button>
 					<button
 						type="button"
@@ -1282,7 +1318,7 @@ function CustomSkillRow({
 						disabled={busy}
 						onClick={onEdit}
 					>
-						Edit
+						{m.edit}
 					</button>
 					<button
 						type="button"
@@ -1290,7 +1326,7 @@ function CustomSkillRow({
 						disabled={busy}
 						onClick={onDelete}
 					>
-						Delete
+						{m.deleteAction}
 					</button>
 				</span>
 			</div>
@@ -1306,9 +1342,11 @@ function CustomSkillRow({
 function SkillForm({
 	view,
 	skillsController,
+	m,
 }: {
 	view: SkillsView;
 	skillsController: SkillsController;
+	m: OptionsMessages;
 }) {
 	function set<K extends keyof SkillFormValues>(field: K) {
 		return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -1331,7 +1369,7 @@ function SkillForm({
 			}}
 		>
 			<label style={{ fontSize: 12 }}>
-				Name
+				{m.formName}
 				<input
 					style={searchInput}
 					value={view.form.name}
@@ -1340,7 +1378,7 @@ function SkillForm({
 				/>
 			</label>
 			<label style={{ fontSize: 12 }}>
-				Priority
+				{m.formPriority}
 				<input
 					style={searchInput}
 					type="number"
@@ -1349,7 +1387,7 @@ function SkillForm({
 				/>
 			</label>
 			<label style={{ fontSize: 12 }}>
-				Domains (comma-separated, e.g. github.com)
+				{m.formDomains}
 				<input
 					style={searchInput}
 					value={view.form.domains}
@@ -1357,7 +1395,7 @@ function SkillForm({
 				/>
 			</label>
 			<label style={{ fontSize: 12 }}>
-				URL patterns (comma-separated, `*` wildcard, e.g. example.com/docs/*)
+				{m.formUrlPatterns}
 				<input
 					style={searchInput}
 					value={view.form.urlPatterns}
@@ -1365,7 +1403,7 @@ function SkillForm({
 				/>
 			</label>
 			<label style={{ fontSize: 12 }}>
-				Instruction
+				{m.formInstruction}
 				<textarea
 					style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
 					value={view.form.instruction}
@@ -1381,14 +1419,14 @@ function SkillForm({
 					}
 					disabled={view.busy}
 				>
-					{view.editingId ? "Save changes" : "Create skill"}
+					{view.editingId ? m.saveChanges : m.createSkill}
 				</button>
 				<button
 					type="button"
 					style={subtleButton}
 					onClick={() => skillsController.cancelEdit()}
 				>
-					Cancel
+					{m.cancel}
 				</button>
 			</div>
 		</form>
