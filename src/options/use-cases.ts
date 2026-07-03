@@ -14,12 +14,16 @@
  * collection's own operations (First-class bookmark collection) rather than
  * round-tripping through an async port.
  */
-import type { BookmarkApp, SaveOutcome } from "../lib/app/index";
+import type {
+	AnalysisSettledEvent,
+	BookmarkApp,
+	SaveOutcome,
+} from "../lib/app/index";
 import type { AppError, Result } from "../lib/app/index";
 import type { CacheState } from "../lib/storage/index";
 import type { CanonicalUrl } from "../lib/bookmarks/index";
 
-export type { SaveOutcome } from "../lib/app/index";
+export type { SaveOutcome, AnalysisSettledEvent } from "../lib/app/index";
 export type { AppError, Result } from "../lib/app/index";
 export type { CacheState } from "../lib/storage/index";
 export type { CanonicalUrl } from "../lib/bookmarks/index";
@@ -42,6 +46,15 @@ export interface OptionsUseCases {
 	reAnalyzeBookmark(
 		canonicalUrl: CanonicalUrl,
 	): Promise<Result<SaveOutcome, AppError>>;
+	/**
+	 * Subscribe to queued analysis completions (MIK-019), so the ledger can
+	 * refresh a row live once a popup-save's or re-analyze's queued analysis
+	 * settles, without requiring a manual refresh. Returns an unsubscribe
+	 * function.
+	 */
+	onAnalysisSettled(
+		listener: (event: AnalysisSettledEvent) => void,
+	): () => void;
 }
 
 /**
@@ -63,6 +76,9 @@ export function createOptionsUseCases(app: BookmarkApp): OptionsUseCases {
 		},
 		reAnalyzeBookmark(canonicalUrl) {
 			return app.reAnalyzeBookmark(canonicalUrl);
+		},
+		onAnalysisSettled(listener) {
+			return app.onAnalysisSettled(listener);
 		},
 	};
 }

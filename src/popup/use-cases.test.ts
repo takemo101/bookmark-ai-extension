@@ -176,18 +176,42 @@ const fakeEnv: PopupEnvironmentProvider = {
 	},
 };
 
+/**
+ * `analyzing`/`syncing` now happen inside the in-memory analysis queue
+ * (MIK-019), *after* `saveCurrentTab`/`reAnalyzeBookmark` itself resolves — so
+ * every test below that needs to see those later stages waits for
+ * `onAnalysisSettled` before asserting on them, rather than assuming they
+ * already happened by the time the save/re-analyze call returns.
+ */
+function waitForSettled(useCases: {
+	onAnalysisSettled(listener: () => void): () => void;
+}): Promise<void> {
+	return new Promise((resolve) => {
+		const unsubscribe = useCases.onAnalysisSettled(() => {
+			unsubscribe();
+			resolve();
+		});
+	});
+}
+
 describe("createPopupUseCases", () => {
 	it("forwards genuine per-stage save progress in flow order", async () => {
 		const t = timeline();
 		const useCases = createPopupUseCases(makeApp(t.mark), fakeEnv);
 
 		const stages: SaveStage[] = [];
+		const settled = waitForSettled(useCases);
 		const result = await useCases.saveCurrentTab(({ stage }) => {
 			stages.push(stage);
 			t.mark(`stage:${stage}`);
 		});
-
 		expect(result.ok).toBe(true);
+		// `saving`/`extracting` have already fired by the time the call resolves;
+		// `analyzing`/`syncing` now happen inside the queue, which may or may not
+		// have caught up yet — only that it hasn't skipped ahead of `saving`.
+		expect(stages.slice(0, 2)).toEqual(["saving", "extracting"]);
+
+		await settled;
 		expect(stages).toEqual(["saving", "extracting", "analyzing", "syncing"]);
 
 		// Each stage is emitted before the work it announces actually runs.
@@ -208,30 +232,44 @@ describe("createPopupUseCases", () => {
 	it("emits the same genuine stages for re-analyze", async () => {
 		const t = timeline();
 		const app = makeApp(t.mark);
-		// Seed a saved bookmark to re-analyze.
+		// Seed a saved bookmark to re-analyze; wait for its own queued analysis
+		// to settle first so it doesn't race with the re-analyze below.
+		const seedSettled = new Promise<void>((resolve) => {
+			const unsubscribe = app.onAnalysisSettled(() => {
+				unsubscribe();
+				resolve();
+			});
+		});
 		const saved = await app.saveCurrentTab();
 		expect(saved.ok).toBe(true);
+		await seedSettled;
 
 		const useCases = createPopupUseCases(app, fakeEnv);
 		const canonical = (await useCases.loadCachedState()).bookmarks.toArray()[0]
 			?.canonicalUrl as CanonicalUrl;
 
 		const stages: SaveStage[] = [];
+		const settled = waitForSettled(useCases);
 		const result = await useCases.reAnalyzeBookmark(canonical, ({ stage }) =>
 			stages.push(stage),
 		);
-
 		expect(result.ok).toBe(true);
+		expect(stages.slice(0, 2)).toEqual(["saving", "extracting"]);
+
+		await settled;
 		expect(stages).toEqual(["saving", "extracting", "analyzing", "syncing"]);
 	});
 
 	it("never emits progress when no observer is passed", async () => {
 		const t = timeline();
 		const useCases = createPopupUseCases(makeApp(t.mark), fakeEnv);
+		const settled = waitForSettled(useCases);
 		const result = await useCases.saveCurrentTab();
 		expect(result.ok).toBe(true);
-		// The flow still completed its real work without an observer.
 		expect(t.events).toContain("extract");
+
+		// Analysis itself is queued and finishes in the background.
+		await settled;
 		expect(t.events).toContain("analyze");
 	});
 

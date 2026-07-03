@@ -253,11 +253,13 @@ function Receipt({
 				<Preview preview={receipt.preview} />
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-					{receipt.aiStatus === "unavailable"
-						? "Saved without AI — the Prompt API was unavailable. Re-analyze later from Options."
-						: receipt.aiError
-							? `Saved, but analysis failed: ${receipt.aiError}. Re-analyze later from Options.`
-							: "Saved. Re-analyze later from Options."}
+					{receipt.analysisPending
+						? "Bookmark saved. AI analysis is running in the background — safe to close this popup."
+						: receipt.aiStatus === "unavailable"
+							? "Saved without AI — the Prompt API was unavailable. Re-analyze later from Options."
+							: receipt.aiError
+								? `Saved, but analysis failed: ${receipt.aiError}. Re-analyze later from Options.`
+								: "Saved. Re-analyze later from Options."}
 				</p>
 			)}
 			{receipt.driveWarning ? (

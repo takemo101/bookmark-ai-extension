@@ -426,7 +426,9 @@ function DetailPane({
 				</p>
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "10px 0 0" }}>
-					No AI description yet.
+					{detail.aiStatus === "pending"
+						? "AI analysis queued — running in the background."
+						: "No AI description yet."}
 				</p>
 			)}
 

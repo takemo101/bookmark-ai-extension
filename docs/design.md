@@ -224,10 +224,15 @@ Notes:
 4. Extension gets current tab URL/title.
 5. Extension injects an extractor into the current tab using `activeTab` + `scripting`.
 6. Extractor returns general page content.
-7. Extension builds a structured excerpt with a character cap of roughly 8k-12k characters.
+7. Extension builds a structured excerpt with a character cap of roughly
+   8k-12k characters.
 8. Extension writes or updates a pending bookmark record in Drive/local cache.
-9. Popup runs Prompt API analysis while the popup remains open.
-10. Extension updates the bookmark record with Japanese `description`, `genre`, `tags`, `aiStatus`, and analysis timestamps.
+9. Popup/options queues Prompt API analysis in memory and returns control to the
+   user after the pending write lands.
+10. While that UI context remains alive, the queue updates the bookmark record
+    with Japanese `description`, `genre`, `tags`, `aiStatus`, and analysis
+    timestamps; if the context closes first, the pending record remains
+    recoverable for later re-analysis.
 
 If AI is unavailable or fails:
 
