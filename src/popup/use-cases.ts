@@ -17,12 +17,16 @@
  * probing) is provided by an injected {@link PopupEnvironmentProvider}; real
  * granular per-stage save events arrive with the runtime wiring in MIK-009.
  */
-import type { BookmarkApp, SaveOutcome } from "../lib/app/index";
+import type {
+	AnalysisSettledEvent,
+	BookmarkApp,
+	SaveOutcome,
+} from "../lib/app/index";
 import type { AppError, Result } from "../lib/app/index";
 import type { CacheState } from "../lib/storage/index";
 import type { CanonicalUrl } from "../lib/bookmarks/index";
 
-export type { SaveOutcome } from "../lib/app/index";
+export type { SaveOutcome, AnalysisSettledEvent } from "../lib/app/index";
 export type { AppError, Result } from "../lib/app/index";
 export type { CacheState } from "../lib/storage/index";
 export type { CanonicalUrl } from "../lib/bookmarks/index";
@@ -89,6 +93,14 @@ export interface PopupUseCases {
 		canonicalUrl: CanonicalUrl,
 		onProgress?: ProgressObserver,
 	): Promise<Result<SaveOutcome, AppError>>;
+	/**
+	 * Subscribe to queued analysis completions (MIK-019), so the popup can
+	 * refresh recents/sync without waiting on a save/re-analyze call itself.
+	 * Returns an unsubscribe function.
+	 */
+	onAnalysisSettled(
+		listener: (event: AnalysisSettledEvent) => void,
+	): () => void;
 }
 
 /**
@@ -144,6 +156,9 @@ export function createPopupUseCases(
 		},
 		async reAnalyzeBookmark(canonicalUrl, onProgress) {
 			return app.reAnalyzeBookmark(canonicalUrl, relay(onProgress));
+		},
+		onAnalysisSettled(listener) {
+			return app.onAnalysisSettled(listener);
 		},
 	};
 }

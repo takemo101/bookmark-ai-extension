@@ -30,6 +30,25 @@
  * merge reconcile it with Drive) rather than replacing the cache with the remote
  * state, so an offline mutation is never silently discarded and is eventually
  * pushed once Drive recovers (MIK-014).
+ *
+ * ## Queued AI analysis (MIK-019)
+ *
+ * Extraction stays synchronous — it is fast, and re-analyze's activeTab
+ * precondition check *is* the extraction call, so it cannot be deferred
+ * without weakening that guarantee (docs/design.md "Options page: Research
+ * Ledger"). Only the AI *analysis* step (the Prompt API call, applying its
+ * result through the domain, and pushing the outcome to Drive) is deferred to
+ * a small sequential in-memory {@link AnalysisQueue}, one per
+ * `createBookmarkApp` instance. `saveCurrentTab`/`reAnalyzeBookmark` return as
+ * soon as the pending record is durably persisted and (on extraction success)
+ * the analysis item is enqueued — they never await the queued analysis. A
+ * caller that wants to know when analysis finishes subscribes via
+ * {@link BookmarkApp.onAnalysisSettled}. Because the queue is a plain
+ * in-memory object with the same lifetime as this app instance (i.e. the
+ * popup/options JS context), closing that page drops the queue and any
+ * in-memory {@link ExtractedPage} it was holding — nothing durable is ever at
+ * risk, and no raw excerpt is ever persisted (docs/ai-analysis-v2.md "Queue
+ * behavior"; docs/privacy-policy.md).
  */
 import {
 	type AiAnalysis,
@@ -42,13 +61,9 @@ import {
 } from "../bookmarks/index";
 import type { AnalysisProfile } from "../ai/index";
 import type { DriveLocation } from "../drive/index";
-import {
-	type ExtractedPage,
-	type ExtractionError,
-	type Result as ExtractionResult,
-	buildExcerpt,
-} from "../extraction/index";
+import { type ExtractedPage, buildExcerpt } from "../extraction/index";
 import type { CacheState } from "../storage/index";
+import { type AnalysisQueue, createAnalysisQueue } from "./analysis-queue";
 import {
 	type AppError,
 	appError,
@@ -76,6 +91,16 @@ export type SaveOutcome = {
 	readonly driveError?: AppError;
 };
 
+/**
+ * Fired once per queued analysis item, after its AI analysis + Drive push has
+ * settled (MIK-019). `outcome` mirrors what `saveCurrentTab`/`reAnalyzeBookmark`
+ * would have resolved with if analysis had run inline.
+ */
+export type AnalysisSettledEvent = {
+	readonly canonicalUrl: CanonicalUrl;
+	readonly outcome: Result<SaveOutcome, AppError>;
+};
+
 /** The use-case surface exposed to the popup/options UI. */
 export interface BookmarkApp {
 	/** Render-fast read of the last cached state. Never hits Drive. */
@@ -83,8 +108,13 @@ export interface BookmarkApp {
 	/** Pull the authoritative store from Drive and refresh the cache. */
 	syncFromDrive(): Promise<Result<CacheState, AppError>>;
 	/**
-	 * Save the current active tab, then extract → analyze → apply AI status.
-	 * `onProgress`, when supplied, fires as each stage genuinely begins.
+	 * Save the current active tab: persist a pending record, then extract the
+	 * page synchronously. Resolves as soon as that pending write lands (and, on
+	 * extraction success, the AI analysis step is enqueued) — it does not await
+	 * analysis (MIK-019). `onProgress`, when supplied, fires as each stage the
+	 * call itself performs genuinely begins; subscribe via
+	 * {@link BookmarkApp.onAnalysisSettled} to learn when the queued analysis
+	 * finishes.
 	 */
 	saveCurrentTab(
 		onProgress?: SaveProgress,
@@ -94,19 +124,46 @@ export interface BookmarkApp {
 		canonicalUrl: CanonicalUrl,
 	): Promise<Result<CacheState, AppError>>;
 	/**
-	 * Re-run AI analysis for an existing bookmark by canonical URL. `onProgress`,
-	 * when supplied, fires as each stage genuinely begins.
+	 * Re-run AI analysis for an existing bookmark by canonical URL: re-extracts
+	 * the page synchronously, then enqueues analysis the same way as
+	 * {@link BookmarkApp.saveCurrentTab} — it resolves once extraction and the
+	 * pending write are done, not once analysis finishes (MIK-019). `onProgress`,
+	 * when supplied, fires as each stage the call itself performs genuinely
+	 * begins.
 	 */
 	reAnalyzeBookmark(
 		canonicalUrl: CanonicalUrl,
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>>;
+	/**
+	 * Subscribe to queued analysis completions (MIK-019): fires once per
+	 * `saveCurrentTab`/`reAnalyzeBookmark` call whose extraction succeeded,
+	 * after that item's AI analysis + Drive push settles. Returns an
+	 * unsubscribe function. There is no backlog replay — a listener only sees
+	 * settlements that occur after it subscribes.
+	 */
+	onAnalysisSettled(
+		listener: (event: AnalysisSettledEvent) => void,
+	): () => void;
 }
 
 type DrivePush = {
 	readonly state: CacheState;
 	readonly driveSynced: boolean;
 	readonly driveError?: AppError;
+};
+
+/**
+ * One item of deferred analysis work (MIK-019): the already-extracted page for
+ * a bookmark whose pending record has already been persisted. `page` is held
+ * only in this in-memory queue entry — it is never written to `deps.cache` or
+ * `deps.repository` (docs/ai-analysis-v2.md "Non-goals"; docs/privacy-policy.md).
+ */
+type QueuedAnalysisItem = {
+	readonly canonicalUrl: CanonicalUrl;
+	readonly target: ExtractionTarget;
+	readonly page: ExtractedPage;
+	readonly onProgress?: SaveProgress;
 };
 
 export function createBookmarkApp(deps: AppDeps): BookmarkApp {
@@ -227,43 +284,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
-	 * The shared tail of save and re-analyze once extraction has run: apply the
-	 * extracted page's analysis, then sync to Drive. A failed extraction *after a
-	 * valid target* keeps the bookmark and marks it `failed` so it can be retried;
-	 * it is recoverable, not a hard error. (Re-analyze handles the separate
-	 * activeTab precondition — a `tab` extraction error — before reaching here, so
-	 * that case never mutates the record.)
+	 * Build the final {@link SaveOutcome} from a completed Drive push, reading
+	 * the record back out of the push's own resulting state so the outcome
+	 * always reflects that push (never a stale pre-push value).
 	 */
-	async function finishAnalysis(
-		base: CacheState,
+	function outcomeFromPush(
+		push: DrivePush,
 		canonicalUrl: CanonicalUrl,
-		target: ExtractionTarget,
-		extraction: ExtractionResult<ExtractedPage, ExtractionError>,
-		onProgress?: SaveProgress,
-	): Promise<Result<SaveOutcome, AppError>> {
-		const now = deps.clock.now();
-		const updated = extraction.ok
-			? await analyzeExtractedPage(
-					base.bookmarks,
-					canonicalUrl,
-					target,
-					extraction.value,
-					now,
-					onProgress,
-				)
-			: base.bookmarks.markAiFailed(
-					canonicalUrl,
-					`extraction failed: ${extraction.error.message}`,
-					now,
-				);
-		if (!updated.ok) {
-			return err(fromCollectionError(updated.error));
-		}
-
-		onProgress?.("syncing");
-		const push = await pushToDrive(updated.value, {
-			prevLocation: base.location,
-		});
+	): Result<SaveOutcome, AppError> {
 		const record = push.state.bookmarks.get(canonicalUrl);
 		if (!record) {
 			// The record we just applied must be present; its absence is a defect.
@@ -278,6 +306,71 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			driveError: push.driveSynced ? undefined : push.driveError,
 		});
 	}
+
+	/**
+	 * The synchronous fail tail for a *failed extraction* after a valid target:
+	 * mark the bookmark `failed` and push immediately — there is nothing to
+	 * analyze, so nothing is queued. (Re-analyze's separate activeTab
+	 * precondition — a `tab` extraction error — is handled by its caller before
+	 * ever reaching here, so that case never mutates the record.)
+	 */
+	async function finishExtractionFailure(
+		base: CacheState,
+		canonicalUrl: CanonicalUrl,
+		message: string,
+		onProgress?: SaveProgress,
+	): Promise<Result<SaveOutcome, AppError>> {
+		const now = deps.clock.now();
+		const updated = base.bookmarks.markAiFailed(canonicalUrl, message, now);
+		if (!updated.ok) {
+			return err(fromCollectionError(updated.error));
+		}
+		onProgress?.("syncing");
+		const push = await pushToDrive(updated.value, {
+			prevLocation: base.location,
+		});
+		return outcomeFromPush(push, canonicalUrl);
+	}
+
+	/**
+	 * The queued tail once a page has already been extracted (MIK-019): analyze
+	 * it and push the result to Drive. Loads a *fresh* `deps.cache.load()` at
+	 * process time rather than a snapshot captured at enqueue time, since
+	 * Drive/cache state may have changed while the item sat in the queue —
+	 * mirrors how `pushToDrive` is used elsewhere for conflict-safety.
+	 */
+	async function processQueuedAnalysis(
+		item: QueuedAnalysisItem,
+	): Promise<Result<SaveOutcome, AppError>> {
+		const cached = await deps.cache.load();
+		const now = deps.clock.now();
+		const updated = await analyzeExtractedPage(
+			cached.bookmarks,
+			item.canonicalUrl,
+			item.target,
+			item.page,
+			now,
+			item.onProgress,
+		);
+		if (!updated.ok) {
+			return err(fromCollectionError(updated.error));
+		}
+		item.onProgress?.("syncing");
+		const push = await pushToDrive(updated.value, {
+			prevLocation: cached.location,
+		});
+		return outcomeFromPush(push, item.canonicalUrl);
+	}
+
+	// One sequential in-memory analysis queue per `createBookmarkApp` instance
+	// (MIK-019): its lifetime is this instance's lifetime, i.e. the popup/
+	// options JS context. It is never persisted or hoisted anywhere durable, so
+	// closing that page drops it — and any `ExtractedPage` an item was still
+	// holding — without ever having written it anywhere.
+	const analysisQueue: AnalysisQueue<
+		QueuedAnalysisItem,
+		Result<SaveOutcome, AppError>
+	> = createAnalysisQueue(processQueuedAnalysis);
 
 	return {
 		async loadCachedState(): Promise<CacheState> {
@@ -400,22 +493,37 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				prevLocation: cached.location,
 			});
 
-			// 3. Extract → analyze → apply the resulting AI status. The active tab's
-			//    `tabId` targets injection at exactly the user-chosen tab, so the
-			//    save path never hits the re-analyze activeTab precondition.
+			// 3. Extract (synchronous). The active tab's `tabId` targets injection at
+			//    exactly the user-chosen tab, so the save path never hits the
+			//    re-analyze activeTab precondition.
 			onProgress?.("extracting");
 			const extraction = await deps.extractor.extract({
 				url: tab.url,
 				title: tab.title,
 				tabId: tab.id,
 			});
-			return finishAnalysis(
-				pendingPush.state,
+
+			// 4. A failed extraction after a valid target is recoverable and has
+			//    nothing to analyze: mark `failed` and push synchronously, right now.
+			if (!extraction.ok) {
+				return finishExtractionFailure(
+					pendingPush.state,
+					canonicalUrl,
+					`extraction failed: ${extraction.error.message}`,
+					onProgress,
+				);
+			}
+
+			// 5. Extraction succeeded: defer the (slow, unbounded-latency) AI analysis
+			//    call to the in-memory queue and return now with the pending outcome.
+			//    The caller never awaits analysis; `onAnalysisSettled` reports later.
+			analysisQueue.enqueue({
 				canonicalUrl,
-				{ url: tab.url, title: tab.title },
-				extraction,
+				target: { url: tab.url, title: tab.title },
+				page: extraction.value,
 				onProgress,
-			);
+			});
+			return outcomeFromPush(pendingPush, canonicalUrl);
 		},
 
 		async deleteBookmark(
@@ -483,13 +591,32 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				prevLocation: cached.location,
 			});
 
-			return finishAnalysis(
-				pendingPush.state,
+			// A failed extraction after a valid target (not the activeTab
+			// precondition, handled above) is recoverable and has nothing to
+			// analyze: mark `failed` and push synchronously, right now.
+			if (!extraction.ok) {
+				return finishExtractionFailure(
+					pendingPush.state,
+					canonicalUrl,
+					`extraction failed: ${extraction.error.message}`,
+					onProgress,
+				);
+			}
+
+			// Extraction succeeded: defer analysis to the queue, same as save.
+			analysisQueue.enqueue({
 				canonicalUrl,
-				{ url: record.url, title: record.title },
-				extraction,
+				target: { url: record.url, title: record.title },
+				page: extraction.value,
 				onProgress,
-			);
+			});
+			return outcomeFromPush(pendingPush, canonicalUrl);
+		},
+
+		onAnalysisSettled(listener) {
+			return analysisQueue.onSettled((item, result) => {
+				listener({ canonicalUrl: item.canonicalUrl, outcome: result });
+			});
 		},
 	};
 }

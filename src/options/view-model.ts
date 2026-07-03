@@ -271,6 +271,19 @@ export function createOptionsController(
 		},
 
 		async init() {
+			// A queued analysis (MIK-019) — from a popup save or an options
+			// re-analyze — settles independently of any in-flight action here;
+			// refresh the list whenever one lands so its row updates live from
+			// `pending` to its terminal status with no manual refresh needed. The
+			// options page's lifetime is this controller's lifetime, so no
+			// unsubscribe.
+			useCases.onAnalysisSettled(() => {
+				void (async () => {
+					setState(await useCases.loadCachedState());
+					notify();
+				})();
+			});
+
 			loading = true;
 			notify();
 			setState(await useCases.loadCachedState());
@@ -343,6 +356,20 @@ export function createOptionsController(
 				setState(await useCases.loadCachedState());
 				if (!result.ok) {
 					actionError = safeMessage(result.error.message);
+					return;
+				}
+				if (result.value.aiStatus === "pending") {
+					// Extraction succeeded and analysis was handed off to the in-memory
+					// queue (MIK-019) — it has not finished yet. `onAnalysisSettled`
+					// (wired in `init`) refreshes this row live once it does, so this
+					// notice only needs to say the work is queued, not done.
+					actionNotice = result.value.driveSynced
+						? "Re-analysis queued — running in the background."
+						: safeMessage(
+								`Re-analysis queued, saved locally — Drive sync pending: ${
+									result.value.driveError?.message ?? "Drive sync failed"
+								}`,
+							);
 					return;
 				}
 				if (!result.value.driveSynced) {

@@ -11,7 +11,11 @@
  * "Module boundary rules"; AGENTS.md "Architecture boundaries").
  *
  * Surface:
- *   - {@link createBookmarkApp} + {@link BookmarkApp} — the use cases.
+ *   - {@link createBookmarkApp} + {@link BookmarkApp} — the use cases. AI
+ *     analysis is deferred to a sequential in-memory queue
+ *     ({@link createAnalysisQueue}); subscribe via
+ *     {@link BookmarkApp.onAnalysisSettled} to observe queued completions
+ *     (MIK-019).
  *   - {@link createSettingsApp} + {@link SettingsApp} — the custom-skill CRUD
  *     use cases the options page drives (MIK-018).
  *   - Ports and their value types, for wiring real or fake dependencies.
@@ -51,8 +55,15 @@ export type {
 	Redactor,
 } from "./ports";
 
-export type { BookmarkApp, SaveOutcome } from "./bookmark-app";
+export type {
+	BookmarkApp,
+	SaveOutcome,
+	AnalysisSettledEvent,
+} from "./bookmark-app";
 export { createBookmarkApp } from "./bookmark-app";
+
+export type { AnalysisQueue } from "./analysis-queue";
+export { createAnalysisQueue } from "./analysis-queue";
 
 export type {
 	SettingsApp,

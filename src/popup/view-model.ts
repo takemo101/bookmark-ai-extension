@@ -88,6 +88,13 @@ export type SaveReceiptView = {
 	readonly driveSynced: boolean;
 	/** Present when the AI ran but the Drive write failed; safe, token-free. */
 	readonly driveWarning?: string;
+	/**
+	 * `true` when the bookmark was persisted but AI analysis is still queued/
+	 * running in the background (MIK-019) — `aiStatus` is `pending` here, not a
+	 * terminal status. Safe to close the popup; the analysis keeps running and
+	 * `onAnalysisSettled` (or a later refresh) will pick it up.
+	 */
+	readonly analysisPending?: boolean;
 };
 
 /** The flow region of the receipt: idle, running a trail, done, or errored. */
@@ -243,6 +250,18 @@ export function createPopupController(
 			return () => listeners.delete(listener);
 		},
 		async init() {
+			// A queued analysis (MIK-019) — from this save or an earlier one still
+			// finishing in the background — settles independently of any running
+			// flow; refresh recents/sync whenever one lands so a row updates from
+			// `pending` to its terminal status with no manual refresh needed. The
+			// popup's lifetime is this controller's lifetime, so no unsubscribe.
+			useCases.onAnalysisSettled(() => {
+				void (async () => {
+					const state = await useCases.loadCachedState();
+					setView({ recent: mapRecent(state), sync: mapSync(state) });
+				})();
+			});
+
 			const [tab, environment, state] = await Promise.all([
 				useCases.currentTab(),
 				useCases.environment(),
@@ -357,6 +376,24 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 		genre: record.genre,
 		tags: [...record.tags],
 	};
+
+	if (record.aiStatus === "pending") {
+		// Extraction succeeded and analysis was handed off to the in-memory queue
+		// (MIK-019) — the save itself is done, so `canSave` becomes `true` again
+		// (see `runFlow`), but AI analysis is still running in the background.
+		// `syncing` here reflects whether the *pending* record reached Drive; the
+		// analyzing stage stays `active` to show it is still genuinely in flight.
+		return {
+			kind: "done",
+			trail: trailFrom({
+				saving: "done",
+				extracting: "done",
+				analyzing: "active",
+				syncing,
+			}),
+			receipt: { ...receiptBase, preview, analysisPending: true },
+		};
+	}
 
 	if (record.aiStatus === "ready") {
 		return {
