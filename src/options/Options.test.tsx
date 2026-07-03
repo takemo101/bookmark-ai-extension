@@ -107,8 +107,12 @@ function controllerOf(view: OptionsView): OptionsController {
 	};
 }
 
-function render(view: OptionsView): string {
-	return renderToStaticMarkup(<Options controller={controllerOf(view)} />);
+// Language is injected explicitly (MIK-029) so the assertions never depend on
+// the test environment's own UI language.
+function render(view: OptionsView, language: "en" | "ja" = "en"): string {
+	return renderToStaticMarkup(
+		<Options controller={controllerOf(view)} language={language} />,
+	);
 }
 
 function skillsViewOf(overrides: Partial<SkillsView> = {}): SkillsView {
@@ -157,12 +161,14 @@ function renderWithSkills(
 	view: OptionsView,
 	skillsView: SkillsView,
 	initialScreen: OptionsScreen = "library",
+	language: "en" | "ja" = "en",
 ): string {
 	return renderToStaticMarkup(
 		<Options
 			controller={controllerOf(view)}
 			skillsController={skillsControllerOf(skillsView)}
 			initialScreen={initialScreen}
+			language={language}
 		/>,
 	);
 }
@@ -583,6 +589,82 @@ describe("Options Drive sync progress feedback (MIK-026)", () => {
 		expect(html).not.toContain("Writing changes to Google Drive…");
 		expect(html).not.toContain("disabled");
 		expect(html).toContain("synced");
+	});
+});
+
+describe("Options UI language (MIK-029)", () => {
+	const populatedView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+		facets: {
+			genres: ["技術"],
+			tags: ["typescript"],
+			statuses: ["ready", "pending", "unavailable", "failed"],
+			domains: ["example.test"],
+		},
+	});
+
+	it("renders representative Japanese library strings for the ja language", () => {
+		const html = render(populatedView, "ja");
+
+		expect(html).toContain("リサーチ台帳");
+		expect(html).toContain(">検索<");
+		expect(html).toContain(">フィルタ<");
+		expect(html).toContain(">ドメイン<");
+		expect(html).toContain(">ジャンル<");
+		expect(html).toContain(">タグ<");
+		expect(html).toContain(">AIステータス<");
+		expect(html).toContain("Driveと同期");
+		expect(html).toContain("全1件中1件を表示");
+		expect(html).not.toContain("Research Ledger");
+		expect(html).not.toContain(">Filters<");
+	});
+
+	it("renders representative Japanese skills-screen strings for the ja language", () => {
+		const html = renderWithSkills(
+			viewOf(),
+			skillsViewOf(),
+			"analysis-skills",
+			"ja",
+		);
+
+		expect(html).toContain(">ライブラリ<");
+		expect(html).toContain(">分析スキル<");
+		expect(html).toContain("組み込み（読み取り専用）");
+		expect(html).toContain("カスタム（Drive同期）");
+		expect(html).toContain("カスタムスキルを追加");
+		expect(html).toContain("設定の同期");
+		// Drive filename stays literal in both languages.
+		expect(html).toContain("bookmark-ai/settings.json");
+		expect(html).not.toContain("Built-in (read-only)");
+	});
+
+	it("localizes the detail sheet actions for the ja language", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf({ selected: true })],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				selected: detailOf(),
+			}),
+			"ja",
+		);
+
+		expect(html).toContain(">開く<");
+		expect(html).toContain(">削除<");
+		expect(html).toContain(">閉じる<");
+		expect(html).not.toContain(">Open<");
+	});
+
+	it("keeps rendering English strings for the en language", () => {
+		const html = render(populatedView, "en");
+
+		expect(html).toContain("Research Ledger");
+		expect(html).toContain(">Filters<");
+		expect(html).not.toContain("リサーチ台帳");
 	});
 });
 

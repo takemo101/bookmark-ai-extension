@@ -11,10 +11,12 @@
  * component is trivially renderable with a fake in tests.
  */
 import { useEffect, useSyncExternalStore } from "react";
+import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
 // UI-only dependency (MIK-028): the safe Markdown renderer and its style
 // tokens, no Options controller state — the sanctioned reuse of the
 // no-raw-HTML rendering posture (docs/ai-analysis-v2.md "UI behavior").
 import { AnalysisMarkdown } from "../options/markdown";
+import { type PopupMessages, popupMessages } from "./i18n";
 import { openOptionsPage } from "./open-options";
 import {
 	card,
@@ -40,7 +42,18 @@ import type {
 } from "./view-model";
 import type { AiStatus } from "./view-types";
 
-export function Popup({ controller }: { controller: PopupController }) {
+export function Popup({
+	controller,
+	language,
+}: {
+	controller: PopupController;
+	/**
+	 * UI language override (MIK-029). Tests/embeds inject it for determinism;
+	 * the runtime omits it and the browser UI language decides (Japanese
+	 * fallback).
+	 */
+	language?: SupportedLanguage;
+}) {
 	// The third argument (server snapshot) lets tests render the popup with
 	// `renderToStaticMarkup`, mirroring the Options component tests.
 	const view = useSyncExternalStore(
@@ -48,6 +61,7 @@ export function Popup({ controller }: { controller: PopupController }) {
 		controller.getView,
 		controller.getView,
 	);
+	const m = popupMessages(language ?? detectUiLanguage());
 
 	useEffect(() => {
 		void controller.init();
@@ -55,24 +69,27 @@ export function Popup({ controller }: { controller: PopupController }) {
 
 	return (
 		<main style={surface}>
-			<Header />
+			<Header m={m} />
 			<TabReceipt
 				view={view}
+				m={m}
 				onDelete={() => void controller.deleteCurrentBookmark()}
 			/>
-			<Badges view={view} />
-			<SaveAction view={view} onSave={() => void controller.save()} />
-			<Flow flow={view.flow} />
+			<Badges view={view} m={m} />
+			<SaveAction view={view} m={m} onSave={() => void controller.save()} />
+			<Flow flow={view.flow} m={m} />
 			<Recent
 				items={view.recent}
+				m={m}
 				busy={view.flow.kind === "running" || view.deleting}
 				onReAnalyze={(url) => void controller.reAnalyze(url)}
 				onSelect={(url) => controller.selectRecent(url)}
 			/>
-			<Footer />
+			<Footer m={m} />
 			{view.selectedRecent ? (
 				<RecentDetail
 					detail={view.selectedRecent}
+					m={m}
 					onClose={() => controller.clearRecentSelection()}
 				/>
 			) : null}
@@ -80,14 +97,14 @@ export function Popup({ controller }: { controller: PopupController }) {
 	);
 }
 
-function Header() {
+function Header({ m }: { m: PopupMessages }) {
 	return (
 		<header style={{ marginBottom: 10 }}>
 			<h1 style={{ fontSize: 16, margin: 0, letterSpacing: 0.2 }}>
 				Bookmark AI
 			</h1>
 			<p style={{ fontSize: 11, margin: "2px 0 0", color: palette.inkFaint }}>
-				Save the current tab as an AI-enriched bookmark.
+				{m.tagline}
 			</p>
 		</header>
 	);
@@ -95,14 +112,15 @@ function Header() {
 
 function TabReceipt({
 	view,
+	m,
 	onDelete,
 }: {
 	view: PopupView;
+	m: PopupMessages;
 	onDelete: () => void;
 }) {
 	const title =
-		view.tab?.title ??
-		(view.loading ? "Reading current tab…" : "No active tab");
+		view.tab?.title ?? (view.loading ? m.readingTab : m.noActiveTab);
 	const url = view.tab?.url ?? "";
 	return (
 		<section style={{ ...card, marginBottom: 8 }}>
@@ -114,7 +132,7 @@ function TabReceipt({
 					color: palette.inkFaint,
 				}}
 			>
-				Current tab
+				{m.currentTab}
 			</div>
 			<div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{title}</div>
 			{url ? (
@@ -132,7 +150,7 @@ function TabReceipt({
 				</div>
 			) : null}
 			{view.currentBookmark ? (
-				<CurrentBookmark view={view} onDelete={onDelete} />
+				<CurrentBookmark view={view} m={m} onDelete={onDelete} />
 			) : null}
 		</section>
 	);
@@ -147,9 +165,11 @@ function TabReceipt({
  */
 function CurrentBookmark({
 	view,
+	m,
 	onDelete,
 }: {
 	view: PopupView;
+	m: PopupMessages;
 	onDelete: () => void;
 }) {
 	const bookmark = view.currentBookmark;
@@ -170,7 +190,7 @@ function CurrentBookmark({
 					✓
 				</span>
 				<span style={{ fontSize: 12, fontWeight: 600, color: palette.ok }}>
-					Already bookmarked
+					{m.alreadyBookmarked}
 				</span>
 				<StatusPill status={bookmark.aiStatus} />
 				<span style={{ flex: 1 }} />
@@ -184,43 +204,43 @@ function CurrentBookmark({
 					disabled={busy}
 					onClick={onDelete}
 				>
-					{view.deleting ? "Removing…" : "Remove"}
+					{view.deleting ? m.removing : m.remove}
 				</button>
 			</div>
 			<p style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}>
-				Save & Analyze updates this bookmark and refreshes its AI analysis.
+				{m.duplicateSaveHint}
 			</p>
 			{view.deleteError ? (
 				<p style={{ fontSize: 11, color: palette.danger, margin: "4px 0 0" }}>
-					Remove failed: {view.deleteError}
+					{m.removeFailed(view.deleteError)}
 				</p>
 			) : null}
 		</div>
 	);
 }
 
-function Badges({ view }: { view: PopupView }) {
+function Badges({ view, m }: { view: PopupView; m: PopupMessages }) {
 	return (
 		<section
 			style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}
 		>
 			<Badge
-				label="Google"
-				text={connectionText(view.connection)}
+				label={m.googleLabel}
+				text={connectionText(view.connection, m)}
 				tone={connectionTone(view.connection)}
 			/>
 			<Badge
-				label="Prompt API"
+				label={m.promptApiLabel}
 				text={promptApiText(view.promptApi)}
 				tone={promptApiTone(view.promptApi)}
 			/>
 			<Badge
-				label="Sync"
+				label={m.syncLabel}
 				text={view.sync.status}
 				tone={syncTone(view.sync.status)}
 			/>
 			{view.sync.pendingLocalChanges ? (
-				<Badge label="Local" text="changes pending" tone="warn" />
+				<Badge label={m.localLabel} text={m.changesPending} tone="warn" />
 			) : null}
 		</section>
 	);
@@ -264,7 +284,15 @@ function Badge({
 	);
 }
 
-function SaveAction({ view, onSave }: { view: PopupView; onSave: () => void }) {
+function SaveAction({
+	view,
+	m,
+	onSave,
+}: {
+	view: PopupView;
+	m: PopupMessages;
+	onSave: () => void;
+}) {
 	const saving = view.flow.kind === "running";
 	const disabled = !view.canSave || saving;
 	return (
@@ -274,18 +302,18 @@ function SaveAction({ view, onSave }: { view: PopupView; onSave: () => void }) {
 			disabled={disabled}
 			style={disabled ? primaryButtonDisabled : primaryButton}
 		>
-			{saving ? "Saving & Analyzing…" : "Save & Analyze"}
+			{saving ? m.saving : m.save}
 		</button>
 	);
 }
 
-function Flow({ flow }: { flow: FlowView }) {
+function Flow({ flow, m }: { flow: FlowView; m: PopupMessages }) {
 	if (flow.kind === "idle") {
 		return null;
 	}
 	return (
 		<section style={{ ...card, marginTop: 10 }}>
-			<Trail trail={flow.trail} />
+			<Trail trail={flow.trail} m={m} />
 			{flow.kind === "running" ? (
 				<p
 					style={{
@@ -295,8 +323,7 @@ function Flow({ flow }: { flow: FlowView }) {
 						margin: "8px 0 0",
 					}}
 				>
-					AI analysis is running in the foreground and may take a while. Keep
-					this popup open and stay on the saved page until it finishes.
+					{m.runningNotice}
 				</p>
 			) : null}
 			{flow.kind === "error" ? (
@@ -304,12 +331,18 @@ function Flow({ flow }: { flow: FlowView }) {
 					{flow.message}
 				</p>
 			) : null}
-			{flow.kind === "done" ? <Receipt receipt={flow.receipt} /> : null}
+			{flow.kind === "done" ? <Receipt receipt={flow.receipt} m={m} /> : null}
 		</section>
 	);
 }
 
-function Trail({ trail }: { trail: readonly TrailStage[] }) {
+function Trail({
+	trail,
+	m,
+}: {
+	trail: readonly TrailStage[];
+	m: PopupMessages;
+}) {
 	return (
 		<ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
 			{trail.map((stage) => (
@@ -326,7 +359,10 @@ function Trail({ trail }: { trail: readonly TrailStage[] }) {
 					}}
 				>
 					<span aria-hidden>{stageGlyph(stage.status)}</span>
-					<span>{stage.label}</span>
+					{/* Stage labels resolve from the dictionary by key so the trail
+					    follows the UI language (MIK-029); `stage.label` stays as the
+					    controller's language-neutral fallback. */}
+					<span>{m.trail[stage.key] ?? stage.label}</span>
 				</li>
 			))}
 		</ol>
@@ -335,8 +371,10 @@ function Trail({ trail }: { trail: readonly TrailStage[] }) {
 
 function Receipt({
 	receipt,
+	m,
 }: {
 	receipt: Extract<FlowView, { kind: "done" }>["receipt"];
+	m: PopupMessages;
 }) {
 	return (
 		<div style={{ marginTop: 8 }}>
@@ -351,7 +389,7 @@ function Receipt({
 				<StatusPill status={receipt.aiStatus} />
 				{!receipt.driveSynced ? (
 					<span style={{ fontSize: 11, color: palette.warn }}>
-						saved locally
+						{m.savedLocally}
 					</span>
 				) : null}
 			</div>
@@ -360,15 +398,15 @@ function Receipt({
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
 					{receipt.aiStatus === "unavailable"
-						? "Saved without AI — the Prompt API was unavailable. Re-analyze later from Options."
+						? m.unavailableReceipt
 						: receipt.aiError
-							? `Saved, but analysis failed: ${receipt.aiError}. Re-analyze later from Options.`
-							: "Saved. Re-analyze later from Options."}
+							? m.failedReceipt(receipt.aiError)
+							: m.savedReceipt}
 				</p>
 			)}
 			{receipt.driveWarning ? (
 				<p style={{ fontSize: 11, color: palette.warn, margin: "6px 0 0" }}>
-					Drive sync pending: {receipt.driveWarning}
+					{m.drivePending(receipt.driveWarning)}
 				</p>
 			) : null}
 		</div>
@@ -424,11 +462,13 @@ function Preview({ preview }: { preview: AiPreview }) {
  */
 function Recent({
 	items,
+	m,
 	busy,
 	onReAnalyze,
 	onSelect,
 }: {
 	items: readonly RecentItemView[];
+	m: PopupMessages;
 	busy: boolean;
 	onReAnalyze: (canonicalUrl: string) => void;
 	onSelect: (canonicalUrl: string) => void;
@@ -447,7 +487,7 @@ function Recent({
 					margin: "0 0 4px",
 				}}
 			>
-				Recent bookmarks
+				{m.recentBookmarks}
 			</h2>
 			<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 				{items.map((item) => (
@@ -486,7 +526,7 @@ function Recent({
 									onReAnalyze(item.canonicalUrl);
 								}}
 							>
-								Re-analyze
+								{m.reAnalyze}
 							</button>
 						) : null}
 					</li>
@@ -505,9 +545,11 @@ function Recent({
  */
 function RecentDetail({
 	detail,
+	m,
 	onClose,
 }: {
 	detail: PopupDetailView;
+	m: PopupMessages;
 	onClose: () => void;
 }) {
 	return (
@@ -527,7 +569,7 @@ function RecentDetail({
 						// dialog when it opens.
 						autoFocus
 					>
-						← Back
+						{m.back}
 					</button>
 					<span style={{ flex: 1 }} />
 					<StatusPill status={detail.aiStatus} />
@@ -535,7 +577,7 @@ function RecentDetail({
 						type="button"
 						style={subtleButton}
 						onClick={onClose}
-						aria-label="Close details"
+						aria-label={m.closeDetails}
 					>
 						✕
 					</button>
@@ -616,7 +658,7 @@ function RecentDetail({
 			) : null}
 
 			<p style={{ fontSize: 10, color: palette.inkFaint, margin: "10px 0 0" }}>
-				Updated {formatDate(detail.updatedAt)}
+				{m.updated(formatDate(detail.updatedAt))}
 				{detail.analysisProfileId ? ` · ${detail.analysisProfileId}` : ""}
 			</p>
 		</section>
@@ -639,7 +681,7 @@ function formatDate(iso: string): string {
 	});
 }
 
-function Footer() {
+function Footer({ m }: { m: PopupMessages }) {
 	return (
 		<footer
 			style={{
@@ -658,7 +700,7 @@ function Footer() {
 				// opened standalone (a bare `chrome` reference would `ReferenceError`).
 				onClick={() => openOptionsPage()}
 			>
-				Manage in Options
+				{m.manageInOptions}
 			</button>
 		</footer>
 	);
@@ -713,12 +755,12 @@ function aiStatusTone(status: AiStatus): "ok" | "warn" | "danger" | "neutral" {
 	}
 }
 
-function connectionText(status: ConnectionStatus): string {
+function connectionText(status: ConnectionStatus, m: PopupMessages): string {
 	return status === "connected"
-		? "connected"
+		? m.connection.connected
 		: status === "disconnected"
-			? "sign in"
-			: "unknown";
+			? m.connection.disconnected
+			: m.connection.unknown;
 }
 
 function connectionTone(status: ConnectionStatus): "ok" | "warn" | "neutral" {

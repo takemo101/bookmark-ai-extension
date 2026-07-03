@@ -222,6 +222,9 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				title: target.title,
 				url: target.url,
 				excerpt: excerpt.text,
+				// The UI/browser language: the analyzer's fallback when the page text
+				// itself does not decide the output language (MIK-029).
+				fallbackLanguage: deps.fallbackLanguage,
 			},
 			customProfiles,
 		);

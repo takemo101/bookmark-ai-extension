@@ -20,7 +20,8 @@ worth revisiting.
 - Add long-form `analysisMarkdown` in addition to the existing short
   `description`, `genre`, and `tags`.
 - Keep the core AI output contract fixed:
-  - output is Japanese;
+  - output is Japanese or English, auto-selected per page (MIK-029; the
+    language is part of the fixed contract, never a skill instruction);
   - output is structured JSON;
   - raw page excerpts are not persisted;
   - `analysisMarkdown` is generated analysis, not copied source text.
@@ -40,7 +41,8 @@ worth revisiting.
   - official documentation;
   - generic page.
 - Use skill-specific Markdown templates.
-- Target medium-to-long analysis, roughly 800-1500 Japanese characters.
+- Target medium-to-long analysis, roughly 800-1500 Japanese characters
+  (roughly double that in characters for English output, MIK-029).
 - Include `analysisMarkdown` in normal bookmark search.
 - Render `analysisMarkdown` safely as Markdown in the options detail pane:
   headings/lists/formatting are allowed, raw HTML is escaped or disabled.
@@ -171,12 +173,17 @@ ignore/report invalid skill definitions safely.
 
 Use a layered prompt model:
 
-1. **Core contract** (fixed): JSON-only, Japanese, schema, no copied raw excerpt.
+1. **Core contract** (fixed): JSON-only, target output language (Japanese or
+   English, auto-selected per page — MIK-029), schema, no copied raw excerpt.
 2. **Built-in or custom skill instruction**: domain-specific analysis emphasis.
 3. **Page input**: title, URL, structured excerpt.
 
 The core contract must not be user-editable. Custom skill instructions can change
-analysis emphasis but cannot override output schema or privacy rules.
+analysis emphasis but cannot override the output language, schema, or privacy
+rules. The target language is inferred deterministically from the page
+title/excerpt script counts, falling back to the browser UI language, then
+Japanese; `LanguageModel.availability()` / `create()` request the same language
+via `expectedOutputs`. The JSON keys are identical in both languages.
 
 Suggested output JSON:
 

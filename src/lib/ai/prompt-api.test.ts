@@ -37,7 +37,7 @@ describe("createChromePromptClient", () => {
 		expect(await make("???").availability()).toBe("unavailable");
 	});
 
-	it("passes Japanese expected output language to availability probes", async () => {
+	it("passes Japanese expected output language to availability probes by default", async () => {
 		let availabilityOptions: unknown;
 		const client = createChromePromptClient({
 			availability: async (options) => {
@@ -48,6 +48,27 @@ describe("createChromePromptClient", () => {
 		});
 
 		expect(await client.availability()).toBe("available");
+		expect(availabilityOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["ja"] }],
+		});
+	});
+
+	it("passes the requested language to availability probes (MIK-029)", async () => {
+		let availabilityOptions: unknown;
+		const client = createChromePromptClient({
+			availability: async (options) => {
+				availabilityOptions = options;
+				return "available";
+			},
+			create: async () => ({ prompt: async () => "" }),
+		});
+
+		expect(await client.availability("en")).toBe("available");
+		expect(availabilityOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["en"] }],
+		});
+
+		expect(await client.availability("ja")).toBe("available");
 		expect(availabilityOptions).toMatchObject({
 			expectedOutputs: [{ type: "text", languages: ["ja"] }],
 		});
@@ -89,6 +110,28 @@ describe("createChromePromptClient", () => {
 			expectedOutputs: [{ type: "text", languages: ["ja"] }],
 		});
 		expect(destroyed).toBe(true);
+	});
+
+	it("creates an English-output session with an English system prompt (MIK-029)", async () => {
+		let createOptions: unknown;
+		const client = createChromePromptClient({
+			availability: async () => "available",
+			create: async (options) => {
+				createOptions = options;
+				return { prompt: async () => "model output" };
+			},
+		});
+
+		expect(await client.prompt("question", "en")).toBe("model output");
+		expect(createOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["en"] }],
+		});
+		const options = createOptions as {
+			initialPrompts: readonly { role: string; content: string }[];
+		};
+		expect(options.initialPrompts[0]?.role).toBe("system");
+		expect(options.initialPrompts[0]?.content).toContain("English");
+		expect(options.initialPrompts[0]?.content).not.toContain("日本語");
 	});
 
 	it("destroys the session even when prompting throws", async () => {

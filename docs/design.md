@@ -6,7 +6,7 @@ Date: 2026-06-24
 
 Bookmark AI Extension is a Chrome extension for saving the current tab as an AI-enriched bookmark. Bookmarks are stored in the user's own Google Drive as portable JSONL, so the same Google account can share bookmarks across PCs without a custom backend or database.
 
-The product's differentiator is not just bookmark sync. The key feature is using Chrome's built-in Gemini / Prompt API to analyze the current page content and save a useful Japanese explanation of what the page is about. For example, saving a GitHub repository should produce a human-readable explanation of what the repository does.
+The product's differentiator is not just bookmark sync. The key feature is using Chrome's built-in Gemini / Prompt API to analyze the current page content and save a useful explanation of what the page is about, in Japanese or English (MIK-029). For example, saving a GitHub repository should produce a human-readable explanation of what the repository does.
 
 ## MVP Goals
 
@@ -14,7 +14,8 @@ The product's differentiator is not just bookmark sync. The key feature is using
 - Save the current tab from the popup.
 - Extract page content only when the user explicitly saves the tab.
 - Analyze the page with Chrome Built-in AI / Prompt API.
-- Save a Japanese AI-generated description, genre, and tags.
+- Save an AI-generated description, genre, and tags in Japanese or English
+  (auto-selected per page; MIK-029).
 - Store records in a visible Google Drive folder: `bookmark-ai/bookmarks.jsonl`.
 - Sync across PCs via the user's Google Drive.
 - Keep raw extracted page text out of persistent storage.
@@ -92,7 +93,7 @@ The exact paths can change during implementation, but keep these boundaries:
 | `drive/*` | Google auth token, folder/file bootstrap, download/upload, revision metadata. |
 | `bookmarks/*` | JSONL schema, parse/serialize, URL upsert, merge behavior. |
 | `extraction/*` | Current page extraction and excerpt construction. |
-| `ai/*` | Prompt API availability and Japanese AI output generation. |
+| `ai/*` | Prompt API availability and English/Japanese AI output generation. |
 | `storage/*` | `chrome.storage.local` cache of bookmarks and Drive metadata. |
 | `popup/*` | Save current tab flow and status display. |
 | `options/*` | List/search/filter/delete/re-analyze management UI. |
@@ -228,8 +229,8 @@ Notes:
    8k-12k characters.
 8. Extension writes or updates a pending bookmark record in Drive/local cache.
 9. Popup/options runs Prompt API analysis in the foreground while the screen
-   stays open, then updates the bookmark record with Japanese `description`,
-   `genre`, `tags`, `aiStatus`, and analysis timestamps before reporting the
+   stays open, then updates the bookmark record with the target-language
+   `description`, `genre`, `tags`, `aiStatus`, and analysis timestamps before reporting the
    save as complete (MIK-021). Analysis is never handed off to a service
    worker, offscreen document, or background queue.
 10. If the UI closes mid-flow, the in-memory excerpt is dropped (it is never
@@ -268,7 +269,11 @@ Use Chrome Built-in AI / Prompt API only in MVP.
 
 - No Gemini API key fallback in MVP.
 - No OpenAI fallback in MVP.
-- Generated output language: Japanese.
+- Generated output language: Japanese or English (MIK-029). The language is
+  inferred per page from the title/excerpt text with a deterministic script
+  heuristic; ambiguous pages fall back to the browser UI language, then
+  Japanese. `LanguageModel.availability()` / `create()` request the selected
+  language via `expectedOutputs`. No languages beyond English/Japanese.
 - Generate `description`, `genre`, and `tags` in a single analysis call.
 
 Prompt shape should request structured JSON. Implementation must validate and safely recover from malformed output.
@@ -402,6 +407,17 @@ Design deck selections from 2026-06-24:
 
 The product should feel like a warm personal knowledge shelf rather than a generic AI dashboard. Prefer paper, ledger, and library cues: warm off-white backgrounds, muted ink colors, gentle borders, readable hierarchy, and restrained accent colors. Avoid overusing neon gradients or generic AI-purple branding.
 
+### UI language (MIK-029)
+
+Popup and Options user-visible strings render in English or Japanese,
+selected automatically from the browser UI language
+(`chrome.i18n.getUILanguage()`, then `navigator.language`, falling back to
+Japanese). The dictionaries are plain typed objects (`popup/i18n.ts`,
+`options/i18n.ts`, shared language logic in `lib/i18n/`); no i18n framework
+and no stored language preference. Domain status enums (`ready`, `synced`,
+`available`, …) and controller-produced safe error text stay as their internal
+spellings. Tests inject the language explicitly.
+
 ### Popup: Bookmark Receipt
 
 Popup responsibilities:
@@ -441,7 +457,7 @@ The popup should behave like a save receipt:
    - page excerpt extracted;
    - AI analyzing;
    - Drive synced / AI ready.
-4. Show a short preview of the generated Japanese description, genre, and tags when ready.
+4. Show a short preview of the generated description, genre, and tags when ready.
 5. If Prompt API is unavailable or fails, keep the saved bookmark visible with `unavailable` or `failed` status and a path to re-analyze later.
 
 ### Options page: Research Ledger

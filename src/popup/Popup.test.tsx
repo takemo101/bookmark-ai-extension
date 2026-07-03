@@ -104,8 +104,12 @@ function detailOf(overrides: Partial<PopupDetailView> = {}): PopupDetailView {
 	};
 }
 
-function render(view: PopupView): string {
-	return renderToStaticMarkup(<Popup controller={controllerOf(view)} />);
+// Language is injected explicitly (MIK-029) so the assertions never depend on
+// the test environment's own UI language.
+function render(view: PopupView, language: "en" | "ja" = "en"): string {
+	return renderToStaticMarkup(
+		<Popup controller={controllerOf(view)} language={language} />,
+	);
 }
 
 describe("Popup", () => {
@@ -232,6 +236,59 @@ describe("Popup", () => {
 			// A reading surface only: delete/search/filters stay in Options.
 			expect(html).not.toContain(">Delete<");
 			expect(html).not.toContain("Search bookmarks");
+		});
+	});
+
+	describe("UI language (MIK-029)", () => {
+		it("renders representative Japanese strings for the ja language", () => {
+			const html = render(
+				viewOf({
+					currentBookmark: currentBookmarkOf(),
+					recent: [recentOf({ aiStatus: "failed", canReAnalyze: true })],
+				}),
+				"ja",
+			);
+
+			expect(html).toContain(
+				"現在のタブをAI付きブックマークとして保存します。",
+			);
+			expect(html).toContain("現在のタブ");
+			expect(html).toContain("ブックマーク済み");
+			expect(html).toContain("保存＆分析");
+			expect(html).toContain("最近のブックマーク");
+			expect(html).toContain("再分析");
+			expect(html).toContain("設定ページで管理");
+			expect(html).not.toContain("Save &amp; Analyze");
+			expect(html).not.toContain("Recent bookmarks");
+		});
+
+		it("localizes the running foreground notice and trail stages", () => {
+			const html = render(
+				viewOf({
+					flow: { kind: "running", trail: runningTrail() },
+					canSave: false,
+				}),
+				"ja",
+			);
+
+			expect(html).toContain("保存＆分析中…");
+			expect(html).toContain("AI分析をフォアグラウンドで実行中です。");
+			expect(html).toContain("AIが分析中");
+			expect(html).toContain("Driveへ同期");
+			expect(html).not.toContain("AI analysis is running in the foreground");
+		});
+
+		it("renders English strings for the en language", () => {
+			const html = render(
+				viewOf({ currentBookmark: currentBookmarkOf() }),
+				"en",
+			);
+
+			expect(html).toContain(
+				"Save the current tab as an AI-enriched bookmark.",
+			);
+			expect(html).toContain("Already bookmarked");
+			expect(html).not.toContain("ブックマーク済み");
 		});
 	});
 
