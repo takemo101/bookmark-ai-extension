@@ -279,6 +279,8 @@ real Chrome supports the needed Prompt API operations from an MV3 service worker
 - prompt execution;
 - lifecycle behavior during a slow prompt.
 
+See [`prompt-api-service-worker-experiment.md`](./prompt-api-service-worker-experiment.md) for the real-Chrome run protocol and run-record table for this experiment.
+
 Only if that experiment passes should a later issue add durable background queue
 processing.
 
