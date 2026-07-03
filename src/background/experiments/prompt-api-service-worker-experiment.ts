@@ -59,6 +59,8 @@ const SKIPPED_NO_SESSION: ExperimentPointResult = {
 	detail: "skipped: session creation did not pass",
 };
 
+const ENGLISH_TEXT_OUTPUT = [{ type: "text", languages: ["en"] }] as const;
+
 /** Synthetic, non-sensitive system prompt for the experiment session(s). */
 const SYSTEM_PROMPT = "You are a test assistant. Reply concisely.";
 /** Synthetic, non-sensitive fast prompt for the promptExecution check. */
@@ -170,6 +172,7 @@ async function checkSessionCreation(
 	try {
 		const session = await namespace.create({
 			initialPrompts: [{ role: "system", content: SYSTEM_PROMPT }],
+			expectedOutputs: ENGLISH_TEXT_OUTPUT,
 		});
 		return { result: { status: "pass" }, session };
 	} catch (error) {
@@ -202,6 +205,7 @@ async function checkSlowPromptLifecycle(
 	try {
 		session = await namespace.create({
 			initialPrompts: [{ role: "system", content: SYSTEM_PROMPT }],
+			expectedOutputs: ENGLISH_TEXT_OUTPUT,
 		});
 	} catch (error) {
 		return { status: "fail", error: safeErrorMessage(error) };

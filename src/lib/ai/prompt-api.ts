@@ -16,6 +16,9 @@
  *     `"unavailable" | "downloadable" | "downloading" | "available"`.
  *   - `namespace.create(options)` resolves to a session with
  *     `prompt(text): Promise<string>` and an optional `destroy()`.
+ *   - `namespace.create(options)` accepts `expectedOutputs`; this adapter
+ *     requests Japanese text output to match the product's AI contract and avoid
+ *     Chrome's missing-output-language warning.
  * If a future Chrome changes these, only this file moves — callers keep using
  * {@link PromptClient}. The namespace can also be injected for tests.
  */
@@ -68,6 +71,8 @@ export interface PromptModelNamespace {
 	availability(options?: unknown): Promise<RawAvailability | string>;
 	create(options?: unknown): Promise<PromptSession>;
 }
+
+const JAPANESE_TEXT_OUTPUT = [{ type: "text", languages: ["ja"] }] as const;
 
 /** Locate the language-model namespace, tolerating both known global shapes. */
 export function resolveNamespace(): PromptModelNamespace | null {
@@ -135,6 +140,7 @@ export function createChromePromptClient(
 			}
 			const session = await namespace.create({
 				initialPrompts: [{ role: "system", content: ANALYSIS_SYSTEM_PROMPT }],
+				expectedOutputs: JAPANESE_TEXT_OUTPUT,
 			});
 			try {
 				return await session.prompt(input);

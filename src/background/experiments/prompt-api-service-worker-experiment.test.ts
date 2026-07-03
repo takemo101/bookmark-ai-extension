@@ -47,14 +47,18 @@ describe("runPromptApiServiceWorkerExperiment", () => {
 
 	it("reports pass for all four points on the full success path", async () => {
 		let destroyCount = 0;
+		const createOptions: unknown[] = [];
 		const namespace: PromptModelNamespace = {
 			availability: async () => "available",
-			create: async () => ({
-				prompt: async () => "model output that must never appear in report",
-				destroy: () => {
-					destroyCount += 1;
-				},
-			}),
+			create: async (options) => {
+				createOptions.push(options);
+				return {
+					prompt: async () => "model output that must never appear in report",
+					destroy: () => {
+						destroyCount += 1;
+					},
+				};
+			},
 		};
 		const report = await runPromptApiServiceWorkerExperiment(namespace);
 
@@ -62,6 +66,13 @@ describe("runPromptApiServiceWorkerExperiment", () => {
 		expect(report.sessionCreation.status).toBe("pass");
 		expect(report.promptExecution.status).toBe("pass");
 		expect(report.slowPromptLifecycle.status).toBe("pass");
+
+		expect(createOptions).toHaveLength(2);
+		for (const options of createOptions) {
+			expect(options).toMatchObject({
+				expectedOutputs: [{ type: "text", languages: ["en"] }],
+			});
+		}
 
 		// Both the promptExecution session and the slowPromptLifecycle session
 		// must be destroyed.

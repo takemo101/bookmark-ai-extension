@@ -78,6 +78,24 @@ The JSON response has the shape:
 }
 ```
 
+## Expected console messages / troubleshooting
+
+Chrome may print this informational message when the experiment reaches the
+Built-in AI API:
+
+```txt
+This page uses Chrome's Built-In AI features (LanguageModel)! We're always improving our models; please submit your feedback here: https://issues.chromium.org/issues/new?component=1583624
+```
+
+This is Chrome's own feedback notice and is not by itself a failed experiment
+point.
+
+The extension explicitly requests text output languages when creating
+LanguageModel sessions. The production analyzer requests Japanese (`ja`) output;
+this service-worker experiment uses English (`en`) because its synthetic prompts
+are English. If Chrome still prints `No output language was specified`, rebuild
+and reload the unpacked extension before re-running the experiment.
+
 ## Run record
 
 Record each real run here. Do not mark a row `PASS`/`FAIL`/`PARTIAL` unless the

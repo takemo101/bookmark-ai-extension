@@ -47,24 +47,31 @@ describe("createChromePromptClient", () => {
 		expect(await client.availability()).toBe("unavailable");
 	});
 
-	it("creates a session, returns its text, and destroys it", async () => {
+	it("creates a Japanese-output session, returns its text, and destroys it", async () => {
 		let destroyed = false;
 		let promptedWith = "";
+		let createOptions: unknown;
 		const client = createChromePromptClient({
 			availability: async () => "available",
-			create: async () => ({
-				prompt: async (input: string) => {
-					promptedWith = input;
-					return "model output";
-				},
-				destroy: () => {
-					destroyed = true;
-				},
-			}),
+			create: async (options) => {
+				createOptions = options;
+				return {
+					prompt: async (input: string) => {
+						promptedWith = input;
+						return "model output";
+					},
+					destroy: () => {
+						destroyed = true;
+					},
+				};
+			},
 		});
 		const out = await client.prompt("question");
 		expect(out).toBe("model output");
 		expect(promptedWith).toBe("question");
+		expect(createOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["ja"] }],
+		});
 		expect(destroyed).toBe(true);
 	});
 
