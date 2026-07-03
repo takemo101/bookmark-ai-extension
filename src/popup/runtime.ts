@@ -20,19 +20,20 @@
  * {@link PopupUseCases}, and the runtime adapters are tested directly with fake
  * chrome/fetch dependencies in `runtime/*` and `storage/*`.
  */
+
+import { createChromePromptClient } from "../lib/ai/index";
 import {
 	type AppError,
-	type TabProviderPort,
+	err as appErr,
 	appError,
+	ok as appOk,
 	createAnalyzerPort,
 	createBookmarkApp,
 	createCryptoIdGenerator,
 	createSettingsProviderPort,
 	createSystemClock,
-	err as appErr,
-	ok as appOk,
+	type TabProviderPort,
 } from "../lib/app/index";
-import { createChromePromptClient } from "../lib/ai/index";
 import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
@@ -42,9 +43,9 @@ import {
 	createChromeSettingsCache,
 } from "../lib/storage/index";
 import {
+	createPopupUseCases,
 	type PopupEnvironmentProvider,
 	type PopupUseCases,
-	createPopupUseCases,
 } from "./use-cases";
 
 /** Active-tab provider backed by `chrome.tabs`. */

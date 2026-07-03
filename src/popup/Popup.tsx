@@ -11,18 +11,6 @@
  * component is trivially renderable with a fake in tests.
  */
 import { useEffect, useSyncExternalStore } from "react";
-
-import type {
-	AiPreview,
-	FlowView,
-	PopupController,
-	PopupView,
-	RecentItemView,
-	TrailStage,
-	TrailStageStatus,
-} from "./view-model";
-import type { ConnectionStatus, PromptApiStatus } from "./use-cases";
-import type { AiStatus } from "./view-types";
 import { openOptionsPage } from "./open-options";
 import {
 	card,
@@ -33,9 +21,26 @@ import {
 	subtleButton,
 	surface,
 } from "./styles";
+import type { ConnectionStatus, PromptApiStatus } from "./use-cases";
+import type {
+	AiPreview,
+	FlowView,
+	PopupController,
+	PopupView,
+	RecentItemView,
+	TrailStage,
+	TrailStageStatus,
+} from "./view-model";
+import type { AiStatus } from "./view-types";
 
 export function Popup({ controller }: { controller: PopupController }) {
-	const view = useSyncExternalStore(controller.subscribe, controller.getView);
+	// The third argument (server snapshot) lets tests render the popup with
+	// `renderToStaticMarkup`, mirroring the Options component tests.
+	const view = useSyncExternalStore(
+		controller.subscribe,
+		controller.getView,
+		controller.getView,
+	);
 
 	useEffect(() => {
 		void controller.init();
@@ -44,12 +49,16 @@ export function Popup({ controller }: { controller: PopupController }) {
 	return (
 		<main style={surface}>
 			<Header />
-			<TabReceipt view={view} />
+			<TabReceipt
+				view={view}
+				onDelete={() => void controller.deleteCurrentBookmark()}
+			/>
 			<Badges view={view} />
 			<SaveAction view={view} onSave={() => void controller.save()} />
 			<Flow flow={view.flow} />
 			<Recent
 				items={view.recent}
+				busy={view.flow.kind === "running" || view.deleting}
 				onReAnalyze={(url) => void controller.reAnalyze(url)}
 			/>
 			<Footer />
@@ -70,7 +79,13 @@ function Header() {
 	);
 }
 
-function TabReceipt({ view }: { view: PopupView }) {
+function TabReceipt({
+	view,
+	onDelete,
+}: {
+	view: PopupView;
+	onDelete: () => void;
+}) {
 	const title =
 		view.tab?.title ??
 		(view.loading ? "Reading current tab…" : "No active tab");
@@ -102,7 +117,71 @@ function TabReceipt({ view }: { view: PopupView }) {
 					{url}
 				</div>
 			) : null}
+			{view.currentBookmark ? (
+				<CurrentBookmark view={view} onDelete={onDelete} />
+			) : null}
 		</section>
+	);
+}
+
+/**
+ * The already-bookmarked state of the current page: a clear "Already
+ * bookmarked" line with the record's AI status and a Remove affordance that
+ * deletes through the app's tombstone delete. Save & Analyze stays available —
+ * a duplicate save is the documented upsert that refreshes the analysis
+ * (docs/design.md "Duplicate Behavior") — so the hint says exactly that.
+ */
+function CurrentBookmark({
+	view,
+	onDelete,
+}: {
+	view: PopupView;
+	onDelete: () => void;
+}) {
+	const bookmark = view.currentBookmark;
+	if (!bookmark) {
+		return null;
+	}
+	const busy = view.deleting || view.flow.kind === "running";
+	return (
+		<div
+			style={{
+				marginTop: 8,
+				paddingTop: 8,
+				borderTop: `1px solid ${palette.border}`,
+			}}
+		>
+			<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+				<span aria-hidden style={{ color: palette.ok, fontSize: 12 }}>
+					✓
+				</span>
+				<span style={{ fontSize: 12, fontWeight: 600, color: palette.ok }}>
+					Already bookmarked
+				</span>
+				<StatusPill status={bookmark.aiStatus} />
+				<span style={{ flex: 1 }} />
+				<button
+					type="button"
+					style={
+						busy
+							? { ...subtleButton, cursor: "default", opacity: 0.6 }
+							: subtleButton
+					}
+					disabled={busy}
+					onClick={onDelete}
+				>
+					{view.deleting ? "Removing…" : "Remove"}
+				</button>
+			</div>
+			<p style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}>
+				Save & Analyze updates this bookmark and refreshes its AI analysis.
+			</p>
+			{view.deleteError ? (
+				<p style={{ fontSize: 11, color: palette.danger, margin: "4px 0 0" }}>
+					Remove failed: {view.deleteError}
+				</p>
+			) : null}
+		</div>
 	);
 }
 
@@ -194,8 +273,16 @@ function Flow({ flow }: { flow: FlowView }) {
 		<section style={{ ...card, marginTop: 10 }}>
 			<Trail trail={flow.trail} />
 			{flow.kind === "running" ? (
-				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
-					Analyzing in the foreground — keep this popup open until it finishes.
+				<p
+					style={{
+						fontSize: 12,
+						fontWeight: 600,
+						color: palette.warn,
+						margin: "8px 0 0",
+					}}
+				>
+					AI analysis is running in the foreground and may take a while. Keep
+					this popup open and stay on the saved page until it finishes.
 				</p>
 			) : null}
 			{flow.kind === "error" ? (
@@ -313,11 +400,19 @@ function Preview({ preview }: { preview: AiPreview }) {
 	);
 }
 
+/**
+ * Compact recent list (MIK-027): one line per bookmark — title, status pill,
+ * and an inline Re-analyze affordance when the status is not `ready`. The
+ * title tooltip carries the description/URL the row no longer shows; the full
+ * ledger lives in Options, never here.
+ */
 function Recent({
 	items,
+	busy,
 	onReAnalyze,
 }: {
 	items: readonly RecentItemView[];
+	busy: boolean;
 	onReAnalyze: (canonicalUrl: string) => void;
 }) {
 	if (items.length === 0) {
@@ -331,7 +426,7 @@ function Recent({
 					textTransform: "uppercase",
 					letterSpacing: 1,
 					color: palette.inkFaint,
-					margin: "0 0 6px",
+					margin: "0 0 4px",
 				}}
 			>
 				Recent bookmarks
@@ -342,55 +437,40 @@ function Recent({
 						key={item.canonicalUrl}
 						style={{
 							borderTop: `1px solid ${palette.border}`,
-							padding: "6px 0",
+							padding: "4px 0",
 							display: "flex",
-							gap: 8,
-							alignItems: "flex-start",
+							gap: 6,
+							alignItems: "center",
 						}}
 					>
-						<div style={{ minWidth: 0, flex: 1 }}>
-							<div
-								style={{
-									fontSize: 12,
-									fontWeight: 600,
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-									whiteSpace: "nowrap",
-								}}
-							>
-								{item.title}
-							</div>
-							<div
-								style={{
-									fontSize: 11,
-									color: palette.inkSoft,
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-									whiteSpace: "nowrap",
-								}}
-							>
-								{item.description ?? item.url}
-							</div>
-						</div>
 						<div
+							title={item.description ?? item.url}
 							style={{
-								display: "flex",
-								flexDirection: "column",
-								gap: 4,
-								alignItems: "flex-end",
+								minWidth: 0,
+								flex: 1,
+								fontSize: 12,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
 							}}
 						>
-							<StatusPill status={item.aiStatus} />
-							{item.canReAnalyze ? (
-								<button
-									type="button"
-									style={subtleButton}
-									onClick={() => onReAnalyze(item.canonicalUrl)}
-								>
-									Re-analyze
-								</button>
-							) : null}
+							{item.title}
 						</div>
+						<StatusPill status={item.aiStatus} />
+						{item.canReAnalyze ? (
+							<button
+								type="button"
+								style={
+									busy
+										? { ...subtleButton, cursor: "default", opacity: 0.6 }
+										: subtleButton
+								}
+								disabled={busy}
+								onClick={() => onReAnalyze(item.canonicalUrl)}
+							>
+								Re-analyze
+							</button>
+						) : null}
 					</li>
 				))}
 			</ul>

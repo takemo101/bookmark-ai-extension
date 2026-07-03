@@ -292,9 +292,15 @@ is kept for historical reference only.
 
 - Save keeps the popup open and walks the visible progress trail
   (saving → extracting → analyzing → syncing) until the flow finishes.
-- Tell the user to keep the popup open until analysis finishes; the receipt
-  shows the terminal AI status, never a "running in the background" state.
-- Keep recent bookmark display compact using `description`.
+- While the flow runs, show strong foreground guidance: analysis runs in the
+  foreground and may take a while — keep the popup open and stay on the saved
+  page until it finishes. The receipt shows the terminal AI status, never a
+  "running in the background" state.
+- Keep recent bookmark display compact: one line per bookmark (title + AI
+  status + inline re-analyze), with `description` available as a tooltip.
+- If the current page is already bookmarked, show that state on the current
+  tab receipt with a Remove affordance (MIK-027); a repeated Save & Analyze
+  is the normal duplicate upsert and refreshes the analysis.
 
 ### Options
 

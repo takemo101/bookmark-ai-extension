@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	Bookmarks,
 	type BookmarkRecord,
+	Bookmarks,
 	bookmarkId,
 	isoTimestamp,
 } from "../lib/bookmarks/index";
 import type { CacheState } from "../lib/storage/index";
 import type {
 	AppError,
+	CanonicalUrl,
 	PopupEnvironment,
 	PopupUseCases,
 	ProgressObserver,
@@ -16,7 +17,6 @@ import type {
 	SaveOutcome,
 	SaveStage,
 	TabInfo,
-	CanonicalUrl,
 } from "./use-cases";
 import { createPopupController, type FlowView } from "./view-model";
 
@@ -100,6 +100,8 @@ class FakeUseCases implements PopupUseCases {
 	];
 	saveCalls = 0;
 	reAnalyzeArgs: CanonicalUrl[] = [];
+	deleteResult: Result<CacheState, AppError> | null = null;
+	deleteArgs: CanonicalUrl[] = [];
 
 	async currentTab() {
 		return this.tab;
@@ -129,6 +131,10 @@ class FakeUseCases implements PopupUseCases {
 			onProgress?.({ stage });
 		}
 		return this.reAnalyzeResult ?? this.saveResult;
+	}
+	async deleteBookmark(canonicalUrl: CanonicalUrl) {
+		this.deleteArgs.push(canonicalUrl);
+		return this.deleteResult ?? { ok: true as const, value: this.cache };
 	}
 }
 
@@ -352,6 +358,141 @@ describe("createPopupController", () => {
 			await Promise.all([first, second]);
 
 			expect(fake.saveCalls).toBe(1);
+		});
+	});
+
+	describe("current bookmark", () => {
+		it("detects the current tab as already bookmarked via canonical normalization", async () => {
+			// The tab URL differs from the saved URL by www/tracking-param/fragment/
+			// trailing-slash noise; both canonicalize to the same dedup key.
+			const fake = new FakeUseCases();
+			fake.tab = {
+				ok: true,
+				value: {
+					title: "Example Page",
+					url: "https://www.example.test/page/?utm_source=news#top",
+				},
+			};
+			fake.cache = cacheOf([recordOf({ title: "Saved Before" })]);
+			const controller = controllerWith(fake);
+
+			await controller.init();
+			const current = controller.getView().currentBookmark;
+
+			expect(current).toBeDefined();
+			expect(current?.title).toBe("Saved Before");
+			expect(current?.aiStatus).toBe("ready");
+		});
+
+		it("leaves currentBookmark undefined when the page is not bookmarked", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ url: "https://other.test/x" })]);
+			const controller = controllerWith(fake);
+
+			await controller.init();
+
+			expect(controller.getView().currentBookmark).toBeUndefined();
+		});
+
+		it("leaves currentBookmark undefined for a non-bookmarkable tab URL", async () => {
+			const fake = new FakeUseCases();
+			fake.tab = {
+				ok: true,
+				value: { title: "Extensions", url: "chrome://extensions" },
+			};
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+
+			await controller.init();
+
+			expect(controller.getView().currentBookmark).toBeUndefined();
+			expect(controller.getView().canSave).toBe(true);
+		});
+
+		it("marks the current page bookmarked after a successful save", async () => {
+			const record = recordOf({ aiStatus: "ready" });
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([]);
+			fake.saveResult = { ok: true, value: outcomeOf(record) };
+			const controller = controllerWith(fake);
+			await controller.init();
+			expect(controller.getView().currentBookmark).toBeUndefined();
+
+			fake.cache = cacheOf([record]);
+			await controller.save();
+
+			expect(controller.getView().currentBookmark?.title).toBe("Example Page");
+		});
+	});
+
+	describe("deleteCurrentBookmark", () => {
+		it("deletes through the use case and clears current/recent state", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+			expect(controller.getView().currentBookmark).toBeDefined();
+
+			fake.deleteResult = { ok: true, value: cacheOf([]) };
+			await controller.deleteCurrentBookmark();
+
+			expect(fake.deleteArgs).toHaveLength(1);
+			expect(fake.deleteArgs[0]).toBe("https://example.test/page");
+			const view = controller.getView();
+			expect(view.currentBookmark).toBeUndefined();
+			expect(view.recent).toHaveLength(0);
+			expect(view.deleting).toBe(false);
+			expect(view.deleteError).toBeUndefined();
+		});
+
+		it("surfaces a safe error and keeps state when delete fails", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			fake.deleteResult = {
+				ok: false,
+				error: { kind: "drive", message: "cache write  failed\nbadly" },
+			};
+			await controller.deleteCurrentBookmark();
+
+			const view = controller.getView();
+			// Whitespace is collapsed by the safe-message guard.
+			expect(view.deleteError).toBe("cache write failed badly");
+			expect(view.currentBookmark).toBeDefined();
+			expect(view.recent).toHaveLength(1);
+			expect(view.deleting).toBe(false);
+		});
+
+		it("is a no-op when the current page is not bookmarked", async () => {
+			const fake = new FakeUseCases();
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			await controller.deleteCurrentBookmark();
+
+			expect(fake.deleteArgs).toHaveLength(0);
+		});
+
+		it("is a no-op while a save flow is running", async () => {
+			const record = recordOf({});
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([record]);
+			let resolveSave!: (r: Result<SaveOutcome, AppError>) => void;
+			fake.saveCurrentTab = () =>
+				new Promise((resolve) => {
+					resolveSave = resolve;
+				});
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const saving = controller.save();
+			await controller.deleteCurrentBookmark();
+			expect(fake.deleteArgs).toHaveLength(0);
+
+			resolveSave({ ok: true, value: outcomeOf(record) });
+			await saving;
 		});
 	});
 

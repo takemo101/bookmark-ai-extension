@@ -1,29 +1,28 @@
 import { describe, expect, it } from "vitest";
-
+import type { AnalysisInput, AnalysisOutcome } from "../lib/ai/index";
 import {
 	type AnalyzerPort,
+	ok as appOk,
 	type BookmarkRepositoryPort,
 	type Clock,
+	createBookmarkApp,
 	type IdGenerator,
 	type PageExtractorPort,
 	type TabProviderPort,
-	createBookmarkApp,
-	ok as appOk,
 } from "../lib/app/index";
-import type { AnalysisInput, AnalysisOutcome } from "../lib/ai/index";
 import {
 	Bookmarks,
-	type CanonicalUrl,
 	bookmarkId,
+	type CanonicalUrl,
 	isoTimestamp,
 } from "../lib/bookmarks/index";
 import {
 	type DriveFileId,
 	type DriveFolderId,
-	type DriveRevision,
-	type RepositorySnapshot,
 	type Result as DriveResult,
+	type DriveRevision,
 	ok as driveOk,
+	type RepositorySnapshot,
 } from "../lib/drive/index";
 import {
 	type ExtractedPage,

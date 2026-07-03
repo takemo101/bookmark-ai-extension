@@ -12,14 +12,15 @@
  * It is fully testable on its own: drive it with a fake `PopupUseCases` and read
  * `getView()` across states — no DOM, Chrome, Drive, or Prompt API required.
  */
-import type {
-	CacheState,
-	CanonicalUrl,
-	PopupEnvironment,
-	PopupUseCases,
-	ProgressObserver,
-	SaveOutcome,
-	SaveStage,
+import {
+	type CacheState,
+	type CanonicalUrl,
+	canonicalizeUrl,
+	type PopupEnvironment,
+	type PopupUseCases,
+	type ProgressObserver,
+	type SaveOutcome,
+	type SaveStage,
 } from "./use-cases";
 import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
@@ -105,6 +106,21 @@ export type FlowView =
 			readonly message: string;
 	  };
 
+/**
+ * The current page's bookmark, when the active tab's canonical URL already
+ * exists in the cached collection. Display-safe fields only — the same dedup
+ * key as save/upsert, so "already bookmarked" always matches what a duplicate
+ * save would update (docs/design.md "Duplicate Behavior").
+ */
+export type CurrentBookmarkView = {
+	readonly canonicalUrl: string;
+	readonly title: string;
+	readonly url: string;
+	readonly description?: string;
+	readonly aiStatus: AiStatus;
+	readonly updatedAt: string;
+};
+
 export type SyncView = {
 	readonly status: SyncStatus;
 	readonly lastSyncedAt?: string;
@@ -127,6 +143,12 @@ export type PopupView = {
 	readonly flow: FlowView;
 	readonly recent: readonly RecentItemView[];
 	readonly canSave: boolean;
+	/** Present when the active tab is already bookmarked (canonical-URL match). */
+	readonly currentBookmark?: CurrentBookmarkView;
+	/** Whether a delete of the current page's bookmark is in flight. */
+	readonly deleting: boolean;
+	/** Safe, token-free message when the last delete failed. */
+	readonly deleteError?: string;
 };
 
 export type TabInfoView = { readonly title: string; readonly url: string };
@@ -140,6 +162,8 @@ export interface PopupController {
 	save(): Promise<void>;
 	/** Re-analyze a recent bookmark by its (display) canonical URL. */
 	reAnalyze(canonicalUrl: string): Promise<void>;
+	/** Delete the current page's bookmark (no-op unless one exists and no flow runs). */
+	deleteCurrentBookmark(): Promise<void>;
 	/** Pull the authoritative store from Drive and refresh recents/sync badge. */
 	refresh(): Promise<void>;
 }
@@ -154,6 +178,7 @@ const INITIAL_VIEW: PopupView = {
 	flow: { kind: "idle" },
 	recent: [],
 	canSave: false,
+	deleting: false,
 };
 
 export function createPopupController(
@@ -164,6 +189,10 @@ export function createPopupController(
 	// Display canonical URLs map back to their branded value so re-analyze never
 	// re-parses or casts a raw string (parse, don't validate).
 	let canonicalByDisplay = new Map<string, CanonicalUrl>();
+	// The active tab's canonical URL — the same dedup key save/upsert uses — so
+	// "already bookmarked" and delete target exactly what a duplicate save would
+	// update. Undefined when the tab is missing or its URL is not bookmarkable.
+	let tabCanonical: CanonicalUrl | undefined;
 
 	function setView(next: Partial<PopupView>): void {
 		view = { ...view, ...next };
@@ -183,6 +212,35 @@ export function createPopupController(
 			});
 		canonicalByDisplay = next;
 		return items;
+	}
+
+	function mapCurrentBookmark(
+		state: CacheState,
+	): CurrentBookmarkView | undefined {
+		if (!tabCanonical) {
+			return undefined;
+		}
+		const record = state.bookmarks.get(tabCanonical);
+		if (!record) {
+			return undefined;
+		}
+		return {
+			canonicalUrl: record.canonicalUrl,
+			title: record.title,
+			url: record.url,
+			description: record.description,
+			aiStatus: record.aiStatus,
+			updatedAt: record.updatedAt,
+		};
+	}
+
+	/** The recent/sync/current-page projections that any cache refresh updates together. */
+	function mapState(state: CacheState): Partial<PopupView> {
+		return {
+			recent: mapRecent(state),
+			sync: mapSync(state),
+			currentBookmark: mapCurrentBookmark(state),
+		};
 	}
 
 	function mapSync(state: CacheState): SyncView {
@@ -216,6 +274,7 @@ export function createPopupController(
 		setView({
 			flow: { kind: "running", trail: runningTrail("saving") },
 			canSave: false,
+			deleteError: undefined,
 		});
 
 		const onProgress: ProgressObserver = ({ stage }) => {
@@ -228,10 +287,11 @@ export function createPopupController(
 		const result = await invoke(onProgress);
 		setView({ flow: finalizeFlow(result), canSave: true });
 
-		// Refresh recents/sync from cache so the saved bookmark is visible even when
-		// AI was unavailable/failed or Drive did not accept the write.
+		// Refresh recents/sync/current-page from cache so the saved bookmark is
+		// visible even when AI was unavailable/failed or Drive did not accept the
+		// write — and the "Already bookmarked" state appears right after a save.
 		const state = await useCases.loadCachedState();
-		setView({ recent: mapRecent(state), sync: mapSync(state) });
+		setView(mapState(state));
 	}
 
 	return {
@@ -248,6 +308,14 @@ export function createPopupController(
 				useCases.environment(),
 				useCases.loadCachedState(),
 			]);
+			// A missing tab or a non-http(s) URL simply yields no canonical key, so
+			// `currentBookmark` stays undefined and save behavior is unchanged.
+			if (tab.ok) {
+				const canonical = canonicalizeUrl(tab.value.url);
+				tabCanonical = canonical.ok ? canonical.value : undefined;
+			} else {
+				tabCanonical = undefined;
+			}
 			setView({
 				loading: false,
 				tab: tab.ok
@@ -255,8 +323,7 @@ export function createPopupController(
 					: undefined,
 				connection: environment.connection,
 				promptApi: environment.promptApi,
-				recent: mapRecent(state),
-				sync: mapSync(state),
+				...mapState(state),
 				canSave: view.flow.kind !== "running",
 			});
 		},
@@ -278,18 +345,41 @@ export function createPopupController(
 				useCases.reAnalyzeBookmark(branded, onProgress),
 			);
 		},
+		async deleteCurrentBookmark() {
+			// Guard: nothing to delete, or a save/re-analyze/delete already runs —
+			// deleting mid-flow could race the flow's own cache writes.
+			if (
+				view.flow.kind === "running" ||
+				view.deleting ||
+				!view.currentBookmark ||
+				!tabCanonical
+			) {
+				return;
+			}
+			setView({ deleting: true, deleteError: undefined });
+			const result = await useCases.deleteBookmark(tabCanonical);
+			if (result.ok) {
+				// The domain tombstone delete already reconciled the cache; a Drive
+				// write failure surfaces through the sync badge (`pending`), not here.
+				setView({ deleting: false, ...mapState(result.value) });
+				return;
+			}
+			const state = await useCases.loadCachedState();
+			setView({
+				deleting: false,
+				deleteError: safeMessage(result.error.message),
+				...mapState(state),
+			});
+		},
 		async refresh() {
 			const result = await useCases.syncFromDrive();
 			if (result.ok) {
-				setView({
-					recent: mapRecent(result.value),
-					sync: mapSync(result.value),
-				});
+				setView(mapState(result.value));
 				return;
 			}
 			// Keep recents; surface the safe sync error message.
 			const state = await useCases.loadCachedState();
-			setView({ recent: mapRecent(state), sync: mapSync(state) });
+			setView(mapState(state));
 		},
 	};
 }
