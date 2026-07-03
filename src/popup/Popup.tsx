@@ -11,12 +11,18 @@
  * component is trivially renderable with a fake in tests.
  */
 import { useEffect, useSyncExternalStore } from "react";
+// UI-only dependency (MIK-028): the safe Markdown renderer and its style
+// tokens, no Options controller state — the sanctioned reuse of the
+// no-raw-HTML rendering posture (docs/ai-analysis-v2.md "UI behavior").
+import { AnalysisMarkdown } from "../options/markdown";
 import { openOptionsPage } from "./open-options";
 import {
 	card,
+	detailOverlay,
 	palette,
 	primaryButton,
 	primaryButtonDisabled,
+	recentRowButton,
 	statusColor,
 	subtleButton,
 	surface,
@@ -26,6 +32,7 @@ import type {
 	AiPreview,
 	FlowView,
 	PopupController,
+	PopupDetailView,
 	PopupView,
 	RecentItemView,
 	TrailStage,
@@ -60,8 +67,15 @@ export function Popup({ controller }: { controller: PopupController }) {
 				items={view.recent}
 				busy={view.flow.kind === "running" || view.deleting}
 				onReAnalyze={(url) => void controller.reAnalyze(url)}
+				onSelect={(url) => controller.selectRecent(url)}
 			/>
 			<Footer />
+			{view.selectedRecent ? (
+				<RecentDetail
+					detail={view.selectedRecent}
+					onClose={() => controller.clearRecentSelection()}
+				/>
+			) : null}
 		</main>
 	);
 }
@@ -404,16 +418,20 @@ function Preview({ preview }: { preview: AiPreview }) {
  * Compact recent list (MIK-027): one line per bookmark — title, status pill,
  * and an inline Re-analyze affordance when the status is not `ready`. The
  * title tooltip carries the description/URL the row no longer shows; the full
- * ledger lives in Options, never here.
+ * ledger lives in Options, never here. Clicking the title opens the compact
+ * detail overlay (MIK-028); Re-analyze stops propagation so it never also
+ * opens the detail.
  */
 function Recent({
 	items,
 	busy,
 	onReAnalyze,
+	onSelect,
 }: {
 	items: readonly RecentItemView[];
 	busy: boolean;
 	onReAnalyze: (canonicalUrl: string) => void;
+	onSelect: (canonicalUrl: string) => void;
 }) {
 	if (items.length === 0) {
 		return null;
@@ -443,19 +461,15 @@ function Recent({
 							alignItems: "center",
 						}}
 					>
-						<div
+						<button
+							type="button"
 							title={item.description ?? item.url}
-							style={{
-								minWidth: 0,
-								flex: 1,
-								fontSize: 12,
-								overflow: "hidden",
-								textOverflow: "ellipsis",
-								whiteSpace: "nowrap",
-							}}
+							style={recentRowButton}
+							aria-haspopup="dialog"
+							onClick={() => onSelect(item.canonicalUrl)}
 						>
 							{item.title}
-						</div>
+						</button>
 						<StatusPill status={item.aiStatus} />
 						{item.canReAnalyze ? (
 							<button
@@ -466,7 +480,11 @@ function Recent({
 										: subtleButton
 								}
 								disabled={busy}
-								onClick={() => onReAnalyze(item.canonicalUrl)}
+								onClick={(event) => {
+									// Never also open the detail behind the inline action.
+									event.stopPropagation();
+									onReAnalyze(item.canonicalUrl);
+								}}
 							>
 								Re-analyze
 							</button>
@@ -476,6 +494,149 @@ function Recent({
 			</ul>
 		</section>
 	);
+}
+
+/**
+ * The compact recent-bookmark detail (MIK-028): a full-popup overlay — the
+ * 340px receipt has no room for a side sheet — with Back/Close, the link, the
+ * AI description/genre/tags, and the long-form analysis rendered through the
+ * safe Markdown component (no raw HTML execution). A reading surface only:
+ * no delete, no filters, no full ledger — those stay in Options.
+ */
+function RecentDetail({
+	detail,
+	onClose,
+}: {
+	detail: PopupDetailView;
+	onClose: () => void;
+}) {
+	return (
+		<section
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="recent-detail-title"
+			style={detailOverlay}
+		>
+			<header>
+				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+					<button
+						type="button"
+						style={subtleButton}
+						onClick={onClose}
+						// Best-effort focus management: land keyboard focus inside the
+						// dialog when it opens.
+						autoFocus
+					>
+						← Back
+					</button>
+					<span style={{ flex: 1 }} />
+					<StatusPill status={detail.aiStatus} />
+					<button
+						type="button"
+						style={subtleButton}
+						onClick={onClose}
+						aria-label="Close details"
+					>
+						✕
+					</button>
+				</div>
+				<h2
+					id="recent-detail-title"
+					style={{ fontSize: 15, margin: "10px 0 2px" }}
+				>
+					{detail.title}
+				</h2>
+				<a
+					href={detail.url}
+					target="_blank"
+					rel="noreferrer"
+					style={{
+						fontSize: 11,
+						color: palette.accent,
+						wordBreak: "break-all",
+					}}
+				>
+					{detail.url}
+				</a>
+			</header>
+
+			{detail.description ? (
+				<p style={{ fontSize: 12, color: palette.ink, margin: "8px 0 0" }}>
+					{detail.description}
+				</p>
+			) : null}
+
+			{detail.genre || detail.tags.length > 0 ? (
+				<div
+					style={{
+						display: "flex",
+						flexWrap: "wrap",
+						gap: 4,
+						alignItems: "center",
+						marginTop: 6,
+					}}
+				>
+					{detail.genre ? (
+						<span
+							style={{
+								fontSize: 11,
+								color: palette.accent,
+								border: `1px solid ${palette.border}`,
+								borderRadius: 6,
+								padding: "1px 6px",
+							}}
+						>
+							{detail.genre}
+						</span>
+					) : null}
+					{detail.tags.map((t) => (
+						<span key={t} style={{ fontSize: 11, color: palette.inkSoft }}>
+							#{t}
+						</span>
+					))}
+				</div>
+			) : null}
+
+			{detail.analysisMarkdown ? (
+				<div
+					style={{
+						marginTop: 10,
+						paddingTop: 8,
+						borderTop: `1px solid ${palette.border}`,
+					}}
+				>
+					<AnalysisMarkdown markdown={detail.analysisMarkdown} />
+				</div>
+			) : null}
+
+			{detail.aiError ? (
+				<p style={{ fontSize: 11, color: palette.danger, margin: "8px 0 0" }}>
+					{detail.aiError}
+				</p>
+			) : null}
+
+			<p style={{ fontSize: 10, color: palette.inkFaint, margin: "10px 0 0" }}>
+				Updated {formatDate(detail.updatedAt)}
+				{detail.analysisProfileId ? ` · ${detail.analysisProfileId}` : ""}
+			</p>
+		</section>
+	);
+}
+
+/**
+ * Render an ISO timestamp as a short local date. Display-only formatting; the
+ * stored value remains the canonical ISO string from the domain.
+ */
+function formatDate(iso: string): string {
+	const parsed = new Date(iso);
+	if (Number.isNaN(parsed.getTime())) {
+		return iso;
+	}
+	return parsed.toLocaleDateString(undefined, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	});
 }
 
 function Footer() {

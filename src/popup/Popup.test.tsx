@@ -5,6 +5,7 @@ import { Popup } from "./Popup";
 import type {
 	CurrentBookmarkView,
 	PopupController,
+	PopupDetailView,
 	PopupView,
 	RecentItemView,
 	TrailStage,
@@ -80,8 +81,26 @@ function controllerOf(view: PopupView): PopupController {
 		init: async () => {},
 		save: async () => {},
 		reAnalyze: async () => {},
+		selectRecent: () => {},
+		clearRecentSelection: () => {},
 		deleteCurrentBookmark: async () => {},
 		refresh: async () => {},
+	};
+}
+
+function detailOf(overrides: Partial<PopupDetailView> = {}): PopupDetailView {
+	return {
+		canonicalUrl: URL,
+		title: "Recent Page",
+		url: URL,
+		description: "説明文",
+		genre: "技術",
+		tags: ["typescript"],
+		aiStatus: "ready",
+		updatedAt: "2026-03-01T00:00:00Z",
+		analysisMarkdown: "## 概要\n\n分析本文。",
+		analysisProfileId: "github-repository",
+		...overrides,
 	};
 }
 
@@ -141,6 +160,78 @@ describe("Popup", () => {
 			expect(html).toContain("AI analysis is running in the foreground");
 			expect(html).toContain("Keep this popup open");
 			expect(html).toContain("stay on the saved page until it finishes");
+		});
+	});
+
+	describe("recent detail (MIK-028)", () => {
+		it("renders recent titles as clickable detail openers", () => {
+			const html = render(viewOf({ recent: [recentOf()] }));
+
+			// The row title is a real button that opens the detail dialog.
+			expect(html).toContain('aria-haspopup="dialog"');
+			expect(html).not.toContain('role="dialog"');
+		});
+
+		it("opens a compact detail overlay with Back/Close and safe Markdown", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: detailOf() }),
+			);
+
+			expect(html).toContain('role="dialog"');
+			expect(html).toContain('aria-modal="true"');
+			expect(html).toContain('aria-labelledby="recent-detail-title"');
+			expect(html).toContain("← Back");
+			expect(html).toContain('aria-label="Close details"');
+			// The analysisMarkdown renders through react-markdown as elements, never
+			// as raw text or injected HTML.
+			expect(html).toContain("概要");
+			expect(html).toContain("分析本文。");
+			expect(html).not.toContain("## 概要");
+			// The link opens in a new tab without a referrer.
+			expect(html).toContain('rel="noreferrer"');
+			expect(html).toContain("github-repository");
+		});
+
+		it("keeps raw HTML in the analysis inert (no execution path)", () => {
+			const html = render(
+				viewOf({
+					recent: [recentOf()],
+					selectedRecent: detailOf({
+						analysisMarkdown: '<img src=x onerror="alert(1)">攻撃',
+					}),
+				}),
+			);
+
+			// react-markdown without rehype-raw emits raw HTML as escaped literal
+			// text, so no <img> element (or its onerror) ever reaches the DOM.
+			expect(html).not.toContain("<img");
+			expect(html).toContain("攻撃");
+		});
+
+		it("shows status and a safe error for a failed bookmark without Markdown", () => {
+			const html = render(
+				viewOf({
+					recent: [recentOf()],
+					selectedRecent: detailOf({
+						aiStatus: "failed",
+						aiError: "model returned no JSON",
+						analysisMarkdown: undefined,
+					}),
+				}),
+			);
+
+			expect(html).toContain("failed");
+			expect(html).toContain("model returned no JSON");
+		});
+
+		it("renders no full-ledger affordances in the detail", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: detailOf() }),
+			);
+
+			// A reading surface only: delete/search/filters stay in Options.
+			expect(html).not.toContain(">Delete<");
+			expect(html).not.toContain("Search bookmarks");
 		});
 	});
 

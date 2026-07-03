@@ -301,6 +301,12 @@ is kept for historical reference only.
 - If the current page is already bookmarked, show that state on the current
   tab receipt with a Remove affordance (MIK-027); a repeated Save & Analyze
   is the normal duplicate upsert and refreshes the analysis.
+- Clicking a recent bookmark opens a compact detail overlay (MIK-028) that
+  renders the cached `analysisMarkdown` through the same safe Markdown
+  component as Options: `react-markdown` + `remark-gfm` only, no
+  `rehype-raw`, no `dangerouslySetInnerHTML`, links open in a new tab with
+  `rel="noreferrer"`. Back/Close return to the receipt; the popup never
+  becomes the full ledger.
 
 ### Options
 

@@ -294,6 +294,102 @@ describe("createOptionsController", () => {
 		});
 	});
 
+	describe("domain filter (MIK-028)", () => {
+		function seeded() {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({
+					id: "gh-1",
+					url: "https://www.github.test/repo?utm_source=x",
+					title: "GitHub repo",
+					tags: ["TypeScript"],
+					aiStatus: "ready",
+				}),
+				recordOf({
+					id: "gh-2",
+					url: "https://github.test/other",
+					title: "GitHub other",
+					aiStatus: "pending",
+				}),
+				recordOf({
+					id: "news",
+					url: "https://news.test/story",
+					title: "News article",
+					aiStatus: "ready",
+				}),
+			]);
+			return fake;
+		}
+
+		it("derives sorted www-free domain facets from canonical URLs", async () => {
+			const controller = controllerWith(seeded());
+			await controller.init();
+
+			expect(controller.getView().facets.domains).toEqual([
+				"github.test",
+				"news.test",
+			]);
+		});
+
+		it("filters rows by domain", async () => {
+			const controller = controllerWith(seeded());
+			await controller.init();
+
+			controller.setDomain("github.test");
+			const view = controller.getView();
+
+			expect(view.filters.domain).toBe("github.test");
+			expect(view.rows.map((r) => r.title).sort()).toEqual([
+				"GitHub other",
+				"GitHub repo",
+			]);
+		});
+
+		it("combines the domain filter with query/tag/status filters", async () => {
+			const controller = controllerWith(seeded());
+			await controller.init();
+
+			controller.setDomain("github.test");
+			controller.setStatus("ready");
+			expect(controller.getView().rows.map((r) => r.title)).toEqual([
+				"GitHub repo",
+			]);
+
+			controller.setTag("TypeScript");
+			expect(controller.getView().rows.map((r) => r.title)).toEqual([
+				"GitHub repo",
+			]);
+
+			controller.setQuery("news");
+			expect(controller.getView().noMatches).toBe(true);
+		});
+
+		it("clearFilters resets the domain filter too", async () => {
+			const controller = controllerWith(seeded());
+			await controller.init();
+
+			controller.setDomain("news.test");
+			expect(controller.getView().filteredCount).toBe(1);
+
+			controller.clearFilters();
+			const view = controller.getView();
+
+			expect(view.filters).toEqual({ query: "" });
+			expect(view.filteredCount).toBe(3);
+		});
+
+		it("setDomain(undefined) removes the domain filter", async () => {
+			const controller = controllerWith(seeded());
+			await controller.init();
+
+			controller.setDomain("news.test");
+			controller.setDomain(undefined);
+
+			expect(controller.getView().filters.domain).toBeUndefined();
+			expect(controller.getView().filteredCount).toBe(3);
+		});
+	});
+
 	describe("select", () => {
 		it("selects a bookmark and shows its detail", async () => {
 			const fake = new FakeUseCases();

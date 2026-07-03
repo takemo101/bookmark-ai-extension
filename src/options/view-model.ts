@@ -36,6 +36,8 @@ export type FiltersView = {
 	readonly genre?: string;
 	readonly tag?: string;
 	readonly aiStatus?: AiStatus;
+	/** Host filter derived from canonical URLs (MIK-028), e.g. `github.com`. */
+	readonly domain?: string;
 };
 
 /** The available filter facets derived from the full collection. */
@@ -43,6 +45,8 @@ export type FacetsView = {
 	readonly genres: readonly string[];
 	readonly tags: readonly string[];
 	readonly statuses: readonly AiStatus[];
+	/** Distinct bookmark domains, sorted, derived on demand (MIK-028). */
+	readonly domains: readonly string[];
 };
 
 /** A single dense bookmark row in the center ledger. */
@@ -136,6 +140,7 @@ export interface OptionsController {
 	setGenre(genre: string | undefined): void;
 	setTag(tag: string | undefined): void;
 	setStatus(status: AiStatus | undefined): void;
+	setDomain(domain: string | undefined): void;
 	clearFilters(): void;
 	select(canonicalUrl: string): void;
 	clearSelection(): void;
@@ -223,6 +228,7 @@ export function createOptionsController(
 					genre: filters.genre,
 					tag: filters.tag,
 					aiStatus: filters.aiStatus,
+					domain: filters.domain,
 				})
 			: [];
 
@@ -245,6 +251,7 @@ export function createOptionsController(
 				genres: bookmarks?.genres() ?? [],
 				tags: bookmarks?.tags() ?? [],
 				statuses: STATUS_OPTIONS,
+				domains: bookmarks?.domains() ?? [],
 			},
 			rows,
 			totalCount,
@@ -337,6 +344,10 @@ export function createOptionsController(
 		},
 		setStatus(status) {
 			filters = { ...filters, aiStatus: status };
+			notify();
+		},
+		setDomain(domain) {
+			filters = { ...filters, domain: domain || undefined };
 			notify();
 		},
 		clearFilters() {

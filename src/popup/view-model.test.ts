@@ -37,6 +37,8 @@ function recordOf(opts: {
 	tags?: string[];
 	aiError?: string;
 	id?: string;
+	analysisMarkdown?: string;
+	analysisProfileId?: string;
 }): BookmarkRecord {
 	const res = Bookmarks.empty().upsert(
 		{
@@ -47,6 +49,8 @@ function recordOf(opts: {
 			genre: opts.genre,
 			tags: opts.tags,
 			aiError: opts.aiError,
+			analysisMarkdown: opts.analysisMarkdown,
+			analysisProfileId: opts.analysisProfileId,
 		},
 		{
 			id: bookmarkId(opts.id ?? "id-1"),
@@ -530,6 +534,117 @@ describe("createPopupController", () => {
 
 			expect(fake.reAnalyzeArgs).toHaveLength(0);
 			expect(controller.getView().flow.kind).toBe("idle");
+		});
+	});
+
+	describe("recent detail (MIK-028)", () => {
+		it("opens the compact detail for a known recent bookmark", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({
+					title: "Saved One",
+					description: "説明文",
+					genre: "技術",
+					tags: ["a", "b"],
+					analysisMarkdown: "## 概要\n\n分析本文。",
+					analysisProfileId: "github-repository",
+				}),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const target = controller.getView().recent[0].canonicalUrl;
+			controller.selectRecent(target);
+			const detail = controller.getView().selectedRecent;
+
+			expect(detail).toBeDefined();
+			expect(detail?.title).toBe("Saved One");
+			expect(detail?.description).toBe("説明文");
+			expect(detail?.genre).toBe("技術");
+			expect(detail?.tags).toEqual(["a", "b"]);
+			expect(detail?.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(detail?.analysisProfileId).toBe("github-repository");
+		});
+
+		it("is a no-op for an unknown canonical URL", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent("https://unknown.test/");
+
+			expect(controller.getView().selectedRecent).toBeUndefined();
+		});
+
+		it("clearRecentSelection closes the detail", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const target = controller.getView().recent[0].canonicalUrl;
+			controller.selectRecent(target);
+			expect(controller.getView().selectedRecent).toBeDefined();
+
+			controller.clearRecentSelection();
+
+			expect(controller.getView().selectedRecent).toBeUndefined();
+		});
+
+		it("updates the open detail in place after a refresh", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({ aiStatus: "pending" })]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const target = controller.getView().recent[0].canonicalUrl;
+			controller.selectRecent(target);
+			expect(controller.getView().selectedRecent?.aiStatus).toBe("pending");
+
+			fake.syncResult = {
+				ok: true,
+				value: cacheOf([
+					recordOf({ aiStatus: "ready", analysisMarkdown: "## 更新後" }),
+				]),
+			};
+			await controller.refresh();
+
+			const detail = controller.getView().selectedRecent;
+			expect(detail?.aiStatus).toBe("ready");
+			expect(detail?.analysisMarkdown).toBe("## 更新後");
+		});
+
+		it("drops the selection when the record disappears from the cache", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const target = controller.getView().recent[0].canonicalUrl;
+			controller.selectRecent(target);
+			expect(controller.getView().selectedRecent).toBeDefined();
+
+			fake.syncResult = { ok: true, value: cacheOf([]) };
+			await controller.refresh();
+
+			expect(controller.getView().selectedRecent).toBeUndefined();
+		});
+
+		it("surfaces a safe aiError on the detail", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({ aiStatus: "failed", aiError: "model  returned\nno JSON" }),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent(controller.getView().recent[0].canonicalUrl);
+
+			// Whitespace is collapsed by the safe-message guard.
+			expect(controller.getView().selectedRecent?.aiError).toBe(
+				"model returned no JSON",
+			);
 		});
 	});
 

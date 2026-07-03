@@ -80,6 +80,46 @@ export const subtleButton: CSSProperties = {
 	cursor: "pointer",
 };
 
+/**
+ * The clickable recent-row title (MIK-028): a real button for keyboard users,
+ * visually just the truncated one-line title the compact list already shows.
+ */
+export const recentRowButton: CSSProperties = {
+	flex: 1,
+	minWidth: 0,
+	margin: 0,
+	padding: 0,
+	textAlign: "left",
+	fontFamily: fontStack,
+	fontSize: 12,
+	color: palette.ink,
+	background: "transparent",
+	border: "none",
+	cursor: "pointer",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
+	lineHeight: 1.4,
+};
+
+/**
+ * Full-popup takeover for a recent bookmark's compact detail (MIK-028). The
+ * popup is too narrow for a side sheet, so the detail covers the receipt and
+ * scrolls on its own; Back/Close return to the receipt underneath.
+ */
+export const detailOverlay: CSSProperties = {
+	position: "fixed",
+	inset: 0,
+	boxSizing: "border-box",
+	padding: "14px 18px 18px",
+	fontFamily: fontStack,
+	color: palette.ink,
+	background: palette.paper,
+	overflowY: "auto",
+	zIndex: 10,
+	lineHeight: 1.4,
+};
+
 /** A status dot/badge color for the AI status and connection badges. */
 export function statusColor(
 	tone: "ok" | "warn" | "danger" | "neutral",
