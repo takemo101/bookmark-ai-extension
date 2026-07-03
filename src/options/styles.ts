@@ -141,6 +141,74 @@ export const rowSelected: CSSProperties = {
 	border: `1px solid ${palette.borderStrong}`,
 };
 
+/**
+ * The row's main open-detail hit area. The row container is a plain flex box
+ * (a `<button>` cannot legally nest the quick-delete `<button>`), so this reset
+ * keeps the title/summary block a real button for keyboard users while the
+ * visual row chrome stays on the container.
+ */
+export const rowOpenButton: CSSProperties = {
+	flex: 1,
+	minWidth: 0,
+	margin: 0,
+	padding: 0,
+	textAlign: "left",
+	background: "transparent",
+	border: "none",
+	cursor: "pointer",
+	fontFamily: fontStack,
+	color: palette.ink,
+	lineHeight: 1.45,
+};
+
+/** Compact per-row quick delete (MIK-024): danger-toned but visually small. */
+export const rowDeleteButton: CSSProperties = {
+	padding: "1px 7px",
+	fontFamily: fontStack,
+	fontSize: 11,
+	lineHeight: 1.6,
+	color: palette.danger,
+	background: "transparent",
+	border: `1px solid ${palette.border}`,
+	borderRadius: 6,
+	cursor: "pointer",
+};
+
+/**
+ * Expanded TAGS facet container (MIK-024): once the user shows all tags, the
+ * list scrolls inside a capped box instead of stretching the sticky rail past
+ * the viewport.
+ */
+export const tagListExpanded: CSSProperties = {
+	maxHeight: 240,
+	overflowY: "auto",
+};
+
+/**
+ * Floating Drive sync action (MIK-024): fixed bottom-right so sync is always
+ * reachable without occupying rail space. Sits below the detail sheet backdrop
+ * (zIndex 20) so the modal sheet still covers it.
+ */
+export const floatingSyncButton: CSSProperties = {
+	position: "fixed",
+	right: 24,
+	bottom: 24,
+	zIndex: 10,
+	display: "flex",
+	alignItems: "center",
+	gap: 8,
+	padding: "10px 16px",
+	fontFamily: fontStack,
+	fontSize: 13,
+	fontWeight: 600,
+	color: palette.accent,
+	background: palette.paperRaised,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 999,
+	boxShadow: "0 6px 18px rgba(58, 52, 43, 0.22)",
+	cursor: "pointer",
+};
+
 export const truncate: CSSProperties = {
 	overflow: "hidden",
 	textOverflow: "ellipsis",

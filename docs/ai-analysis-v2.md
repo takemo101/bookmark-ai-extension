@@ -58,7 +58,9 @@ worth revisiting.
   operation. They are not saved to Drive or persistent local storage.
 - Analysis runs while the popup/options page stays open. If the UI closes
   mid-operation, the in-memory excerpt is dropped; the durable pending bookmark
-  remains and the user can re-analyze later from a valid active tab.
+  remains and the user can re-run analysis later from a valid active tab (e.g.
+  by saving the page again from the popup — the Options detail sheet does not
+  offer Re-analyze, MIK-024).
 - Service-worker/background/offscreen Prompt API processing is not pursued for
   the MVP (MIK-020 conclusion, adopted by MIK-021).
 
@@ -301,6 +303,8 @@ is kept for historical reference only.
   `react-markdown` + `remark-gfm`: no `rehype-raw`, no
   `dangerouslySetInnerHTML`, so raw HTML in AI output is never executed;
   Markdown links open in a new tab with `rel="noreferrer"`.
+- The detail sheet offers Open, Delete, and Close only; it does not trigger
+  re-analysis (MIK-024).
 - Search includes `analysisMarkdown`.
 - Show which `analysisProfileId` generated the current analysis.
 - Provide custom skill CRUD:

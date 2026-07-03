@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Options } from "./Options";
+import { lockScroll, Options, visibleTagFacets } from "./Options";
 import type {
 	DetailView,
 	OptionsController,
@@ -10,12 +10,15 @@ import type {
 } from "./view-model";
 
 /**
- * Static-markup tests for the MIK-022 detail sheet: the component is rendered
- * with a fake controller and a fixed view, no DOM or Chrome required. Event
- * behavior (Escape, backdrop click) lives in handlers the controller tests
- * cover indirectly; here we pin the rendered structure — the old detail pane
- * is gone, the sheet carries dialog semantics, and busy state disables the
- * mutating actions while keeping Open/Close available.
+ * Static-markup tests for the MIK-022 detail sheet and the MIK-024 list
+ * polish: the component is rendered with a fake controller and a fixed view,
+ * no DOM or Chrome required. Event behavior (Escape, backdrop click, quick
+ * delete stopPropagation) lives in handlers the controller tests cover
+ * indirectly; here we pin the rendered structure — the sheet carries dialog
+ * semantics without a Re-analyze action, rows carry a quick delete button,
+ * the tag facet collapses behind a cap, and Drive sync floats instead of
+ * sitting in the rail. The scroll-lock and tag-cap logic are unit-tested via
+ * their exported helpers because tests run in node, not jsdom.
  */
 
 function detailOf(overrides: Partial<DetailView> = {}): DetailView {
@@ -135,24 +138,191 @@ describe("Options detail sheet", () => {
 		expect(html).toContain('aria-expanded="true"');
 	});
 
-	it("keeps Open/Close while disabling Re-analyze/Delete and warns during busy analysis", () => {
+	it("offers only Open/Delete/Close — never Re-analyze (MIK-024)", () => {
 		const html = render(
 			viewOf({
 				rows: [rowOf({ selected: true, canReAnalyze: true })],
 				totalCount: 1,
 				filteredCount: 1,
 				empty: false,
-				busy: true,
 				selected: detailOf({ aiStatus: "failed", canReAnalyze: true }),
 			}),
 		);
 
-		expect(html).toContain(
-			"Analyzing in the foreground — keep this page open until it finishes.",
+		expect(html).toContain(">Open<");
+		expect(html).toContain(">Delete<");
+		expect(html).toContain(">Close<");
+		expect(html).not.toContain("Re-analyze");
+		expect(html).not.toContain("Analyzing…");
+	});
+
+	it("keeps Open/Close while disabling Delete and warns during a busy action", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf({ selected: true })],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				busy: true,
+				selected: detailOf(),
+			}),
 		);
-		expect(html).toContain("Analyzing…");
+
+		expect(html).toContain("Working — keep this page open until it finishes.");
 		expect(html).toContain("disabled");
 		expect(html).toContain(">Open<");
 		expect(html).toContain(">Close<");
+	});
+});
+
+describe("Options scroll lock (MIK-024)", () => {
+	it("hides overflow while locked and restores the previous value on unlock", () => {
+		const body = { style: { overflow: "scroll" } };
+
+		const restore = lockScroll(body);
+		expect(body.style.overflow).toBe("hidden");
+
+		restore();
+		expect(body.style.overflow).toBe("scroll");
+	});
+});
+
+describe("Options row quick delete (MIK-024)", () => {
+	it("renders a quick delete button on each row", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+		);
+
+		expect(html).toContain('aria-label="Delete Selected bookmark"');
+		expect(html).not.toContain("disabled");
+	});
+
+	it("disables quick delete while an action is busy", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				busy: true,
+			}),
+		);
+
+		expect(html).toContain('aria-label="Delete Selected bookmark"');
+		expect(html).toContain("disabled");
+	});
+});
+
+describe("Options tag facet cap (MIK-024)", () => {
+	const manyTags = Array.from(
+		{ length: 20 },
+		(_, i) => `tag-${String(i + 1).padStart(2, "0")}`,
+	);
+
+	it("collapses a long tag list behind a Show all toggle", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				facets: {
+					genres: [],
+					tags: manyTags,
+					statuses: ["ready", "pending", "unavailable", "failed"],
+				},
+			}),
+		);
+
+		expect(html).toContain("#tag-01");
+		expect(html).toContain("#tag-12");
+		expect(html).not.toContain("#tag-13");
+		expect(html).toContain("Show all 20 tags");
+	});
+
+	it("shows every tag with no toggle when the list fits the cap", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				facets: {
+					genres: [],
+					tags: manyTags.slice(0, 5),
+					statuses: ["ready", "pending", "unavailable", "failed"],
+				},
+			}),
+		);
+
+		expect(html).toContain("#tag-05");
+		expect(html).not.toContain("Show all");
+	});
+
+	it("keeps the active tag filter visible even when collapsed beyond the cap", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				filters: { query: "", tag: "tag-20" },
+				facets: {
+					genres: [],
+					tags: manyTags,
+					statuses: ["ready", "pending", "unavailable", "failed"],
+				},
+			}),
+		);
+
+		expect(html).toContain("#tag-20");
+		expect(html).not.toContain("#tag-13");
+	});
+
+	it("returns the full list when expanded (visibleTagFacets)", () => {
+		expect(visibleTagFacets(manyTags, undefined, true)).toEqual(manyTags);
+		expect(visibleTagFacets(manyTags, undefined, false)).toHaveLength(12);
+		expect(visibleTagFacets(manyTags, "tag-20", false)).toContain("tag-20");
+	});
+});
+
+describe("Options Drive sync affordance (MIK-024)", () => {
+	it("renders a floating sync button and no rail Sync now button", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+		);
+
+		expect(html).toContain('aria-label="Sync with Google Drive"');
+		expect(html).toContain("Sync Drive");
+		expect(html).not.toContain("Sync now");
+		// The rail keeps the status readout.
+		expect(html).toContain("Drive sync");
+		expect(html).toContain("synced");
+	});
+
+	it("keeps sync errors and pending-change info visible in the rail", () => {
+		const html = render(
+			viewOf({
+				sync: {
+					status: "error",
+					pendingLocalChanges: true,
+					error: "Drive sync failed",
+				},
+			}),
+		);
+
+		expect(html).toContain("Drive sync failed");
+		expect(html).toContain("Local changes pending — will retry on next sync");
+		expect(html).toContain('aria-label="Sync with Google Drive"');
 	});
 });
