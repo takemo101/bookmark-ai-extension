@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Bookmarks } from "./collection";
+import { Bookmarks, recordDomain } from "./collection";
 import { type BookmarkRecord, parseBookmarkRecord } from "./record";
 import { canonicalizeUrl } from "./url";
 import { type BookmarkId, bookmarkId, isoTimestamp } from "./values";
@@ -518,5 +518,43 @@ describe("Bookmarks search and filter", () => {
 		expect(
 			collection.filter({ query: "github", aiStatus: "pending" }),
 		).toHaveLength(0);
+	});
+
+	it("lists distinct sorted domains as filter facets (MIK-028)", () => {
+		expect(collection.domains()).toEqual(["example.com", "news.example.org"]);
+	});
+
+	it("filters by domain, case-insensitively", () => {
+		expect(
+			collection.filter({ domain: "example.com" }).map((r) => r.id),
+		).toEqual(["bm-1"]);
+		expect(
+			collection.filter({ domain: " News.Example.org " }).map((r) => r.id),
+		).toEqual(["bm-2"]);
+		expect(collection.filter({ domain: "nope.test" })).toHaveLength(0);
+	});
+
+	it("combines the domain filter with other criteria", () => {
+		expect(
+			collection
+				.filter({ domain: "example.com", aiStatus: "ready" })
+				.map((r) => r.id),
+		).toEqual(["bm-1"]);
+		expect(
+			collection.filter({ domain: "example.com", aiStatus: "pending" }),
+		).toHaveLength(0);
+	});
+
+	it("derives the record domain from the canonical URL, dropping www", () => {
+		expect(recordDomain(record())).toBe("example.com");
+		// Defends records that predate the www-stripping canonicalization.
+		expect(
+			recordDomain(
+				record({
+					canonicalUrl: "https://www.legacy.test/a",
+					url: "https://www.legacy.test/a",
+				}),
+			),
+		).toBe("legacy.test");
 	});
 });

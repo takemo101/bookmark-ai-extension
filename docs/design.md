@@ -417,6 +417,14 @@ Popup responsibilities:
   upsert that refreshes the analysis.
 - Show recent saved bookmarks as a compact single-line list (title + AI
   status + inline re-analyze); the full ledger stays in Options.
+- Clicking a recent bookmark's title opens a compact detail overlay (MIK-028):
+  a full-popup reading surface with Back/Close, the link (new tab,
+  `rel="noreferrer"`), AI status, description, genre/tags, and the long-form
+  `analysisMarkdown` rendered through the same safe Markdown component as
+  Options (no `rehype-raw`, no `dangerouslySetInnerHTML`). It is a reading
+  surface only — no delete, search, or filters — and the inline Re-analyze
+  action never also opens it. The detail tracks cache refreshes: it updates in
+  place and closes when the record disappears.
 - Link to options page. `Manage in Options` also requests an Options Drive
   sync (MIK-026): it best-effort writes a token-free request marker (a
   timestamp only, under `bookmark-ai:options-sync-request` in
@@ -442,7 +450,9 @@ Options page responsibilities:
 
 - Show full bookmark list.
 - Text search over title, URL, description, genre, and tags.
-- Filter by genre and tags.
+- Filter by domain, genre, tags, and AI status. Domains are derived on demand
+  from canonical URL hostnames (lowercased, `www.` dropped) — never stored on
+  records (MIK-028).
 - Delete bookmarks — via a per-row quick delete and from the detail sheet.
 - Show Drive sync status and errors, with the sync action as a floating
   button.
@@ -490,11 +500,14 @@ state or the skill form draft.
 
 Use a two-zone ledger layout with a row-click detail sheet:
 
-- Left rail: search, genre filters, tag filters, sync state. The TAGS facet
-  shows a capped set of chips (12) with a `Show all N tags` / `Show fewer
-  tags` toggle; the expanded list scrolls inside a max-height container so a
-  large tag set never makes the rail taller than the viewport, and the active
-  tag filter stays visible even while collapsed.
+- Left rail: three cards — Search (with the shown/total count and Clear
+  filters), the Drive sync status readout, and one grouped Filters panel
+  (MIK-028) with uniform subsections in a fixed order: Domain, Genre, Tags,
+  AI status. Domain and Tags can grow without bound, so each shows a capped
+  set of chips (12) with a `Show all N domains/tags` / `Show fewer` toggle;
+  the expanded list scrolls inside a max-height container so a large facet
+  never makes the rail taller than the viewport, and the active filter value
+  stays visible even while collapsed.
 - Center list: scannable bookmark rows with title, a short clamped AI summary,
   genre/tags/profile metadata, status, updated time, and a small quick delete
   button. Quick delete goes through the existing delete use case, is disabled

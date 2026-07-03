@@ -226,7 +226,8 @@ function LeftRail({
 		view.filters.query.length > 0 ||
 		view.filters.genre !== undefined ||
 		view.filters.tag !== undefined ||
-		view.filters.aiStatus !== undefined;
+		view.filters.aiStatus !== undefined ||
+		view.filters.domain !== undefined;
 
 	return (
 		<aside style={rail}>
@@ -399,30 +400,107 @@ function FloatingSyncButton({
 	);
 }
 
-/** How many tag chips the rail shows before collapsing behind "Show all". */
-const TAG_FACET_CAP = 12;
+/** How many chips a growable facet shows before collapsing behind "Show all". */
+const FACET_CAP = 12;
 
 /**
- * The tags to render given the expansion state (MIK-024): collapsed shows the
- * first {@link TAG_FACET_CAP} chips, but the active tag filter always stays
- * visible so a filter picked while expanded never disappears on collapse.
- * Exported for tests only — view logic, no controller state.
+ * The facet values to render given the expansion state (MIK-024): collapsed
+ * shows the first {@link FACET_CAP} chips, but the active filter value always
+ * stays visible so a filter picked while expanded never disappears on
+ * collapse. Shared by the Tags and Domain facets (MIK-028). Exported for
+ * tests only — view logic, no controller state.
  */
-export function visibleTagFacets(
-	tags: readonly string[],
-	activeTag: string | undefined,
+export function visibleFacetValues<T extends string>(
+	values: readonly T[],
+	active: T | undefined,
 	expanded: boolean,
-): readonly string[] {
-	if (expanded || tags.length <= TAG_FACET_CAP) {
-		return tags;
+): readonly T[] {
+	if (expanded || values.length <= FACET_CAP) {
+		return values;
 	}
-	const capped = tags.slice(0, TAG_FACET_CAP);
-	if (activeTag !== undefined && !capped.includes(activeTag)) {
-		capped.push(activeTag);
+	const capped = values.slice(0, FACET_CAP);
+	if (active !== undefined && !capped.includes(active)) {
+		capped.push(active);
 	}
 	return capped;
 }
 
+/**
+ * One labeled chip group inside the Filters panel (MIK-028): a facet
+ * subsection with single-select toggle chips and — for growable facets — the
+ * capped list behind a `Show all N` toggle. Grouping every facet through this
+ * one shape is what keeps the rail structured instead of scattered.
+ */
+function FacetGroup<T extends string>({
+	label,
+	values,
+	active,
+	onToggle,
+	format = (value) => value,
+	unit = "items",
+	cappable = false,
+}: {
+	label: string;
+	values: readonly T[];
+	active: T | undefined;
+	onToggle: (value: T | undefined) => void;
+	format?: (value: T) => string;
+	/** Plural noun for the Show all/fewer copy of a cappable facet. */
+	unit?: string;
+	cappable?: boolean;
+}) {
+	// Expansion is view-only UI state; it never touches the controller.
+	const [expanded, setExpanded] = useState(false);
+	if (values.length === 0) {
+		return null;
+	}
+	const visible = cappable
+		? visibleFacetValues(values, active, expanded)
+		: values;
+	const overflow = cappable && values.length > FACET_CAP;
+
+	return (
+		<div>
+			<p style={railLabel}>{label}</p>
+			<div
+				style={
+					expanded
+						? { display: "flex", flexWrap: "wrap", gap: 6, ...tagListExpanded }
+						: { display: "flex", flexWrap: "wrap", gap: 6 }
+				}
+			>
+				{visible.map((value) => (
+					<button
+						key={value}
+						type="button"
+						style={active === value ? chipActive : chip}
+						onClick={() => onToggle(active === value ? undefined : value)}
+					>
+						{format(value)}
+					</button>
+				))}
+			</div>
+			{overflow ? (
+				<button
+					type="button"
+					style={{ ...subtleButton, marginTop: 8 }}
+					onClick={() => setExpanded((current) => !current)}
+				>
+					{expanded
+						? `Show fewer ${unit}`
+						: `Show all ${values.length} ${unit}`}
+				</button>
+			) : null}
+		</div>
+	);
+}
+
+/**
+ * The single Filters panel (MIK-028): Domain, Genre, Tags, and AI status as
+ * uniform subsections in one card, replacing the scattered per-facet blocks.
+ * Domain and Tags can grow without bound, so they collapse behind the shared
+ * facet cap; Genre and AI status stay small and render fully.
+ */
 function FilterFacets({
 	facets,
 	filters,
@@ -432,94 +510,41 @@ function FilterFacets({
 	filters: FiltersView;
 	controller: OptionsController;
 }) {
-	// Expansion is view-only UI state; it never touches the controller.
-	const [tagsExpanded, setTagsExpanded] = useState(false);
-	const tags = visibleTagFacets(facets.tags, filters.tag, tagsExpanded);
-	const overflowCount = facets.tags.length - TAG_FACET_CAP;
-
 	return (
-		<section style={panel}>
-			<p style={railLabel}>AI status</p>
-			<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-				{facets.statuses.map((status) => (
-					<button
-						key={status}
-						type="button"
-						style={filters.aiStatus === status ? chipActive : chip}
-						onClick={() =>
-							controller.setStatus(
-								filters.aiStatus === status ? undefined : status,
-							)
-						}
-					>
-						{status}
-					</button>
-				))}
-			</div>
-
-			{facets.genres.length > 0 ? (
-				<>
-					<p style={{ ...railLabel, marginTop: 14 }}>Genre</p>
-					<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-						{facets.genres.map((genre) => (
-							<button
-								key={genre}
-								type="button"
-								style={filters.genre === genre ? chipActive : chip}
-								onClick={() =>
-									controller.setGenre(
-										filters.genre === genre ? undefined : genre,
-									)
-								}
-							>
-								{genre}
-							</button>
-						))}
-					</div>
-				</>
-			) : null}
-
-			{facets.tags.length > 0 ? (
-				<>
-					<p style={{ ...railLabel, marginTop: 14 }}>Tags</p>
-					<div
-						style={
-							tagsExpanded
-								? {
-										display: "flex",
-										flexWrap: "wrap",
-										gap: 6,
-										...tagListExpanded,
-									}
-								: { display: "flex", flexWrap: "wrap", gap: 6 }
-						}
-					>
-						{tags.map((tag) => (
-							<button
-								key={tag}
-								type="button"
-								style={filters.tag === tag ? chipActive : chip}
-								onClick={() =>
-									controller.setTag(filters.tag === tag ? undefined : tag)
-								}
-							>
-								#{tag}
-							</button>
-						))}
-					</div>
-					{overflowCount > 0 ? (
-						<button
-							type="button"
-							style={{ ...subtleButton, marginTop: 8 }}
-							onClick={() => setTagsExpanded((expanded) => !expanded)}
-						>
-							{tagsExpanded
-								? "Show fewer tags"
-								: `Show all ${facets.tags.length} tags`}
-						</button>
-					) : null}
-				</>
-			) : null}
+		<section
+			style={{ ...panel, display: "flex", flexDirection: "column", gap: 14 }}
+			aria-label="Bookmark filters"
+		>
+			<p style={{ ...railLabel, margin: 0 }}>Filters</p>
+			<FacetGroup
+				label="Domain"
+				values={facets.domains}
+				active={filters.domain}
+				onToggle={(domain) => controller.setDomain(domain)}
+				unit="domains"
+				cappable
+			/>
+			<FacetGroup
+				label="Genre"
+				values={facets.genres}
+				active={filters.genre}
+				onToggle={(genre) => controller.setGenre(genre)}
+			/>
+			<FacetGroup
+				label="Tags"
+				values={facets.tags}
+				active={filters.tag}
+				onToggle={(tag) => controller.setTag(tag)}
+				format={(tag) => `#${tag}`}
+				unit="tags"
+				cappable
+			/>
+			<FacetGroup
+				label="AI status"
+				values={facets.statuses}
+				active={filters.aiStatus}
+				onToggle={(status) => controller.setStatus(status)}
+			/>
 		</section>
 	);
 }

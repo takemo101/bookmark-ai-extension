@@ -83,7 +83,26 @@ export type FilterCriteria = {
 	genre?: string;
 	tag?: string;
 	aiStatus?: BookmarkRecord["aiStatus"];
+	/** Exact host match against {@link recordDomain} (case-insensitive). */
+	domain?: string;
 };
+
+/**
+ * The display domain of a record: the canonical URL's hostname. Canonical URLs
+ * are already lowercased with a leading `www.` removed (see url.ts), so equal
+ * domains compare equal as plain strings; the strip here only defends records
+ * that predate the normalization. Returns undefined for an unparsable URL so a
+ * corrupt record never throws out of a filter loop.
+ */
+export function recordDomain(record: BookmarkRecord): string | undefined {
+	try {
+		return new URL(record.canonicalUrl).hostname
+			.toLowerCase()
+			.replace(/^www\./, "");
+	} catch {
+		return undefined;
+	}
+}
 
 export class Bookmarks {
 	// Keyed by canonical URL, the upsert/merge identity. A URL is either live (in
@@ -426,8 +445,12 @@ export class Bookmarks {
 		const needle = criteria.query?.trim().toLowerCase() ?? "";
 		const genreNeedle = criteria.genre?.trim().toLowerCase();
 		const tagNeedle = criteria.tag?.trim().toLowerCase();
+		const domainNeedle = criteria.domain?.trim().toLowerCase();
 		return this.toArray().filter((record) => {
 			if (needle.length > 0 && !matchesQuery(record, needle)) return false;
+			if (domainNeedle !== undefined && recordDomain(record) !== domainNeedle) {
+				return false;
+			}
 			if (
 				genreNeedle !== undefined &&
 				(record.genre ?? "").toLowerCase() !== genreNeedle
@@ -463,6 +486,21 @@ export class Bookmarks {
 			}
 		}
 		return [...seen.values()].sort(compareString);
+	}
+
+	/**
+	 * The distinct domains present, sorted, for building filter facets. Derived
+	 * from canonical URLs on demand — never stored on records (MIK-028).
+	 */
+	domains(): string[] {
+		const seen = new Set<string>();
+		for (const record of this.byUrl.values()) {
+			const domain = recordDomain(record);
+			if (domain !== undefined) {
+				seen.add(domain);
+			}
+		}
+		return [...seen].sort(compareString);
 	}
 
 	/** The distinct tags present, sorted, for building filter facets. */

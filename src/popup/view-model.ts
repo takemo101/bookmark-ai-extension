@@ -71,6 +71,27 @@ export type RecentItemView = {
 	readonly canReAnalyze: boolean;
 };
 
+/**
+ * The compact detail view a Recent row opens (MIK-028): display-safe fields
+ * from the cached record, including the long-form `analysisMarkdown` rendered
+ * through the safe Markdown component. A reading surface only — the full
+ * ledger, delete, and filters stay in Options.
+ */
+export type PopupDetailView = {
+	readonly canonicalUrl: string;
+	readonly title: string;
+	readonly url: string;
+	readonly description?: string;
+	readonly genre?: string;
+	readonly tags: readonly string[];
+	readonly aiStatus: AiStatus;
+	/** Safe, token-free message when the last analysis failed. */
+	readonly aiError?: string;
+	readonly updatedAt: string;
+	readonly analysisMarkdown?: string;
+	readonly analysisProfileId?: string;
+};
+
 /** The Japanese AI preview shown on a `ready` receipt. */
 export type AiPreview = {
 	readonly description?: string;
@@ -145,6 +166,8 @@ export type PopupView = {
 	readonly canSave: boolean;
 	/** Present when the active tab is already bookmarked (canonical-URL match). */
 	readonly currentBookmark?: CurrentBookmarkView;
+	/** Present while a Recent bookmark's compact detail is open (MIK-028). */
+	readonly selectedRecent?: PopupDetailView;
 	/** Whether a delete of the current page's bookmark is in flight. */
 	readonly deleting: boolean;
 	/** Safe, token-free message when the last delete failed. */
@@ -162,6 +185,10 @@ export interface PopupController {
 	save(): Promise<void>;
 	/** Re-analyze a recent bookmark by its (display) canonical URL. */
 	reAnalyze(canonicalUrl: string): Promise<void>;
+	/** Open the compact detail for a recent bookmark (no-op for unknown URLs). */
+	selectRecent(canonicalUrl: string): void;
+	/** Close the recent detail view, returning to the receipt. */
+	clearRecentSelection(): void;
 	/** Delete the current page's bookmark (no-op unless one exists and no flow runs). */
 	deleteCurrentBookmark(): Promise<void>;
 	/** Pull the authoritative store from Drive and refresh recents/sync badge. */
@@ -193,6 +220,13 @@ export function createPopupController(
 	// "already bookmarked" and delete target exactly what a duplicate save would
 	// update. Undefined when the tab is missing or its URL is not bookmarkable.
 	let tabCanonical: CanonicalUrl | undefined;
+	// The last cache snapshot, kept so selectRecent can read the full record
+	// without another async load (MIK-028).
+	let lastState: CacheState | undefined;
+	// The open recent detail's display canonical URL; re-resolved against every
+	// cache refresh so the detail updates in place or closes when the record is
+	// gone (deleted, or pushed out of the recent slice).
+	let selectedRecentDisplay: string | undefined;
 
 	function setView(next: Partial<PopupView>): void {
 		view = { ...view, ...next };
@@ -234,12 +268,33 @@ export function createPopupController(
 		};
 	}
 
+	function mapSelectedRecent(state: CacheState): PopupDetailView | undefined {
+		if (selectedRecentDisplay === undefined) {
+			return undefined;
+		}
+		// `canonicalByDisplay` was just rebuilt by mapRecent, so a record that was
+		// deleted or fell out of the recent slice no longer resolves and the
+		// detail closes instead of showing stale data.
+		const branded = canonicalByDisplay.get(selectedRecentDisplay);
+		const record = branded ? state.bookmarks.get(branded) : undefined;
+		if (!record) {
+			selectedRecentDisplay = undefined;
+			return undefined;
+		}
+		return toRecentDetail(record);
+	}
+
 	/** The recent/sync/current-page projections that any cache refresh updates together. */
 	function mapState(state: CacheState): Partial<PopupView> {
+		lastState = state;
+		// Order matters: mapRecent rebuilds canonicalByDisplay, which
+		// mapSelectedRecent then resolves the open detail against.
+		const recent = mapRecent(state);
 		return {
-			recent: mapRecent(state),
+			recent,
 			sync: mapSync(state),
 			currentBookmark: mapCurrentBookmark(state),
+			selectedRecent: mapSelectedRecent(state),
 		};
 	}
 
@@ -345,6 +400,22 @@ export function createPopupController(
 				useCases.reAnalyzeBookmark(branded, onProgress),
 			);
 		},
+		selectRecent(canonicalUrl) {
+			const branded = canonicalByDisplay.get(canonicalUrl);
+			const record = branded ? lastState?.bookmarks.get(branded) : undefined;
+			if (!record) {
+				return;
+			}
+			selectedRecentDisplay = canonicalUrl;
+			setView({ selectedRecent: toRecentDetail(record) });
+		},
+		clearRecentSelection() {
+			if (selectedRecentDisplay === undefined) {
+				return;
+			}
+			selectedRecentDisplay = undefined;
+			setView({ selectedRecent: undefined });
+		},
 		async deleteCurrentBookmark() {
 			// Guard: nothing to delete, or a save/re-analyze/delete already runs —
 			// deleting mid-flow could race the flow's own cache writes.
@@ -381,6 +452,22 @@ export function createPopupController(
 			const state = await useCases.loadCachedState();
 			setView(mapState(state));
 		},
+	};
+}
+
+function toRecentDetail(record: BookmarkRecord): PopupDetailView {
+	return {
+		canonicalUrl: record.canonicalUrl,
+		title: record.title,
+		url: record.url,
+		description: record.description,
+		genre: record.genre,
+		tags: [...record.tags],
+		aiStatus: record.aiStatus,
+		aiError: record.aiError ? safeMessage(record.aiError) : undefined,
+		updatedAt: record.updatedAt,
+		analysisMarkdown: record.analysisMarkdown,
+		analysisProfileId: record.analysisProfileId,
 	};
 }
 

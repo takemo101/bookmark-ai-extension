@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { OptionsScreen } from "./Options";
-import { lockScroll, Options, visibleTagFacets } from "./Options";
+import { lockScroll, Options, visibleFacetValues } from "./Options";
 import type { SkillsController, SkillsView } from "./skills-view-model";
 import type {
 	DetailView,
@@ -76,6 +76,7 @@ function viewOf(overrides: Partial<OptionsView> = {}): OptionsView {
 			genres: [],
 			tags: [],
 			statuses: ["ready", "pending", "unavailable", "failed"],
+			domains: [],
 		},
 		rows: [],
 		totalCount: 0,
@@ -97,6 +98,7 @@ function controllerOf(view: OptionsView): OptionsController {
 		setGenre: () => {},
 		setTag: () => {},
 		setStatus: () => {},
+		setDomain: () => {},
 		clearFilters: () => {},
 		select: () => {},
 		clearSelection: () => {},
@@ -302,6 +304,7 @@ describe("Options tag facet cap (MIK-024)", () => {
 					genres: [],
 					tags: manyTags,
 					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: [],
 				},
 			}),
 		);
@@ -323,6 +326,7 @@ describe("Options tag facet cap (MIK-024)", () => {
 					genres: [],
 					tags: manyTags.slice(0, 5),
 					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: [],
 				},
 			}),
 		);
@@ -343,6 +347,7 @@ describe("Options tag facet cap (MIK-024)", () => {
 					genres: [],
 					tags: manyTags,
 					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: [],
 				},
 			}),
 		);
@@ -351,10 +356,100 @@ describe("Options tag facet cap (MIK-024)", () => {
 		expect(html).not.toContain("#tag-13");
 	});
 
-	it("returns the full list when expanded (visibleTagFacets)", () => {
-		expect(visibleTagFacets(manyTags, undefined, true)).toEqual(manyTags);
-		expect(visibleTagFacets(manyTags, undefined, false)).toHaveLength(12);
-		expect(visibleTagFacets(manyTags, "tag-20", false)).toContain("tag-20");
+	it("returns the full list when expanded (visibleFacetValues)", () => {
+		expect(visibleFacetValues(manyTags, undefined, true)).toEqual(manyTags);
+		expect(visibleFacetValues(manyTags, undefined, false)).toHaveLength(12);
+		expect(visibleFacetValues(manyTags, "tag-20", false)).toContain("tag-20");
+	});
+});
+
+describe("Options left rail filters (MIK-028)", () => {
+	it("groups Domain, Genre, Tags, and AI status inside one Filters panel", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				facets: {
+					genres: ["技術"],
+					tags: ["typescript"],
+					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: ["example.test", "github.com"],
+				},
+			}),
+		);
+
+		expect(html).toContain('aria-label="Bookmark filters"');
+		expect(html).toContain(">Filters<");
+		// Subsection order: Domain before Genre before Tags before AI status.
+		const order = [">Domain<", ">Genre<", ">Tags<", ">AI status<"].map((s) =>
+			html.indexOf(s),
+		);
+		expect(order.every((i) => i >= 0)).toBe(true);
+		expect([...order].sort((a, b) => a - b)).toEqual(order);
+		expect(html).toContain(">example.test<");
+		expect(html).toContain(">github.com<");
+	});
+
+	it("omits the Domain subsection when no domains exist", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+		);
+
+		expect(html).not.toContain(">Domain<");
+		// AI status renders even with no other facets.
+		expect(html).toContain(">AI status<");
+	});
+
+	it("collapses a long domain list behind a Show all toggle", () => {
+		const manyDomains = Array.from(
+			{ length: 15 },
+			(_, i) => `site-${String(i + 1).padStart(2, "0")}.test`,
+		);
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				facets: {
+					genres: [],
+					tags: [],
+					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: manyDomains,
+				},
+			}),
+		);
+
+		expect(html).toContain("site-12.test");
+		expect(html).not.toContain("site-13.test");
+		expect(html).toContain("Show all 15 domains");
+	});
+
+	it("keeps Clear filters visible when only a domain filter is active", () => {
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				filters: { query: "", domain: "example.test" },
+				facets: {
+					genres: [],
+					tags: [],
+					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: ["example.test"],
+				},
+			}),
+		);
+
+		expect(html).toContain("Clear filters");
 	});
 });
 

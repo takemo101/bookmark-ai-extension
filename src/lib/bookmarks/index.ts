@@ -85,4 +85,5 @@ export {
 	type FilterCriteria,
 	type UpsertContext,
 	Bookmarks,
+	recordDomain,
 } from "./collection";
