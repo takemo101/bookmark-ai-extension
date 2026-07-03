@@ -183,18 +183,20 @@ const EN: OptionsMessages = {
 		aria: "Instruction writing guidance",
 		title: "Writing a good instruction",
 		intro:
-			"The instruction refines what the AI analysis emphasizes for matching pages. It cannot change what is stored, the output format, or where your data goes.",
+			"The instruction refines what the AI analysis emphasizes for matching pages, and can also control the output shape of the analysis note — its headings, sections, and length — which takes priority over the default long-form format. It cannot change the JSON keys, the output language, what is stored, or where your data goes.",
 		examplesHeading: "Examples",
 		examples: [
 			"GitHub repository: “Emphasize architecture, key APIs, setup steps, and adoption risks.”",
 			"Technical article: “Summarize the main claims, prerequisites, and caveats.”",
 			"Official docs: “Highlight the covered version, concrete steps, and integration constraints.”",
+			"Video page: “Use only the two headings ## Video overview and ## Comment picks, with a one-sentence overview within 100 characters.”",
 		],
 		neverHeading: "Never write instructions that",
 		never: [
 			"request secrets, tokens, or credentials;",
 			"ask to persist raw page content or excerpts;",
 			"ask to call external APIs or AI providers;",
+			"ask to change the output language or the AI model;",
 			"try to change the output schema or the privacy contract.",
 		],
 		matchingHeading: "How matching works",
@@ -289,18 +291,20 @@ const JA: OptionsMessages = {
 		aria: "指示の書き方ガイド",
 		title: "良い指示の書き方",
 		intro:
-			"指示は、一致するページのAI分析で何を重視するかを調整します。保存内容・出力形式・データの送信先を変えることはできません。",
+			"指示は、一致するページのAI分析で何を重視するかに加えて、分析ノートの出力の形（見出し構成・セクション・長さ）も指定できます。指定した形は既定の長文形式より優先されます。JSONのキー・出力言語・保存内容・データの送信先を変えることはできません。",
 		examplesHeading: "例",
 		examples: [
 			"GitHubリポジトリ:「アーキテクチャ、主要API、セットアップ手順、導入リスクを重視する。」",
 			"技術記事:「主な主張、前提条件、注意点を要約する。」",
 			"公式ドキュメント:「対象バージョン、具体的な手順、統合時の制約を強調する。」",
+			"動画ページ:「## 動画概要 と ## コメントピックアップ の2つの見出しだけにして、100文字以内の要約と短い箇条書きにする。」",
 		],
 		neverHeading: "次のような指示は書かないでください",
 		never: [
 			"シークレット・トークン・認証情報を要求する。",
 			"ページ本文や抜粋の生データの保存を求める。",
 			"外部APIや外部AIプロバイダの呼び出しを求める。",
+			"出力言語や使用するAIモデルの変更を求める。",
 			"出力スキーマやプライバシー契約の変更を試みる。",
 		],
 		matchingHeading: "マッチングの仕組み",

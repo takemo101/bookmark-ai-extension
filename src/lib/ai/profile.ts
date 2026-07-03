@@ -19,7 +19,12 @@ export type AnalysisProfile = {
 	readonly name: string;
 	readonly priority: number;
 	readonly urlPatterns: readonly string[];
-	/** Domain-specific analysis emphasis layered onto the fixed core prompt contract. */
+	/**
+	 * Domain-specific analysis emphasis layered onto the fixed core prompt
+	 * contract. May also specify the `analysisMarkdown` output shape (headings,
+	 * sections, length), which takes priority over the default long-form
+	 * fallback (MIK-030).
+	 */
 	readonly instruction: string;
 };
 

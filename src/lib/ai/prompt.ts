@@ -14,13 +14,17 @@
  *      copied excerpt;
  *   2. the selected {@link AnalysisProfile}'s domain-specific instruction;
  *   3. the page input (title, URL, excerpt).
- * The core contract (language included) is not user-editable; a profile
- * instruction can only shift analysis emphasis, never the output language,
- * schema, or privacy rules.
+ * The core contract (language included) is not user-editable. A profile
+ * instruction may control the `analysisMarkdown` output shape — headings,
+ * sections, length — with priority over the default long-form format
+ * (MIK-030); the default 800–1500 character guidance is a fallback that
+ * applies only when the instruction is silent about structure/length. The
+ * instruction can never change the output language, JSON keys, or privacy
+ * rules.
  */
 import type { SupportedLanguage } from "../i18n/index";
 import type { AnalysisProfile } from "./profile";
-import { MAX_TAGS, type AnalysisInput } from "./types";
+import { type AnalysisInput, MAX_TAGS } from "./types";
 
 /** System instruction: role + target-language, JSON-only output contract. */
 export function analysisSystemPrompt(language: SupportedLanguage): string {
@@ -58,70 +62,84 @@ export const ANALYSIS_MARKDOWN_CHAR_RANGE: Record<
 	},
 };
 
-function japanesePromptLines(profile: AnalysisProfile): {
+/** Per-language prompt fragments assembled by {@link buildAnalysisPrompt}. */
+type PromptLines = {
 	head: string[];
 	constraints: string[];
+	profilePriority: string;
 	profileHeading: string;
+	fallbackShape: string;
 	inputLabels: { title: string; url: string; excerpt: string };
-} {
+};
+
+function japanesePromptLines(profile: AnalysisProfile): PromptLines {
 	const range = ANALYSIS_MARKDOWN_CHAR_RANGE.ja;
 	return {
 		head: [
-			"次のWebページを分析し、日本語で説明・ジャンル・タグ・詳細なMarkdown分析を生成してください。",
+			"次のWebページを分析し、日本語で説明・ジャンル・タグ・Markdown分析を生成してください。",
 			"",
 			"出力は次の形のJSONオブジェクトのみとし、コードフェンスや前置きの文章は付けないでください:",
 			"{",
 			'  "description": "ページ内容の日本語の説明（1〜3文）",',
 			'  "genre": "日本語のジャンルを1つ",',
 			`  "tags": ["日本語のタグ", "最大${MAX_TAGS}個"],`,
-			'  "analysisMarkdown": "見出しや箇条書きを使った日本語のMarkdown分析"',
+			'  "analysisMarkdown": "日本語のMarkdown分析"',
 			"}",
 		],
 		constraints: [
-			"制約:",
+			"必須の制約（分析指示より常に優先する）:",
+			"- 出力はJSONオブジェクトのみとする。",
+			"- キーは description・genre・tags・analysisMarkdown の4つを必ずすべて使い、名前の変更や省略をしない。",
 			"- すべての値は日本語で記述する。",
 			`- tags は最大${MAX_TAGS}個までとする。`,
 			"- description は空にしない。",
 			"- analysisMarkdown は空にしない。",
-			`- analysisMarkdown は "##" 見出しや "-" 箇条書きを使い、${range.min}〜${range.max}文字程度の分析にする。`,
 			"- analysisMarkdown は本文抜粋の丸写しではなく、自分の言葉でまとめた分析にする。",
 			"- analysisMarkdown に生のHTMLタグを含めない。",
+			"- 外部API・外部AIプロバイダー・APIキー・モデル選択を前提にした内容を書かない。",
 		],
+		profilePriority:
+			"analysisMarkdown の見出し構成・セクション・長さは、次の分析指示に指定があればそれを最優先で守ってください。",
 		profileHeading: `分析の観点（${profile.name}）:`,
+		fallbackShape:
+			`分析指示が analysisMarkdown の構成や長さを指定していない場合のみ、` +
+			`"##" 見出しや "-" 箇条書きを使った${range.min}〜${range.max}文字程度の詳細な分析にしてください。`,
 		inputLabels: { title: "タイトル", url: "URL", excerpt: "本文の抜粋:" },
 	};
 }
 
-function englishPromptLines(profile: AnalysisProfile): {
-	head: string[];
-	constraints: string[];
-	profileHeading: string;
-	inputLabels: { title: string; url: string; excerpt: string };
-} {
+function englishPromptLines(profile: AnalysisProfile): PromptLines {
 	const range = ANALYSIS_MARKDOWN_CHAR_RANGE.en;
 	return {
 		head: [
-			"Analyze the following web page and generate an English description, genre, tags, and a detailed Markdown analysis.",
+			"Analyze the following web page and generate an English description, genre, tags, and a Markdown analysis.",
 			"",
 			"Output only a JSON object of the following shape, with no code fences or introductory text:",
 			"{",
 			'  "description": "English description of the page content (1-3 sentences)",',
 			'  "genre": "a single English genre",',
 			`  "tags": ["English tags", "at most ${MAX_TAGS}"],`,
-			'  "analysisMarkdown": "an English Markdown analysis using headings and bullet lists"',
+			'  "analysisMarkdown": "an English Markdown analysis"',
 			"}",
 		],
 		constraints: [
-			"Constraints:",
+			"Non-negotiable constraints (always take precedence over the analysis focus):",
+			"- Output a JSON object only.",
+			"- Use exactly the four keys description, genre, tags, and analysisMarkdown; never rename or omit them.",
 			"- Write every value in English.",
 			`- tags contains at most ${MAX_TAGS} items.`,
 			"- description must not be empty.",
 			"- analysisMarkdown must not be empty.",
-			`- analysisMarkdown uses "##" headings and "-" bullet lists, roughly ${range.min}-${range.max} characters of analysis.`,
 			"- analysisMarkdown is an analysis in your own words, never a verbatim copy of the page excerpt.",
 			"- analysisMarkdown contains no raw HTML tags.",
+			"- Do not write content that depends on external APIs, external AI providers, API keys, or model selection.",
 		],
+		profilePriority:
+			"When the analysis focus below specifies headings, sections, or length for analysisMarkdown, follow it as the top priority.",
 		profileHeading: `Analysis focus (${profile.name}):`,
+		fallbackShape:
+			"Only if the analysis focus does not specify a structure or length for analysisMarkdown, " +
+			`write a detailed analysis of roughly ${range.min}-${range.max} characters using "##" headings and "-" bullet lists.`,
 		inputLabels: { title: "Title", url: "URL", excerpt: "Page excerpt:" },
 	};
 }
@@ -130,9 +148,11 @@ function englishPromptLines(profile: AnalysisProfile): {
  * Build the user prompt for one page in the target output language. The
  * excerpt is included verbatim (it is already bounded by the extraction
  * layer's character cap). `profile` supplies the domain-specific analysis
- * emphasis layered on top of the fixed core contract. The JSON keys are
- * exactly `description` / `genre` / `tags` / `analysisMarkdown` in both
- * languages, so parsing and storage never change with the language.
+ * emphasis — and, with priority over the default long-form fallback, the
+ * `analysisMarkdown` output shape (MIK-030) — layered on top of the fixed
+ * core contract. The JSON keys are exactly `description` / `genre` / `tags` /
+ * `analysisMarkdown` in both languages, so parsing and storage never change
+ * with the language.
  */
 export function buildAnalysisPrompt(
 	input: AnalysisInput,
@@ -148,8 +168,11 @@ export function buildAnalysisPrompt(
 		"",
 		...lines.constraints,
 		"",
+		lines.profilePriority,
 		lines.profileHeading,
 		profile.instruction,
+		"",
+		lines.fallbackShape,
 		"",
 		`${lines.inputLabels.title}: ${input.title}`,
 		`${lines.inputLabels.url}: ${input.url}`,

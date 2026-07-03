@@ -795,6 +795,17 @@ describe("Skill form modal (MIK-025)", () => {
 			"try to change the output schema or the privacy contract.",
 		);
 		expect(html).toContain("How matching works");
+		// Output-shape guidance (MIK-030): the instruction can shape the analysis
+		// note with priority over the default format, but never the fixed
+		// schema/privacy/language boundaries.
+		expect(html).toContain("takes priority over the default long-form format");
+		expect(html).toContain(
+			"It cannot change the JSON keys, the output language,",
+		);
+		expect(html).toContain("## Video overview and ## Comment picks");
+		expect(html).toContain(
+			"ask to change the output language or the AI model;",
+		);
 	});
 
 	it("opens an edit modal populated with the skill being edited", () => {
