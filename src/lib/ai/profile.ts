@@ -153,3 +153,41 @@ export function selectAnalysisProfile(
 	}
 	return best?.profile ?? GENERIC_PROFILE;
 }
+
+/** How a display name for a stored `analysisProfileId` was resolved. */
+export type AnalysisProfileDisplayKind = "built-in" | "custom" | "unknown";
+
+/** Display metadata resolved from a stored `analysisProfileId` (MIK-031). */
+export type AnalysisProfileDisplay = {
+	readonly id: string;
+	readonly name: string;
+	readonly kind: AnalysisProfileDisplayKind;
+};
+
+/** The id/name pair a custom analysis skill contributes to display resolution. */
+export type CustomProfileName = {
+	readonly id: string;
+	readonly name: string;
+};
+
+/**
+ * Resolve a stored `analysisProfileId` to display metadata (MIK-031):
+ * built-ins by their fixed ids, then the caller-supplied custom skill names,
+ * then a safe fallback that shows the raw id unchanged. Display-only — which
+ * profile analyzes a page stays with {@link selectAnalysisProfile}, and the
+ * stored `analysisProfileId` is never rewritten.
+ */
+export function resolveAnalysisProfileDisplay(
+	id: string,
+	customProfiles: readonly CustomProfileName[] = [],
+): AnalysisProfileDisplay {
+	const builtIn = BUILT_IN_PROFILES.find((profile) => profile.id === id);
+	if (builtIn) {
+		return { id, name: builtIn.name, kind: "built-in" };
+	}
+	const custom = customProfiles.find((profile) => profile.id === id);
+	if (custom) {
+		return { id, name: custom.name, kind: "custom" };
+	}
+	return { id, name: id, kind: "unknown" };
+}

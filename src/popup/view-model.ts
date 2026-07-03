@@ -19,6 +19,7 @@ import {
 	type PopupEnvironment,
 	type PopupUseCases,
 	type ProgressObserver,
+	resolveAnalysisProfileDisplay,
 	type SaveOutcome,
 	type SaveStage,
 } from "./use-cases";
@@ -90,6 +91,13 @@ export type PopupDetailView = {
 	readonly updatedAt: string;
 	readonly analysisMarkdown?: string;
 	readonly analysisProfileId?: string;
+	/**
+	 * Readable name for `analysisProfileId` (MIK-031): built-in profile names
+	 * resolve in the popup; custom/unknown ids fall back to the raw id — the
+	 * popup has no settings data at this boundary and stays a reading surface
+	 * (custom-name resolution and edit navigation live in Options).
+	 */
+	readonly analysisProfileName?: string;
 };
 
 /** The Japanese AI preview shown on a `ready` receipt. */
@@ -468,6 +476,9 @@ function toRecentDetail(record: BookmarkRecord): PopupDetailView {
 		updatedAt: record.updatedAt,
 		analysisMarkdown: record.analysisMarkdown,
 		analysisProfileId: record.analysisProfileId,
+		analysisProfileName: record.analysisProfileId
+			? resolveAnalysisProfileDisplay(record.analysisProfileId).name
+			: undefined,
 	};
 }
 

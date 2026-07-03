@@ -33,6 +33,10 @@ export type { CanonicalUrl } from "../lib/bookmarks/index";
 // (docs/design.md "Duplicate Behavior"). Re-exported here so `view-model`
 // keeps importing only from this boundary module.
 export { canonicalizeUrl } from "../lib/bookmarks/index";
+// Pure display resolution from a stored `analysisProfileId` to a readable
+// profile name (MIK-031). Re-exported for the same reason as canonicalizeUrl:
+// the controller resolves built-in names without importing `lib/ai` directly.
+export { resolveAnalysisProfileDisplay } from "../lib/ai/index";
 export type { CacheState } from "../lib/storage/index";
 
 /** The current tab shown at the top of the receipt. */

@@ -564,6 +564,35 @@ describe("createPopupController", () => {
 			expect(detail?.tags).toEqual(["a", "b"]);
 			expect(detail?.analysisMarkdown).toBe("## 概要\n\n分析本文。");
 			expect(detail?.analysisProfileId).toBe("github-repository");
+			// A built-in profile id resolves to its readable name (MIK-031).
+			expect(detail?.analysisProfileName).toBe("GitHubリポジトリ");
+		});
+
+		it("falls back to the raw profile id for an unknown analysis profile (MIK-031)", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({ analysisProfileId: "custom-or-gone-skill" }),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent(controller.getView().recent[0].canonicalUrl);
+			const detail = controller.getView().selectedRecent;
+
+			expect(detail?.analysisProfileName).toBe("custom-or-gone-skill");
+		});
+
+		it("resolves no profile name when the record has no analysis profile (MIK-031)", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([recordOf({})]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent(controller.getView().recent[0].canonicalUrl);
+			const detail = controller.getView().selectedRecent;
+
+			expect(detail).toBeDefined();
+			expect(detail?.analysisProfileName).toBeUndefined();
 		});
 
 		it("is a no-op for an unknown canonical URL", async () => {
