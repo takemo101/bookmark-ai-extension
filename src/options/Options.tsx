@@ -1,16 +1,18 @@
 /**
  * Research Ledger options page (docs/design.md "Options page: Research Ledger").
  *
- * A pure projection of {@link OptionsController.getView}: it renders the
- * two-zone ledger — left rail (search, sync state, genre/tag/status filters)
- * and the center bookmark rows with per-row quick delete — plus a floating
- * Drive sync action and a detail side sheet overlay that a row click opens
- * with open/delete actions (MIK-022, MIK-024). It dispatches
- * user intent back through the controller and imports only the controller,
- * view types, and style tokens; no Drive client, Prompt API client, JSONL
- * parser, or merge internals appear here (AGENTS.md "Architecture
- * boundaries"). All wiring is injected via the `controller` prop, so the
- * component is trivially renderable with a fake in tests.
+ * A pure projection of {@link OptionsController.getView} with two top-level
+ * screens behind a small nav (MIK-025): the Library — the two-zone ledger
+ * (left rail with search, sync state, genre/tag/status filters; center
+ * bookmark rows with per-row quick delete) plus a floating Drive sync action
+ * and a detail side sheet overlay (MIK-022, MIK-024) — and the Analysis
+ * skills settings screen, where the custom skill create/edit form opens as a
+ * modal with authoring guidance. It dispatches user intent back through the
+ * controllers and imports only the controllers, view types, and style tokens;
+ * no Drive client, Prompt API client, JSONL parser, or merge internals appear
+ * here (AGENTS.md "Architecture boundaries"). All wiring is injected via the
+ * `controller`/`skillsController` props, so the component is trivially
+ * renderable with fakes in tests.
  */
 import type { ChangeEvent } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -35,12 +37,20 @@ import type {
 import type { AiStatus } from "./view-types";
 import {
 	aiStatusTone,
+	appHeader,
 	chip,
 	chipActive,
 	dangerButton,
 	disabledButton,
 	floatingSyncButton,
+	guidanceBox,
 	ledger,
+	modalBackdrop,
+	modalBody,
+	modalCard,
+	modalHeader,
+	navTab,
+	navTabActive,
 	page,
 	palette,
 	panel,
@@ -52,6 +62,7 @@ import {
 	rowOpenButton,
 	rowSelected,
 	searchInput,
+	settingsScreen,
 	sheet,
 	sheetBackdrop,
 	sheetBody,
@@ -66,19 +77,29 @@ import {
 	truncate,
 } from "./styles";
 
+/**
+ * The two top-level options screens (MIK-025). Presentation-only UI state:
+ * switching screens never touches Drive/cache semantics.
+ */
+export type OptionsScreen = "library" | "analysis-skills";
+
 export function Options({
 	controller,
 	skillsController,
+	initialScreen = "library",
 }: {
 	controller: OptionsController;
-	/** Optional so existing tests/embeds can render without the skills panel. */
+	/** Optional so existing tests/embeds can render without the skills screen. */
 	skillsController?: SkillsController;
+	/** Test/embed hook: which screen renders first. Runtime starts on Library. */
+	initialScreen?: OptionsScreen;
 }) {
 	const view = useSyncExternalStore(
 		controller.subscribe,
 		controller.getView,
 		controller.getView,
 	);
+	const [screen, setScreen] = useState<OptionsScreen>(initialScreen);
 
 	useEffect(() => {
 		void controller.init();
@@ -86,27 +107,80 @@ export function Options({
 
 	useLockBodyScroll(view.selected !== undefined);
 
+	function switchScreen(next: OptionsScreen): void {
+		if (next === screen) {
+			return;
+		}
+		// Leaving the library closes the detail sheet so its selection highlight
+		// and scroll lock never linger behind the settings screen. Filters and
+		// the skill form draft are preserved.
+		controller.clearSelection();
+		setScreen(next);
+	}
+
+	const showLibrary = screen === "library" || !skillsController;
+
 	return (
 		<main style={page}>
-			<div style={ledger}>
-				<LeftRail view={view} controller={controller} />
-				<CenterList view={view} controller={controller} />
-			</div>
-			<FloatingSyncButton
-				sync={view.sync}
-				onRefresh={() => void controller.refresh()}
-			/>
-			{view.selected ? (
-				<DetailSheet
-					detail={view.selected}
-					busy={view.busy}
-					controller={controller}
-				/>
-			) : null}
 			{skillsController ? (
-				<SkillsSection skillsController={skillsController} />
+				<header style={appHeader}>
+					<nav aria-label="Options screens" style={{ display: "flex", gap: 8 }}>
+						<NavTab
+							label="Library"
+							active={showLibrary}
+							onClick={() => switchScreen("library")}
+						/>
+						<NavTab
+							label="Analysis skills"
+							active={!showLibrary}
+							onClick={() => switchScreen("analysis-skills")}
+						/>
+					</nav>
+				</header>
+			) : null}
+			{showLibrary ? (
+				<>
+					<div style={ledger}>
+						<LeftRail view={view} controller={controller} />
+						<CenterList view={view} controller={controller} />
+					</div>
+					<FloatingSyncButton
+						sync={view.sync}
+						onRefresh={() => void controller.refresh()}
+					/>
+					{view.selected ? (
+						<DetailSheet
+							detail={view.selected}
+							busy={view.busy}
+							controller={controller}
+						/>
+					) : null}
+				</>
+			) : skillsController ? (
+				<SkillsScreen skillsController={skillsController} />
 			) : null}
 		</main>
+	);
+}
+
+function NavTab({
+	label,
+	active,
+	onClick,
+}: {
+	label: string;
+	active: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			style={active ? navTabActive : navTab}
+			aria-current={active ? "page" : undefined}
+			onClick={onClick}
+		>
+			{label}
+		</button>
 	);
 }
 
@@ -800,13 +874,16 @@ function DetailSheet({
 }
 
 /**
- * "Analysis skills" panel (MIK-018, docs/ai-analysis-v2.md "Settings file"): a
- * pure projection of {@link SkillsController.getView}. Shows the fixed
- * built-in profiles read-only, plus full CRUD over Drive-synced custom
- * skills. Never computes matching/priority itself — that stays inside
- * `ai/profile.ts`'s `selectAnalysisProfile`.
+ * "Analysis skills" settings screen (MIK-018, MIK-025,
+ * docs/ai-analysis-v2.md "Settings file"): a pure projection of
+ * {@link SkillsController.getView}, rendered as its own top-level screen
+ * instead of a panel below the ledger. Shows the settings sync readout, the
+ * fixed built-in profiles read-only, and full CRUD over Drive-synced custom
+ * skills; the create/edit form opens as a modal. Never computes
+ * matching/priority itself — that stays inside `ai/profile.ts`'s
+ * `selectAnalysisProfile`.
  */
-function SkillsSection({
+function SkillsScreen({
 	skillsController,
 }: {
 	skillsController: SkillsController;
@@ -814,62 +891,71 @@ function SkillsSection({
 	const view = useSyncExternalStore(
 		skillsController.subscribe,
 		skillsController.getView,
+		skillsController.getView,
 	);
 
 	useEffect(() => {
 		void skillsController.init();
 	}, [skillsController]);
 
-	return (
-		<section
-			style={{
-				maxWidth: 1200,
-				margin: "0 auto",
-				padding: "0 24px 32px",
-			}}
-		>
-			<div style={panel}>
-				<div
-					style={{
-						display: "flex",
-						justifyContent: "space-between",
-						alignItems: "center",
-						marginBottom: 10,
-					}}
-				>
-					<h2 style={{ fontSize: 15, margin: 0 }}>Analysis skills</h2>
-					{!view.formOpen ? (
-						<button
-							type="button"
-							style={subtleButton}
-							onClick={() => skillsController.startCreate()}
-						>
-							Add custom skill
-						</button>
-					) : null}
-				</div>
+	useLockBodyScroll(view.formOpen);
 
-				{view.actionError ? (
-					<p
-						style={{ fontSize: 12, color: palette.danger, margin: "0 0 10px" }}
+	return (
+		<section style={settingsScreen} aria-label="Analysis skills settings">
+			<header>
+				<h2 style={{ fontSize: 18, margin: 0 }}>Analysis skills</h2>
+				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "4px 0 0" }}>
+					Custom skills tune the Japanese analysis for matching pages. They are
+					stored in <code>bookmark-ai/settings.json</code> in your Google Drive.
+				</p>
+			</header>
+
+			<section style={panel}>
+				<p style={railLabel}>Settings sync</p>
+				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+					<span
+						aria-hidden
+						style={{
+							width: 8,
+							height: 8,
+							borderRadius: 999,
+							background: statusColor(syncTone(view.sync.status)),
+						}}
+					/>
+					<span style={{ fontSize: 13 }}>{view.sync.status}</span>
+					<button
+						type="button"
+						style={
+							view.busy ? { ...subtleButton, ...disabledButton } : subtleButton
+						}
+						disabled={view.busy}
+						onClick={() => void skillsController.refresh()}
 					>
-						{view.actionError}
+						Refresh settings
+					</button>
+				</div>
+				{view.sync.pendingLocalChanges ? (
+					<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
+						Local changes pending — will retry on next sync
 					</p>
 				) : null}
+			</section>
 
-				{view.formOpen ? (
-					<SkillForm view={view} skillsController={skillsController} />
-				) : null}
+			{!view.formOpen && view.actionError ? (
+				<Banner tone="danger" text={view.actionError} />
+			) : null}
 
+			{view.loading ? (
+				<Notice text="Loading analysis skills…" />
+			) : (
 				<div
 					style={{
 						display: "grid",
 						gridTemplateColumns: "1fr 1fr",
 						gap: 16,
-						marginTop: 14,
 					}}
 				>
-					<div>
+					<div style={panel}>
 						<p style={railLabel}>Built-in (read-only)</p>
 						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 							{view.builtIns.map((skill) => (
@@ -877,8 +963,24 @@ function SkillsSection({
 							))}
 						</ul>
 					</div>
-					<div>
-						<p style={railLabel}>Custom (Drive-synced)</p>
+					<div style={panel}>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								marginBottom: 8,
+							}}
+						>
+							<p style={{ ...railLabel, margin: 0 }}>Custom (Drive-synced)</p>
+							<button
+								type="button"
+								style={subtleButton}
+								onClick={() => skillsController.startCreate()}
+							>
+								Add custom skill
+							</button>
+						</div>
 						{view.custom.length === 0 ? (
 							<p style={{ fontSize: 12, color: palette.inkFaint }}>
 								No custom skills yet.
@@ -901,8 +1003,142 @@ function SkillsSection({
 						)}
 					</div>
 				</div>
-			</div>
+			)}
+
+			{view.formOpen ? (
+				<SkillFormModal view={view} skillsController={skillsController} />
+			) : null}
 		</section>
+	);
+}
+
+/**
+ * Modal wrapper for the custom skill create/edit form (MIK-025). Open/close
+ * state stays in the controller ({@link SkillsController.startCreate} /
+ * `startEdit` open it, `cancelEdit` and a successful `submit` close it); this
+ * component only renders the dialog chrome, Escape/backdrop close, and the
+ * instruction authoring guidance next to the form.
+ */
+function SkillFormModal({
+	view,
+	skillsController,
+}: {
+	view: SkillsView;
+	skillsController: SkillsController;
+}) {
+	useEffect(() => {
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				skillsController.cancelEdit();
+			}
+		}
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [skillsController]);
+
+	return (
+		<div
+			style={modalBackdrop}
+			onClick={(event) => {
+				// Only a true backdrop click closes; clicks inside the card bubble up
+				// with a different target and are ignored.
+				if (event.target === event.currentTarget) {
+					skillsController.cancelEdit();
+				}
+			}}
+		>
+			<section
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="skill-form-title"
+				style={modalCard}
+			>
+				<header style={modalHeader}>
+					<h3 id="skill-form-title" style={{ fontSize: 15, margin: 0 }}>
+						{view.editingId ? "Edit custom skill" : "New custom skill"}
+					</h3>
+					<button
+						type="button"
+						style={subtleButton}
+						onClick={() => skillsController.cancelEdit()}
+						aria-label="Close skill form"
+						// Best-effort focus management: land keyboard focus inside the
+						// dialog when it opens.
+						autoFocus
+					>
+						✕
+					</button>
+				</header>
+				<div style={modalBody}>
+					{view.actionError ? (
+						<Banner tone="danger" text={view.actionError} />
+					) : null}
+					<SkillForm view={view} skillsController={skillsController} />
+					<InstructionGuidance />
+				</div>
+			</section>
+		</div>
+	);
+}
+
+/**
+ * Authoring guidance for the skill `instruction` field (MIK-025): what it
+ * changes, per-source examples, safety warnings, and a plain-language
+ * explanation of domain/pattern/priority matching. Static content — mirrors
+ * the constraints in docs/ai-analysis-v2.md and docs/privacy-policy.md.
+ */
+function InstructionGuidance() {
+	return (
+		<aside style={guidanceBox} aria-label="Instruction writing guidance">
+			<p style={{ margin: 0, fontWeight: 600, color: palette.ink }}>
+				Writing a good instruction
+			</p>
+			<p style={{ margin: "6px 0 0" }}>
+				The instruction refines what the Japanese analysis emphasizes for
+				matching pages. It cannot change what is stored, the output format, or
+				where your data goes.
+			</p>
+			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
+				Examples
+			</p>
+			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+				<li>
+					GitHub repository: “Emphasize architecture, key APIs, setup steps, and
+					adoption risks.”
+				</li>
+				<li>
+					Technical article: “Summarize the main claims, prerequisites, and
+					caveats.”
+				</li>
+				<li>
+					Official docs: “Highlight the covered version, concrete steps, and
+					integration constraints.”
+				</li>
+			</ul>
+			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.warn }}>
+				Never write instructions that
+			</p>
+			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+				<li>request secrets, tokens, or credentials;</li>
+				<li>ask to persist raw page content or excerpts;</li>
+				<li>ask to call external APIs or AI providers;</li>
+				<li>try to change the output schema or the privacy contract.</li>
+			</ul>
+			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
+				How matching works
+			</p>
+			<ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+				<li>Domains match the page’s host (e.g. github.com).</li>
+				<li>
+					URL patterns narrow matches with * wildcards (e.g.
+					example.com/docs/*).
+				</li>
+				<li>
+					When several skills match, the higher priority wins first, then the
+					more specific match.
+				</li>
+			</ul>
+		</aside>
 	);
 }
 
@@ -1009,9 +1245,6 @@ function SkillForm({
 	return (
 		<form
 			style={{
-				...panel,
-				background: palette.paperInset,
-				marginBottom: 4,
 				display: "flex",
 				flexDirection: "column",
 				gap: 8,
@@ -1021,9 +1254,6 @@ function SkillForm({
 				void skillsController.submit();
 			}}
 		>
-			<p style={railLabel}>
-				{view.editingId ? "Edit custom skill" : "New custom skill"}
-			</p>
 			<label style={{ fontSize: 12 }}>
 				Name
 				<input

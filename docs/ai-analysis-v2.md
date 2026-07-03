@@ -307,14 +307,20 @@ is kept for historical reference only.
   re-analysis (MIK-024).
 - Search includes `analysisMarkdown`.
 - Show which `analysisProfileId` generated the current analysis.
-- Provide custom skill CRUD:
-  - add;
-  - edit;
+- Provide custom skill CRUD on a dedicated top-level "Analysis skills"
+  settings screen (MIK-025), not below the bookmark list:
+  - add / edit via a modal form with Close/Cancel (Escape and backdrop click
+    also close);
   - delete;
   - enable/disable;
   - domain list;
   - wildcard URL patterns;
-  - instruction textarea.
+  - instruction textarea with authoring guidance next to the form: what the
+    instruction changes, per-source examples (GitHub repository / technical
+    article / official docs), safety warnings (no secrets, no raw page
+    persistence, no external APIs/providers, no output schema or
+    privacy-contract changes), and a plain-language explanation of
+    domain/pattern/priority matching.
 - Built-in profiles are visible as defaults but not editable in the first
   implementation.
 

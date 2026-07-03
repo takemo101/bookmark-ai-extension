@@ -64,6 +64,105 @@ export const ledger: CSSProperties = {
 	padding: "20px 24px 32px",
 };
 
+/**
+ * Top-level options navigation bar (MIK-025): switches between the Library
+ * ledger and the Analysis skills settings screen.
+ */
+export const appHeader: CSSProperties = {
+	maxWidth: 1200,
+	margin: "0 auto",
+	padding: "16px 24px 0",
+	display: "flex",
+	alignItems: "center",
+	gap: 8,
+};
+
+export const navTab: CSSProperties = {
+	padding: "6px 14px",
+	fontFamily: fontStack,
+	fontSize: 13,
+	color: palette.inkSoft,
+	background: "transparent",
+	border: `1px solid ${palette.border}`,
+	borderRadius: 999,
+	cursor: "pointer",
+};
+
+export const navTabActive: CSSProperties = {
+	...navTab,
+	color: palette.accentInk,
+	background: palette.accent,
+	border: `1px solid ${palette.accent}`,
+	fontWeight: 600,
+};
+
+/** Analysis skills settings screen frame (MIK-025). */
+export const settingsScreen: CSSProperties = {
+	maxWidth: 1200,
+	margin: "0 auto",
+	padding: "20px 24px 32px",
+	display: "flex",
+	flexDirection: "column",
+	gap: 14,
+};
+
+/**
+ * Centered modal dialog for the custom skill create/edit form (MIK-025). Sits
+ * above the floating sync button and the detail sheet backdrop.
+ */
+export const modalBackdrop: CSSProperties = {
+	position: "fixed",
+	inset: 0,
+	background: "rgba(58, 52, 43, 0.35)",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: 24,
+	zIndex: 30,
+};
+
+export const modalCard: CSSProperties = {
+	boxSizing: "border-box",
+	width: "min(680px, 100%)",
+	maxHeight: "85vh",
+	display: "flex",
+	flexDirection: "column",
+	background: palette.paper,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 10,
+	boxShadow: "0 18px 48px rgba(58, 52, 43, 0.28)",
+};
+
+export const modalHeader: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 8,
+	padding: "12px 20px",
+	background: palette.paperRaised,
+	borderBottom: `1px solid ${palette.border}`,
+	borderRadius: "10px 10px 0 0",
+};
+
+export const modalBody: CSSProperties = {
+	flex: 1,
+	overflowY: "auto",
+	padding: "14px 20px 20px",
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+};
+
+/** Instruction authoring guidance box inside the skill form modal (MIK-025). */
+export const guidanceBox: CSSProperties = {
+	background: palette.paperInset,
+	border: `1px solid ${palette.border}`,
+	borderRadius: 8,
+	padding: "10px 12px",
+	fontSize: 12,
+	color: palette.inkSoft,
+};
+
 export const rail: CSSProperties = {
 	position: "sticky",
 	top: 20,
