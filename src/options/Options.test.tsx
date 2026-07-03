@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { OptionsScreen } from "./Options";
 import { lockScroll, Options, visibleTagFacets } from "./Options";
+import type { SkillsController, SkillsView } from "./skills-view-model";
 import type {
 	DetailView,
 	OptionsController,
@@ -10,15 +12,19 @@ import type {
 } from "./view-model";
 
 /**
- * Static-markup tests for the MIK-022 detail sheet and the MIK-024 list
- * polish: the component is rendered with a fake controller and a fixed view,
- * no DOM or Chrome required. Event behavior (Escape, backdrop click, quick
- * delete stopPropagation) lives in handlers the controller tests cover
- * indirectly; here we pin the rendered structure — the sheet carries dialog
- * semantics without a Re-analyze action, rows carry a quick delete button,
- * the tag facet collapses behind a cap, and Drive sync floats instead of
- * sitting in the rail. The scroll-lock and tag-cap logic are unit-tested via
- * their exported helpers because tests run in node, not jsdom.
+ * Static-markup tests for the MIK-022 detail sheet, the MIK-024 list polish,
+ * and the MIK-025 screens: the component is rendered with fake controllers
+ * and fixed views, no DOM or Chrome required. Event behavior (Escape,
+ * backdrop click, quick delete stopPropagation, nav clicks) lives in handlers
+ * the controller tests cover indirectly; here we pin the rendered structure —
+ * the sheet carries dialog semantics without a Re-analyze action, rows carry
+ * a quick delete button, the tag facet collapses behind a cap, Drive sync
+ * floats instead of sitting in the rail, and the Analysis skills settings
+ * screen renders separately from the ledger with a modal skill form. Screen
+ * switching is exercised through the `initialScreen` prop because static
+ * rendering cannot dispatch clicks. The scroll-lock and tag-cap logic are
+ * unit-tested via their exported helpers because tests run in node, not
+ * jsdom.
  */
 
 function detailOf(overrides: Partial<DetailView> = {}): DetailView {
@@ -96,6 +102,62 @@ function controllerOf(view: OptionsView): OptionsController {
 
 function render(view: OptionsView): string {
 	return renderToStaticMarkup(<Options controller={controllerOf(view)} />);
+}
+
+function skillsViewOf(overrides: Partial<SkillsView> = {}): SkillsView {
+	return {
+		loading: false,
+		busy: false,
+		sync: { status: "synced", pendingLocalChanges: false },
+		builtIns: [
+			{
+				id: "github-repository",
+				name: "GitHub repository",
+				priority: 30,
+				urlPatterns: ["github.com/*"],
+			},
+		],
+		custom: [],
+		formOpen: false,
+		form: {
+			name: "",
+			priority: "10",
+			domains: "",
+			urlPatterns: "",
+			instruction: "",
+		},
+		...overrides,
+	};
+}
+
+function skillsControllerOf(view: SkillsView): SkillsController {
+	return {
+		getView: () => view,
+		subscribe: () => () => {},
+		init: async () => {},
+		refresh: async () => {},
+		startCreate: () => {},
+		startEdit: () => {},
+		cancelEdit: () => {},
+		setFormField: () => {},
+		submit: async () => {},
+		remove: async () => {},
+		setEnabled: async () => {},
+	};
+}
+
+function renderWithSkills(
+	view: OptionsView,
+	skillsView: SkillsView,
+	initialScreen: OptionsScreen = "library",
+): string {
+	return renderToStaticMarkup(
+		<Options
+			controller={controllerOf(view)}
+			skillsController={skillsControllerOf(skillsView)}
+			initialScreen={initialScreen}
+		/>,
+	);
 }
 
 describe("Options detail sheet", () => {
@@ -324,5 +386,167 @@ describe("Options Drive sync affordance (MIK-024)", () => {
 		expect(html).toContain("Drive sync failed");
 		expect(html).toContain("Local changes pending — will retry on next sync");
 		expect(html).toContain('aria-label="Sync with Google Drive"');
+	});
+});
+
+describe("Options top-level navigation (MIK-025)", () => {
+	const libraryView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+	});
+
+	it("shows the Library screen by default with the nav and no skills content", () => {
+		const html = renderWithSkills(libraryView, skillsViewOf());
+
+		expect(html).toContain(">Library<");
+		expect(html).toContain(">Analysis skills<");
+		expect(html).toContain('aria-current="page"');
+		expect(html).toContain('aria-label="Search bookmarks"');
+		expect(html).not.toContain("Built-in (read-only)");
+		expect(html).not.toContain("Custom (Drive-synced)");
+	});
+
+	it("shows the Analysis skills screen without the ledger when selected", () => {
+		const html = renderWithSkills(
+			libraryView,
+			skillsViewOf(),
+			"analysis-skills",
+		);
+
+		expect(html).toContain('aria-label="Analysis skills settings"');
+		expect(html).toContain("Built-in (read-only)");
+		expect(html).toContain("Custom (Drive-synced)");
+		expect(html).not.toContain('aria-label="Search bookmarks"');
+		expect(html).not.toContain('aria-label="Sync with Google Drive"');
+		expect(html).not.toContain("Selected bookmark");
+	});
+
+	it("renders no nav when no skills controller is provided", () => {
+		const html = render(libraryView);
+
+		expect(html).not.toContain(">Analysis skills<");
+		expect(html).not.toContain('aria-label="Options screens"');
+	});
+});
+
+describe("Analysis skills settings screen (MIK-025)", () => {
+	function renderSkills(skillsView: SkillsView): string {
+		return renderWithSkills(viewOf(), skillsView, "analysis-skills");
+	}
+
+	it("keeps built-ins read-only while custom skills expose full actions", () => {
+		const html = renderSkills(
+			skillsViewOf({
+				custom: [
+					{
+						id: "s1",
+						name: "Docs deep dive",
+						enabled: true,
+						priority: 25,
+						domains: ["example.com"],
+						urlPatterns: ["example.com/docs/*"],
+						instruction: "Focus on X.",
+						updatedAt: "2026-03-01T00:00:00Z",
+					},
+				],
+			}),
+		);
+
+		expect(html).toContain("GitHub repository");
+		expect(html).toContain("Built-in (read-only)");
+		expect(html).toContain("Docs deep dive");
+		expect(html).toContain(">Disable<");
+		expect(html).toContain(">Edit<");
+		expect(html).toContain(">Delete<");
+		// Exactly one each: the custom row's actions, never on built-ins.
+		expect(html.match(/>Edit</g)).toHaveLength(1);
+		expect(html.match(/>Delete</g)).toHaveLength(1);
+	});
+
+	it("shows the settings sync readout with a refresh action", () => {
+		const html = renderSkills(
+			skillsViewOf({ sync: { status: "synced", pendingLocalChanges: true } }),
+		);
+
+		expect(html).toContain("Settings sync");
+		expect(html).toContain("Refresh settings");
+		expect(html).toContain("Local changes pending — will retry on next sync");
+	});
+
+	it("surfaces action errors as an alert on the screen when the form is closed", () => {
+		const html = renderSkills(
+			skillsViewOf({ actionError: "Drive sync failed" }),
+		);
+
+		expect(html).toContain('role="alert"');
+		expect(html).toContain("Drive sync failed");
+	});
+});
+
+describe("Skill form modal (MIK-025)", () => {
+	function renderSkills(skillsView: SkillsView): string {
+		return renderWithSkills(viewOf(), skillsView, "analysis-skills");
+	}
+
+	it("renders no dialog while the form is closed", () => {
+		const html = renderSkills(skillsViewOf());
+
+		expect(html).not.toContain('role="dialog"');
+	});
+
+	it("opens a create modal with an empty form, close/cancel, and guidance", () => {
+		const html = renderSkills(skillsViewOf({ formOpen: true }));
+
+		expect(html).toContain('role="dialog"');
+		expect(html).toContain('aria-modal="true"');
+		expect(html).toContain('aria-labelledby="skill-form-title"');
+		expect(html).toContain("New custom skill");
+		expect(html).toContain('aria-label="Close skill form"');
+		expect(html).toContain(">Cancel<");
+		expect(html).toContain(">Create skill<");
+		// Authoring guidance sits next to the form, including safety warnings.
+		expect(html).toContain("Writing a good instruction");
+		expect(html).toContain("Never write instructions that");
+		expect(html).toContain("request secrets, tokens, or credentials;");
+		expect(html).toContain("ask to persist raw page content or excerpts;");
+		expect(html).toContain("ask to call external APIs or AI providers;");
+		expect(html).toContain(
+			"try to change the output schema or the privacy contract.",
+		);
+		expect(html).toContain("How matching works");
+	});
+
+	it("opens an edit modal populated with the skill being edited", () => {
+		const html = renderSkills(
+			skillsViewOf({
+				formOpen: true,
+				editingId: "s1",
+				form: {
+					name: "Docs deep dive",
+					priority: "25",
+					domains: "example.com",
+					urlPatterns: "example.com/docs/*",
+					instruction: "Focus on X.",
+				},
+			}),
+		);
+
+		expect(html).toContain("Edit custom skill");
+		expect(html).toContain(">Save changes<");
+		expect(html).toContain('value="Docs deep dive"');
+		expect(html).toContain('value="25"');
+		expect(html).toContain("Focus on X.");
+	});
+
+	it("keeps the action error visible inside the open modal", () => {
+		const html = renderSkills(
+			skillsViewOf({ formOpen: true, actionError: "name must be non-empty" }),
+		);
+
+		expect(html).toContain('role="dialog"');
+		expect(html).toContain('role="alert"');
+		expect(html).toContain("name must be non-empty");
 	});
 });

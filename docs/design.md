@@ -164,7 +164,7 @@ never reached Drive, so a sync must reconcile (push) rather than overwrite it.
 `bookmark-ai/settings.json`'s custom skills are cached the same way, but under
 their own `chrome.storage.local` key and schema — a settings-cache read/write
 never touches the bookmark cache blob, and vice versa. The options page's
-"Analysis skills" panel renders from this cache first, then syncs with Drive;
+"Analysis skills" screen renders from this cache first, then syncs with Drive;
 the same cache is read (fast, no Drive round-trip) when a save/re-analyze needs
 the currently-enabled custom skills.
 
@@ -435,6 +435,7 @@ Options page responsibilities:
 - Delete bookmarks — via a per-row quick delete and from the detail sheet.
 - Show Drive sync status and errors, with the sync action as a floating
   button.
+- Manage Analysis skills from a separate top-level settings screen (MIK-025).
 
 The Options UI does not offer re-analysis (MIK-024): the detail sheet is a
 reading/opening/deletion surface. A `pending`, `unavailable`, or `failed`
@@ -452,6 +453,26 @@ valid active-tab target still marks the bookmark `failed` so it can be retried.
 This matches the manual posture documented in
 [`smoke-checklist.md`](smoke-checklist.md) (section 5 and its re-analysis note);
 re-analyze from the page's own tab, or save it again.
+
+The options page has a top-level navigation with two screens (MIK-025):
+
+- **Library** (default): the two-zone ledger, floating sync action, and detail
+  side sheet described below.
+- **Analysis skills**: the settings screen for analysis skills, no longer a
+  panel below the bookmark list. It shows the settings sync status with a
+  refresh action, built-in profiles read-only, and custom skills (stored only
+  in `bookmark-ai/settings.json` on Drive) with
+  create/edit/delete/enable-disable. The create/edit form opens as a centered
+  modal dialog that closes via its Close/Cancel buttons, the Escape key, or a
+  backdrop click, and locks the page scroll while open. Instruction-authoring
+  guidance sits next to the form: what the instruction changes, per-source
+  examples (GitHub repository / technical article / official docs), safety
+  warnings (no secrets, no raw page persistence, no external APIs/providers,
+  no output schema or privacy-contract changes), and a plain-language
+  explanation of domain/URL-pattern/priority matching.
+
+Switching screens closes the detail sheet; it never resets search/filter
+state or the skill form draft.
 
 Use a two-zone ledger layout with a row-click detail sheet:
 
