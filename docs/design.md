@@ -410,7 +410,13 @@ Popup responsibilities:
 - Show Prompt API availability.
 - Save current tab.
 - Show progress: extracting, saving pending record, analyzing, syncing.
-- Show recent saved bookmarks.
+- Detect when the current page is already bookmarked (same canonical-URL
+  dedup key as save/upsert) and show an "Already bookmarked" state with a
+  Remove affordance that deletes through the app's tombstone delete
+  (MIK-027). Save & Analyze stays available as the documented duplicate
+  upsert that refreshes the analysis.
+- Show recent saved bookmarks as a compact single-line list (title + AI
+  status + inline re-analyze); the full ledger stays in Options.
 - Link to options page. `Manage in Options` also requests an Options Drive
   sync (MIK-026): it best-effort writes a token-free request marker (a
   timestamp only, under `bookmark-ai:options-sync-request` in

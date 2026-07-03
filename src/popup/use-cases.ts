@@ -17,15 +17,23 @@
  * probing) is provided by an injected {@link PopupEnvironmentProvider}; real
  * granular per-stage save events arrive with the runtime wiring in MIK-009.
  */
-import type { BookmarkApp, SaveOutcome } from "../lib/app/index";
-import type { AppError, Result } from "../lib/app/index";
-import type { CacheState } from "../lib/storage/index";
+import type {
+	AppError,
+	BookmarkApp,
+	Result,
+	SaveOutcome,
+} from "../lib/app/index";
 import type { CanonicalUrl } from "../lib/bookmarks/index";
+import type { CacheState } from "../lib/storage/index";
 
-export type { SaveOutcome } from "../lib/app/index";
-export type { AppError, Result } from "../lib/app/index";
-export type { CacheState } from "../lib/storage/index";
+export type { AppError, Result, SaveOutcome } from "../lib/app/index";
 export type { CanonicalUrl } from "../lib/bookmarks/index";
+// The controller canonicalizes the active tab's URL to detect an
+// already-bookmarked page with the exact same dedup key save/upsert uses
+// (docs/design.md "Duplicate Behavior"). Re-exported here so `view-model`
+// keeps importing only from this boundary module.
+export { canonicalizeUrl } from "../lib/bookmarks/index";
+export type { CacheState } from "../lib/storage/index";
 
 /** The current tab shown at the top of the receipt. */
 export type TabInfo = {
@@ -89,6 +97,10 @@ export interface PopupUseCases {
 		canonicalUrl: CanonicalUrl,
 		onProgress?: ProgressObserver,
 	): Promise<Result<SaveOutcome, AppError>>;
+	/** Delete a bookmark (the current page's) by canonical URL via the domain tombstone delete. */
+	deleteBookmark(
+		canonicalUrl: CanonicalUrl,
+	): Promise<Result<CacheState, AppError>>;
 }
 
 /**
@@ -144,6 +156,9 @@ export function createPopupUseCases(
 		},
 		async reAnalyzeBookmark(canonicalUrl, onProgress) {
 			return app.reAnalyzeBookmark(canonicalUrl, relay(onProgress));
+		},
+		async deleteBookmark(canonicalUrl) {
+			return app.deleteBookmark(canonicalUrl);
 		},
 	};
 }
