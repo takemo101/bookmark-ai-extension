@@ -18,12 +18,16 @@
  * rendering a badge never pops a consent dialog. Tokens are never logged or
  * surfaced; that contract is enforced inside `drive/*`.
  */
-import type { BookmarkRepositoryPort } from "../app/index";
+import type {
+	BookmarkRepositoryPort,
+	SettingsRepositoryPort,
+} from "../app/index";
 import {
 	type ChromeIdentityApi,
 	type LastErrorAccessor,
 	type TokenProvider,
 	DriveBookmarkRepository,
+	DriveSettingsRepository,
 	createChromeIdentityTokenProvider,
 	createGoogleDriveClient,
 } from "../drive/index";
@@ -40,9 +44,11 @@ export type ChromeDriveDeps = {
 	fetchFn?: typeof fetch;
 };
 
-/** The assembled Drive runtime: the repository port plus a connection probe. */
+/** The assembled Drive runtime: the repository ports plus a connection probe. */
 export type ChromeDriveRuntime = {
 	readonly repository: BookmarkRepositoryPort;
+	/** `bookmark-ai/settings.json`'s repository, sharing the same client/token stack (MIK-018). */
+	readonly settingsRepository: SettingsRepositoryPort;
 	/** Non-interactive check used only to render the popup connection badge. */
 	probeConnection(): Promise<ConnectionStatus>;
 };
@@ -75,9 +81,11 @@ export function createChromeDriveRuntime(
 		fetchFn: deps.fetchFn,
 	});
 	const repository = new DriveBookmarkRepository(client);
+	const settingsRepository = new DriveSettingsRepository(client);
 
 	return {
 		repository,
+		settingsRepository,
 		async probeConnection(): Promise<ConnectionStatus> {
 			try {
 				await base.getToken({ interactive: false });

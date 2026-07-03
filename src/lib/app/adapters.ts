@@ -10,14 +10,43 @@
  * and no Chrome glue). The local-cache adapter lives in `storage/*`.
  */
 import { bookmarkId, isoTimestampFromDate } from "../bookmarks/index";
-import { type PromptClient, analyzePage } from "../ai/index";
-import type { AnalyzerPort, Clock, IdGenerator } from "./ports";
+import { type PromptClient, analyzePage, toAnalysisProfile } from "../ai/index";
+import { skillId } from "../settings/index";
+import type { SettingsCache } from "../storage/settings-local-cache";
+import type {
+	AnalyzerPort,
+	Clock,
+	IdGenerator,
+	SettingsProviderPort,
+} from "./ports";
+import type { SkillIdGenerator } from "./settings-app";
 
 /** Adapt the AI module's {@link analyzePage} into an {@link AnalyzerPort}. */
 export function createAnalyzerPort(client: PromptClient): AnalyzerPort {
 	return {
-		analyze(input) {
-			return analyzePage(client, input);
+		analyze(input, customProfiles) {
+			return analyzePage(client, input, customProfiles);
+		},
+	};
+}
+
+/**
+ * Adapt a {@link SettingsCache} into a {@link SettingsProviderPort}: a fast
+ * local-cache read (never a Drive round-trip), so wiring this into a save flow
+ * never adds Drive latency to saving/re-analyzing a bookmark. Any cache read
+ * failure degrades to `[]` — the built-ins still apply.
+ */
+export function createSettingsProviderPort(
+	cache: SettingsCache,
+): SettingsProviderPort {
+	return {
+		async currentCustomProfiles() {
+			try {
+				const state = await cache.load();
+				return state.settings.enabledSkills().map(toAnalysisProfile);
+			} catch {
+				return [];
+			}
 		},
 	};
 }
@@ -36,6 +65,15 @@ export function createCryptoIdGenerator(): IdGenerator {
 	return {
 		next() {
 			return bookmarkId(crypto.randomUUID());
+		},
+	};
+}
+
+/** A {@link SkillIdGenerator} backed by `crypto.randomUUID()`. */
+export function createCryptoSkillIdGenerator(): SkillIdGenerator {
+	return {
+		next() {
+			return skillId(crypto.randomUUID());
 		},
 	};
 }

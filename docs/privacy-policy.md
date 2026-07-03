@@ -42,10 +42,22 @@ Each record may include:
 - Genre.
 - Tags.
 - A long-form, AI-generated Japanese Markdown analysis (never a copy of the
-  page's raw text) and the ID of the built-in analysis profile used to
-  generate it.
+  page's raw text) and the ID of the analysis profile used to generate it.
 - Creation/update timestamps.
 - AI status such as `pending`, `ready`, `unavailable`, or `failed`.
+
+If you define custom analysis skills (optional, user-initiated), the extension
+also stores them in:
+
+```txt
+bookmark-ai/settings.json
+```
+
+This file contains only your custom skill definitions — name, enabled/disabled
+state, priority, domains, wildcard URL patterns, instruction text, and
+creation/update timestamps. It never contains page excerpts, bookmark records,
+or any other browsing data. Built-in analysis profiles are fixed in the
+extension's code and are never written to this file.
 
 ## Page Text Excerpts
 

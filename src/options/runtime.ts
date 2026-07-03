@@ -1,6 +1,6 @@
 /**
- * The options composition root: build the real {@link OptionsUseCases} for the
- * extension runtime.
+ * The options composition root: build the real {@link OptionsUseCases} and
+ * {@link SkillsUseCases} for the extension runtime.
  *
  * This is the one place adapters are wired, so the React component and controller
  * stay free of Chrome/Drive/AI imports. Every port is now backed by a real
@@ -11,7 +11,11 @@
  *   - the local cache (`chrome.storage.local`) — the ledger's render source;
  *   - the AI analyzer (Chrome Built-in AI / Prompt API) for re-analyze;
  *   - the page extractor (`chrome.scripting`) for re-analyze;
- *   - the system clock and crypto id generator.
+ *   - the system clock and crypto id generator;
+ *   - `bookmark-ai/settings.json`'s Drive repository and its own
+ *     `chrome.storage.local` cache (MIK-018), shared between the re-analyze
+ *     flow's `settingsProvider` port and the "Analysis skills" panel's CRUD
+ *     use cases.
  *
  * The options page never saves the current tab, so the required {@link
  * TabProviderPort} is a typed placeholder: it cannot resolve an active tab from a
@@ -25,8 +29,9 @@
  * the activeTab-only posture.
  *
  * Tests never reach this module: the options controller is exercised with a fake
- * {@link OptionsUseCases}, and the runtime adapters are tested directly with fake
- * chrome/fetch dependencies in `runtime/*` and `storage/*`.
+ * {@link OptionsUseCases}/{@link SkillsUseCases}, and the runtime adapters are
+ * tested directly with fake chrome/fetch dependencies in `runtime/*` and
+ * `storage/*`.
  */
 import {
 	type TabProviderPort,
@@ -34,6 +39,9 @@ import {
 	createAnalyzerPort,
 	createBookmarkApp,
 	createCryptoIdGenerator,
+	createCryptoSkillIdGenerator,
+	createSettingsApp,
+	createSettingsProviderPort,
 	createSystemClock,
 	err as appErr,
 } from "../lib/app/index";
@@ -42,8 +50,12 @@ import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
 } from "../lib/runtime/index";
-import { createChromeLocalCache } from "../lib/storage/index";
+import {
+	createChromeLocalCache,
+	createChromeSettingsCache,
+} from "../lib/storage/index";
 import { type OptionsUseCases, createOptionsUseCases } from "./use-cases";
+import { type SkillsUseCases, createSkillsUseCases } from "./skills-use-cases";
 
 /** The options page does not save the current tab; a typed placeholder suffices. */
 function createUnusedTabProvider(): TabProviderPort {
@@ -59,6 +71,7 @@ function createUnusedTabProvider(): TabProviderPort {
 /** Build the real {@link OptionsUseCases} for the extension options page. */
 export function createRuntimeUseCases(): OptionsUseCases {
 	const drive = createChromeDriveRuntime();
+	const settingsCache = createChromeSettingsCache();
 	const app = createBookmarkApp({
 		repository: drive.repository,
 		analyzer: createAnalyzerPort(createChromePromptClient()),
@@ -67,6 +80,19 @@ export function createRuntimeUseCases(): OptionsUseCases {
 		cache: createChromeLocalCache(),
 		clock: createSystemClock(),
 		ids: createCryptoIdGenerator(),
+		settingsProvider: createSettingsProviderPort(settingsCache),
 	});
 	return createOptionsUseCases(app);
+}
+
+/** Build the real {@link SkillsUseCases} for the options "Analysis skills" panel. */
+export function createRuntimeSkillsUseCases(): SkillsUseCases {
+	const drive = createChromeDriveRuntime();
+	const settingsApp = createSettingsApp({
+		repository: drive.settingsRepository,
+		cache: createChromeSettingsCache(),
+		clock: createSystemClock(),
+		ids: createCryptoSkillIdGenerator(),
+	});
+	return createSkillsUseCases(settingsApp);
 }

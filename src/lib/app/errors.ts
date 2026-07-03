@@ -14,12 +14,14 @@
 import type { RepositoryError } from "../drive/index";
 import type { ExtractionError } from "../extraction/index";
 import type { CollectionError } from "../bookmarks/index";
+import type { SkillError } from "../settings/index";
 import type { SyncError } from "../storage/index";
 
 export type AppErrorKind =
 	| "no-active-tab" // no resolvable active tab to save
 	| "invalid-tab" // active tab lacks a usable URL
 	| "invalid-bookmark" // a domain invariant rejected the record (e.g. bad URL)
+	| "invalid-skill" // a domain invariant rejected a custom analysis skill
 	| "not-found" // no cached record for the requested canonical URL
 	| "extraction" // page extraction failed
 	| "drive" // a Drive repository operation failed
@@ -66,6 +68,15 @@ export function fromExtractionError(error: ExtractionError): AppError {
 export function fromCollectionError(error: CollectionError): AppError {
 	return {
 		kind: "invalid-bookmark",
+		message: error.message,
+		detail: error.field,
+	};
+}
+
+/** Map a settings-domain {@link SkillError} onto an `invalid-skill` error. */
+export function fromSkillError(error: SkillError): AppError {
+	return {
+		kind: "invalid-skill",
 		message: error.message,
 		detail: error.field,
 	};

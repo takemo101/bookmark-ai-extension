@@ -17,7 +17,11 @@ import type {
 	Result as DriveResult,
 } from "../drive/index";
 import { ok as driveOk, err as driveErr } from "../drive/index";
-import type { AnalysisInput, AnalysisOutcome } from "../ai/index";
+import type {
+	AnalysisInput,
+	AnalysisOutcome,
+	AnalysisProfile,
+} from "../ai/index";
 import type {
 	ExtractedPage,
 	ExtractionError,
@@ -101,12 +105,17 @@ class FakeRepository implements BookmarkRepositoryPort {
 
 class FakeAnalyzer implements AnalyzerPort {
 	calls: AnalysisInput[] = [];
+	customProfileCalls: (readonly AnalysisProfile[] | undefined)[] = [];
 	constructor(private outcome: AnalysisOutcome) {}
 	setOutcome(outcome: AnalysisOutcome) {
 		this.outcome = outcome;
 	}
-	async analyze(input: AnalysisInput): Promise<AnalysisOutcome> {
+	async analyze(
+		input: AnalysisInput,
+		customProfiles?: readonly AnalysisProfile[],
+	): Promise<AnalysisOutcome> {
 		this.calls.push(input);
+		this.customProfileCalls.push(customProfiles);
 		return this.outcome;
 	}
 }
@@ -208,6 +217,9 @@ function makeHarness(
 		outcome?: AnalysisOutcome;
 		extraction?: ExtractionResult<ExtractedPage, ExtractionError>;
 		cache?: CacheState;
+		settingsProvider?: {
+			currentCustomProfiles(): Promise<readonly AnalysisProfile[]>;
+		};
 	} = {},
 ): Harness {
 	const tab =
@@ -228,6 +240,7 @@ function makeHarness(
 		cache,
 		clock: fakeClock(),
 		ids: fakeIds(),
+		settingsProvider: opts.settingsProvider,
 	});
 	return { app, repo, analyzer, extractor, cache };
 }
@@ -653,6 +666,53 @@ describe("createBookmarkApp", () => {
 			const { app, repo } = makeHarness();
 			await app.loadCachedState();
 			expect(repo.saveCalls).toBe(0);
+		});
+	});
+
+	describe("settingsProvider wiring (MIK-018)", () => {
+		it("forwards the settings provider's custom profiles into the analyzer", async () => {
+			const custom: AnalysisProfile = {
+				id: "custom-1",
+				name: "Custom",
+				priority: 99,
+				urlPatterns: ["example.test/*"],
+				instruction: "Custom emphasis.",
+			};
+			const { app, analyzer } = makeHarness({
+				settingsProvider: {
+					async currentCustomProfiles() {
+						return [custom];
+					},
+				},
+			});
+
+			await app.saveCurrentTab();
+
+			expect(analyzer.customProfileCalls).toHaveLength(1);
+			expect(analyzer.customProfileCalls[0]).toEqual([custom]);
+		});
+
+		it("degrades to an empty profile list when the settings provider throws", async () => {
+			const { app, analyzer } = makeHarness({
+				settingsProvider: {
+					async currentCustomProfiles() {
+						throw new Error("cache read failed");
+					},
+				},
+			});
+
+			const result = await app.saveCurrentTab();
+
+			expect(result.ok).toBe(true);
+			expect(analyzer.customProfileCalls).toEqual([[]]);
+		});
+
+		it("passes an empty profile list when no settings provider is supplied", async () => {
+			const { app, analyzer } = makeHarness();
+
+			await app.saveCurrentTab();
+
+			expect(analyzer.customProfileCalls).toEqual([[]]);
 		});
 	});
 });

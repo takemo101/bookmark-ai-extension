@@ -120,12 +120,24 @@ Use Google Drive as source of truth.
 
 - Folder: `bookmark-ai/`
 - File: `bookmarks.jsonl`
+- Settings file: `bookmark-ai/settings.json` — Drive-synced custom analysis
+  skills (AI Analysis v2 Phase 2, MIK-018; see docs/ai-analysis-v2.md
+  "Settings file"). Stores only user-defined custom skill definitions
+  (id/name/enabled/priority/domains/urlPatterns/instruction/timestamps),
+  never raw page excerpts. Built-in skills stay fixed in code
+  (`src/lib/ai/profile.ts`) and are never persisted here.
 - OAuth scope: `https://www.googleapis.com/auth/drive.file`
 - Folder is visible in the user's My Drive.
 - The extension creates and manages this folder/file itself.
 - Do not use `appDataFolder` for MVP because portability and visibility are product goals.
 
 `drive.file` is intentionally minimal. It allows the extension to create and manage files it owns, rather than requesting broad Drive access.
+
+`settings.json` uses a simpler conflict policy than `bookmarks.jsonl`: whole-file
+`updatedAt` last-writer-wins (a tie favors the caller's fresh write) rather than
+a per-record merge, since settings edits are comparatively rare and the
+per-skill merge complexity is not warranted for the first implementation (see
+docs/ai-analysis-v2.md "Conflict policy for settings").
 
 ## Local Cache
 
@@ -148,6 +160,13 @@ The cache stays the source of truth's *cache*, never an authority of its own, so
 a corrupt entry is safely discarded and re-pulled. The one nuance is the
 `pending` flag: while it is set, the cache holds the only copy of a change that
 never reached Drive, so a sync must reconcile (push) rather than overwrite it.
+
+`bookmark-ai/settings.json`'s custom skills are cached the same way, but under
+their own `chrome.storage.local` key and schema — a settings-cache read/write
+never touches the bookmark cache blob, and vice versa. The options page's
+"Analysis skills" panel renders from this cache first, then syncs with Drive;
+the same cache is read (fast, no Drive round-trip) when a save/re-analyze needs
+the currently-enabled custom skills.
 
 ## Bookmark Data Model
 

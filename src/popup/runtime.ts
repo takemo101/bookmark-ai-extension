@@ -27,6 +27,7 @@ import {
 	createAnalyzerPort,
 	createBookmarkApp,
 	createCryptoIdGenerator,
+	createSettingsProviderPort,
 	createSystemClock,
 	err as appErr,
 	ok as appOk,
@@ -36,7 +37,10 @@ import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
 } from "../lib/runtime/index";
-import { createChromeLocalCache } from "../lib/storage/index";
+import {
+	createChromeLocalCache,
+	createChromeSettingsCache,
+} from "../lib/storage/index";
 import {
 	type PopupEnvironmentProvider,
 	type PopupUseCases,
@@ -109,6 +113,10 @@ export function createRuntimeUseCases(): PopupUseCases {
 		cache: createChromeLocalCache(),
 		clock: createSystemClock(),
 		ids: createCryptoIdGenerator(),
+		// A fast local-cache read of `bookmark-ai/settings.json`'s custom skills
+		// (MIK-018), never a Drive round-trip, so saving from the popup gains no
+		// extra latency (docs/ai-analysis-v2.md "Settings file").
+		settingsProvider: createSettingsProviderPort(createChromeSettingsCache()),
 	});
 	return createPopupUseCases(
 		app,

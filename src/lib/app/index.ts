@@ -12,10 +12,13 @@
  *
  * Surface:
  *   - {@link createBookmarkApp} + {@link BookmarkApp} — the use cases.
+ *   - {@link createSettingsApp} + {@link SettingsApp} — the custom-skill CRUD
+ *     use cases the options page drives (MIK-018).
  *   - Ports and their value types, for wiring real or fake dependencies.
  *   - {@link AppError} — the single, UI-safe error taxonomy callers handle.
  *   - Chrome-free default adapters ({@link createAnalyzerPort},
- *     {@link createSystemClock}, {@link createCryptoIdGenerator}).
+ *     {@link createSystemClock}, {@link createCryptoIdGenerator},
+ *     {@link createCryptoSkillIdGenerator}, {@link createSettingsProviderPort}).
  */
 export type { Result, Ok, Err } from "./result";
 export { ok, err } from "./result";
@@ -26,6 +29,7 @@ export {
 	fromRepositoryError,
 	fromExtractionError,
 	fromCollectionError,
+	fromSkillError,
 	toSyncError,
 } from "./errors";
 
@@ -33,6 +37,7 @@ export type {
 	AppDeps,
 	BookmarkRepositoryPort,
 	AnalyzerPort,
+	SettingsProviderPort,
 	PageExtractorPort,
 	ExtractionTarget,
 	TabProviderPort,
@@ -49,8 +54,18 @@ export type {
 export type { BookmarkApp, SaveOutcome } from "./bookmark-app";
 export { createBookmarkApp } from "./bookmark-app";
 
+export type {
+	SettingsApp,
+	SettingsAppDeps,
+	SettingsRepositoryPort,
+	SkillIdGenerator,
+} from "./settings-app";
+export { createSettingsApp } from "./settings-app";
+
 export {
 	createAnalyzerPort,
+	createSettingsProviderPort,
 	createSystemClock,
 	createCryptoIdGenerator,
+	createCryptoSkillIdGenerator,
 } from "./adapters";

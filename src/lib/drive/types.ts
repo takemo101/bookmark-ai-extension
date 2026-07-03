@@ -26,6 +26,12 @@ export type DriveRevision = Brand<string, "DriveRevision">;
 /** Fixed, user-visible Drive location for the bookmark store (docs/design.md). */
 export const FOLDER_NAME = "bookmark-ai";
 export const FILE_NAME = "bookmarks.jsonl";
+/**
+ * Fixed, user-visible Drive location for custom analysis-skill settings, in
+ * the same `bookmark-ai/` folder as {@link FILE_NAME}
+ * (docs/ai-analysis-v2.md "Settings file").
+ */
+export const SETTINGS_FILE_NAME = "settings.json";
 
 /** Google Drive mime type for a folder. */
 export const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
