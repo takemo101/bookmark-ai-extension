@@ -45,6 +45,23 @@ describe("runPromptApiServiceWorkerExperiment", () => {
 		expect(report.slowPromptLifecycle.status).toBe("n/a");
 	});
 
+	it("passes English expected output language to the availability probe", async () => {
+		let availabilityOptions: unknown;
+		const namespace: PromptModelNamespace = {
+			availability: async (options) => {
+				availabilityOptions = options;
+				return "unavailable";
+			},
+			create: async () => ({ prompt: async () => "" }),
+		};
+
+		await runPromptApiServiceWorkerExperiment(namespace);
+
+		expect(availabilityOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["en"] }],
+		});
+	});
+
 	it("reports pass for all four points on the full success path", async () => {
 		let destroyCount = 0;
 		const createOptions: unknown[] = [];

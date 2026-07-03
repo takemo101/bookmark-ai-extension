@@ -153,7 +153,9 @@ async function checkAvailability(
 	namespace: PromptModelNamespace,
 ): Promise<ExperimentPointResult> {
 	try {
-		const raw = await namespace.availability();
+		const raw = await namespace.availability({
+			expectedOutputs: ENGLISH_TEXT_OUTPUT,
+		});
 		if (raw === "unavailable") {
 			return {
 				status: "partial",

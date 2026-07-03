@@ -16,9 +16,9 @@
  *     `"unavailable" | "downloadable" | "downloading" | "available"`.
  *   - `namespace.create(options)` resolves to a session with
  *     `prompt(text): Promise<string>` and an optional `destroy()`.
- *   - `namespace.create(options)` accepts `expectedOutputs`; this adapter
- *     requests Japanese text output to match the product's AI contract and avoid
- *     Chrome's missing-output-language warning.
+ *   - `namespace.availability(options)` and `namespace.create(options)` accept
+ *     `expectedOutputs`; this adapter requests Japanese text output to match the
+ *     product's AI contract and avoid Chrome's missing-output-language warning.
  * If a future Chrome changes these, only this file moves — callers keep using
  * {@link PromptClient}. The namespace can also be injected for tests.
  */
@@ -129,7 +129,11 @@ export function createChromePromptClient(
 				return "unavailable";
 			}
 			try {
-				return normalizeAvailability(await namespace.availability());
+				return normalizeAvailability(
+					await namespace.availability({
+						expectedOutputs: JAPANESE_TEXT_OUTPUT,
+					}),
+				);
 			} catch {
 				return "unavailable";
 			}

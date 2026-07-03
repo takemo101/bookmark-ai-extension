@@ -37,6 +37,22 @@ describe("createChromePromptClient", () => {
 		expect(await make("???").availability()).toBe("unavailable");
 	});
 
+	it("passes Japanese expected output language to availability probes", async () => {
+		let availabilityOptions: unknown;
+		const client = createChromePromptClient({
+			availability: async (options) => {
+				availabilityOptions = options;
+				return "available";
+			},
+			create: async () => ({ prompt: async () => "" }),
+		});
+
+		expect(await client.availability()).toBe("available");
+		expect(availabilityOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["ja"] }],
+		});
+	});
+
 	it("treats a throwing availability probe as unavailable", async () => {
 		const client = createChromePromptClient({
 			availability: async () => {
