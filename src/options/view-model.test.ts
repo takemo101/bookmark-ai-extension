@@ -8,7 +8,6 @@ import {
 } from "../lib/bookmarks/index";
 import type { CacheState } from "../lib/storage/index";
 import type {
-	AnalysisSettledEvent,
 	AppError,
 	CanonicalUrl,
 	OptionsUseCases,
@@ -92,14 +91,8 @@ class FakeUseCases implements OptionsUseCases {
 	reAnalyzeResult: Result<SaveOutcome, AppError> | null = null;
 	deleteArgs: CanonicalUrl[] = [];
 	reAnalyzeArgs: CanonicalUrl[] = [];
-	settledListeners = new Set<(event: AnalysisSettledEvent) => void>();
-
-	/** Test helper: simulate a queued analysis settling (MIK-019). */
-	emitSettled(event: AnalysisSettledEvent) {
-		for (const listener of this.settledListeners) {
-			listener(event);
-		}
-	}
+	/** When set, `reAnalyzeBookmark` awaits this before resolving (foreground timing tests). */
+	reAnalyzeGate: Promise<void> | null = null;
 
 	async loadCachedState() {
 		return this.cache;
@@ -125,16 +118,15 @@ class FakeUseCases implements OptionsUseCases {
 	}
 	async reAnalyzeBookmark(canonicalUrl: CanonicalUrl) {
 		this.reAnalyzeArgs.push(canonicalUrl);
+		if (this.reAnalyzeGate) {
+			await this.reAnalyzeGate;
+		}
 		return (
 			this.reAnalyzeResult ?? {
 				ok: true as const,
 				value: outcomeOf(this.cache.bookmarks.toArray()[0]!),
 			}
 		);
-	}
-	onAnalysisSettled(listener: (event: AnalysisSettledEvent) => void) {
-		this.settledListeners.add(listener);
-		return () => this.settledListeners.delete(listener);
 	}
 }
 
@@ -494,7 +486,7 @@ describe("createOptionsController", () => {
 			expect(controller.getView().actionError).toBe("token expired");
 		});
 
-		it("notes that analysis is queued (not done) when re-analyze's extraction succeeds (MIK-019)", async () => {
+		it("stays busy for the whole foreground re-analyze and clears when it resolves (MIK-021)", async () => {
 			const fake = new FakeUseCases();
 			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "failed" });
 			fake.cache = cacheOf([rec]);
@@ -502,77 +494,25 @@ describe("createOptionsController", () => {
 			await controller.init();
 
 			const url = controller.getView().rows[0].canonicalUrl;
-			const pending = recordOf({
-				id: "r",
-				title: "Stale",
-				aiStatus: "pending",
+			const ready = recordOf({ id: "r", title: "Stale", aiStatus: "ready" });
+			let finishAnalysis!: () => void;
+			fake.reAnalyzeGate = new Promise((resolve) => {
+				finishAnalysis = resolve;
 			});
-			fake.cache = cacheOf([pending]);
-			fake.reAnalyzeResult = { ok: true, value: outcomeOf(pending) };
-			await controller.reAnalyze(url);
-
-			const view = controller.getView();
-			expect(view.rows[0].aiStatus).toBe("pending");
-			expect(view.actionNotice).toContain("queued");
-			expect(view.actionError).toBeUndefined();
-		});
-
-		it("busy clears once extraction+enqueue resolves, before analysis itself finishes (MIK-019)", async () => {
-			const fake = new FakeUseCases();
-			const rec = recordOf({ id: "r", title: "Stale", aiStatus: "failed" });
-			fake.cache = cacheOf([rec]);
-			const controller = controllerWith(fake);
-			await controller.init();
-
-			const url = controller.getView().rows[0].canonicalUrl;
-			const pending = recordOf({
-				id: "r",
-				title: "Stale",
-				aiStatus: "pending",
-			});
-			fake.cache = cacheOf([pending]);
-			fake.reAnalyzeResult = { ok: true, value: outcomeOf(pending) };
+			fake.reAnalyzeResult = { ok: true, value: outcomeOf(ready) };
 
 			const action = controller.reAnalyze(url);
+			// The foreground analysis has not resolved yet: the action stays busy,
+			// telling the user to keep the screen open.
+			expect(controller.getView().busy).toBe(true);
+
+			fake.cache = cacheOf([ready]);
+			finishAnalysis();
 			await action;
 
-			// `busy` reflects the extraction+enqueue call, not the still-queued
-			// analysis, so it is already false once `reAnalyze` resolves.
 			expect(controller.getView().busy).toBe(false);
-			expect(controller.getView().rows[0].aiStatus).toBe("pending");
-		});
-	});
-
-	describe("live updates from queued analysis (MIK-019)", () => {
-		it("refreshes the ledger when a queued analysis settles, without a manual refresh", async () => {
-			const fake = new FakeUseCases();
-			const pending = recordOf({
-				id: "r",
-				title: "Queued",
-				aiStatus: "pending",
-			});
-			fake.cache = cacheOf([pending]);
-			const controller = controllerWith(fake);
-			await controller.init();
-
-			expect(controller.getView().rows[0].aiStatus).toBe("pending");
-
-			const ready = recordOf({
-				id: "r",
-				title: "Queued",
-				aiStatus: "ready",
-				description: "分析完了",
-			});
-			fake.cache = cacheOf([ready]);
-			fake.emitSettled({
-				canonicalUrl: ready.canonicalUrl,
-				outcome: { ok: true, value: outcomeOf(ready) },
-			});
-			await Promise.resolve();
-			await Promise.resolve();
-
 			expect(controller.getView().rows[0].aiStatus).toBe("ready");
-			expect(controller.getView().rows[0].summary).toBe("分析完了");
+			expect(controller.getView().actionNotice).toBeUndefined();
 		});
 	});
 

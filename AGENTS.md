@@ -121,7 +121,7 @@ Use durable docs as the source of truth. Before changing behavior, architecture,
 
 1. `docs/design.md` — canonical MVP design and architecture.
 2. `docs/ai-analysis-v2.md` — AI Analysis v2 plan for long-form Markdown
-   analysis, analysis skills, and queue behavior.
+   analysis, analysis skills, and foreground analysis behavior.
 3. `docs/implementation-principles.md` — implementation principles adapted from okite-ai skills.
 4. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
 5. `docs/privacy-policy.md` — privacy constraints and policy draft.

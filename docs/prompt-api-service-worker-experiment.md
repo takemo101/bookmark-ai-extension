@@ -5,9 +5,10 @@ Date: 2026-07-03
 ## Purpose
 
 This experiment checks whether Chrome Built-in AI / Prompt API works from an
-MV3 extension **service worker**, before any durable background analysis queue
-is designed (see [`ai-analysis-v2.md`](./ai-analysis-v2.md) "Service worker
-experiment" under "Queue behavior").
+MV3 extension **service worker** (see [`ai-analysis-v2.md`](./ai-analysis-v2.md)
+"Service worker experiment (concluded)" under "Foreground analysis behavior").
+Per MIK-021 the MVP uses UI-open foreground analysis and this direction is not
+being pursued now; see "Recommendation" at the end of this document.
 
 It checks four points:
 
@@ -112,8 +113,10 @@ extension.
 
 ## Recommendation
 
-Recommendation is **pending real Chrome execution**. Per MIK-020 and
-`AGENTS.md` rules, a production background-queue issue must not be created and
-service-worker background Prompt API processing must not be assumed viable
-until this experiment is actually run in real Chrome and the run record above
-is filled in with real results.
+**Concluded — not pursued (MIK-021).** The experiment was never executed in
+real Chrome, and per the MIK-020/MIK-021 decision the MVP explicitly uses
+UI-open foreground analysis: save/re-analyze runs extraction and Prompt API
+analysis in the initiating popup/options flow while the screen stays open.
+Service-worker/background/offscreen Prompt API processing is not being pursued
+now; do not create a production background-queue issue. This document is kept
+for historical reference in case the question is revisited later.

@@ -193,6 +193,11 @@ function Flow({ flow }: { flow: FlowView }) {
 	return (
 		<section style={{ ...card, marginTop: 10 }}>
 			<Trail trail={flow.trail} />
+			{flow.kind === "running" ? (
+				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
+					Analyzing in the foreground — keep this popup open until it finishes.
+				</p>
+			) : null}
 			{flow.kind === "error" ? (
 				<p style={{ fontSize: 12, color: palette.danger, margin: "8px 0 0" }}>
 					{flow.message}
@@ -253,13 +258,11 @@ function Receipt({
 				<Preview preview={receipt.preview} />
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-					{receipt.analysisPending
-						? "Bookmark saved. AI analysis is running in the background — safe to close this popup."
-						: receipt.aiStatus === "unavailable"
-							? "Saved without AI — the Prompt API was unavailable. Re-analyze later from Options."
-							: receipt.aiError
-								? `Saved, but analysis failed: ${receipt.aiError}. Re-analyze later from Options.`
-								: "Saved. Re-analyze later from Options."}
+					{receipt.aiStatus === "unavailable"
+						? "Saved without AI — the Prompt API was unavailable. Re-analyze later from Options."
+						: receipt.aiError
+							? `Saved, but analysis failed: ${receipt.aiError}. Re-analyze later from Options.`
+							: "Saved. Re-analyze later from Options."}
 				</p>
 			)}
 			{receipt.driveWarning ? (

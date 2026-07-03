@@ -31,23 +31,19 @@
  * state, so an offline mutation is never silently discarded and is eventually
  * pushed once Drive recovers (MIK-014).
  *
- * ## Queued AI analysis (MIK-019)
+ * ## Foreground AI analysis (MIK-021)
  *
- * Extraction stays synchronous — it is fast, and re-analyze's activeTab
- * precondition check *is* the extraction call, so it cannot be deferred
- * without weakening that guarantee (docs/design.md "Options page: Research
- * Ledger"). Only the AI *analysis* step (the Prompt API call, applying its
- * result through the domain, and pushing the outcome to Drive) is deferred to
- * a small sequential in-memory {@link AnalysisQueue}, one per
- * `createBookmarkApp` instance. `saveCurrentTab`/`reAnalyzeBookmark` return as
- * soon as the pending record is durably persisted and (on extraction success)
- * the analysis item is enqueued — they never await the queued analysis. A
- * caller that wants to know when analysis finishes subscribes via
- * {@link BookmarkApp.onAnalysisSettled}. Because the queue is a plain
- * in-memory object with the same lifetime as this app instance (i.e. the
- * popup/options JS context), closing that page drops the queue and any
- * in-memory {@link ExtractedPage} it was holding — nothing durable is ever at
- * risk, and no raw excerpt is ever persisted (docs/ai-analysis-v2.md "Queue
+ * Save/re-analyze runs the whole flow in the initiating UI's foreground:
+ * persist the pending record durably first, extract the page, run the Prompt
+ * API analysis, and push the final result to Drive — all before the call
+ * resolves. There is no background/service-worker/offscreen processing and no
+ * analysis queue (the MIK-019 queue was removed by MIK-021 after MIK-020
+ * concluded against background Prompt API processing); the UI stays open and
+ * shows real progress until the operation reaches a terminal AI status. The
+ * extracted page/excerpt lives only in this call's in-memory scope — it is
+ * never written to the cache or the repository, so closing the popup/options
+ * page mid-flow merely drops it, leaving the already-durable `pending` record
+ * recoverable via re-analyze (docs/ai-analysis-v2.md "Foreground analysis
  * behavior"; docs/privacy-policy.md).
  */
 import {
@@ -63,7 +59,6 @@ import type { AnalysisProfile } from "../ai/index";
 import type { DriveLocation } from "../drive/index";
 import { type ExtractedPage, buildExcerpt } from "../extraction/index";
 import type { CacheState } from "../storage/index";
-import { type AnalysisQueue, createAnalysisQueue } from "./analysis-queue";
 import {
 	type AppError,
 	appError,
@@ -91,16 +86,6 @@ export type SaveOutcome = {
 	readonly driveError?: AppError;
 };
 
-/**
- * Fired once per queued analysis item, after its AI analysis + Drive push has
- * settled (MIK-019). `outcome` mirrors what `saveCurrentTab`/`reAnalyzeBookmark`
- * would have resolved with if analysis had run inline.
- */
-export type AnalysisSettledEvent = {
-	readonly canonicalUrl: CanonicalUrl;
-	readonly outcome: Result<SaveOutcome, AppError>;
-};
-
 /** The use-case surface exposed to the popup/options UI. */
 export interface BookmarkApp {
 	/** Render-fast read of the last cached state. Never hits Drive. */
@@ -108,13 +93,12 @@ export interface BookmarkApp {
 	/** Pull the authoritative store from Drive and refresh the cache. */
 	syncFromDrive(): Promise<Result<CacheState, AppError>>;
 	/**
-	 * Save the current active tab: persist a pending record, then extract the
-	 * page synchronously. Resolves as soon as that pending write lands (and, on
-	 * extraction success, the AI analysis step is enqueued) — it does not await
-	 * analysis (MIK-019). `onProgress`, when supplied, fires as each stage the
-	 * call itself performs genuinely begins; subscribe via
-	 * {@link BookmarkApp.onAnalysisSettled} to learn when the queued analysis
-	 * finishes.
+	 * Save the current active tab in one foreground flow (MIK-021): persist a
+	 * pending record durably, extract the page, run AI analysis, and push the
+	 * final result to Drive. Resolves only once the record has reached a
+	 * terminal AI status (`ready`/`unavailable`/`failed`) and the final write
+	 * settled. `onProgress`, when supplied, fires as each stage genuinely
+	 * begins.
 	 */
 	saveCurrentTab(
 		onProgress?: SaveProgress,
@@ -124,46 +108,21 @@ export interface BookmarkApp {
 		canonicalUrl: CanonicalUrl,
 	): Promise<Result<CacheState, AppError>>;
 	/**
-	 * Re-run AI analysis for an existing bookmark by canonical URL: re-extracts
-	 * the page synchronously, then enqueues analysis the same way as
-	 * {@link BookmarkApp.saveCurrentTab} — it resolves once extraction and the
-	 * pending write are done, not once analysis finishes (MIK-019). `onProgress`,
-	 * when supplied, fires as each stage the call itself performs genuinely
-	 * begins.
+	 * Re-run AI analysis for an existing bookmark by canonical URL in the same
+	 * foreground flow as {@link BookmarkApp.saveCurrentTab} (MIK-021):
+	 * re-extract the page, analyze it, and push the outcome before resolving.
+	 * `onProgress`, when supplied, fires as each stage genuinely begins.
 	 */
 	reAnalyzeBookmark(
 		canonicalUrl: CanonicalUrl,
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>>;
-	/**
-	 * Subscribe to queued analysis completions (MIK-019): fires once per
-	 * `saveCurrentTab`/`reAnalyzeBookmark` call whose extraction succeeded,
-	 * after that item's AI analysis + Drive push settles. Returns an
-	 * unsubscribe function. There is no backlog replay — a listener only sees
-	 * settlements that occur after it subscribes.
-	 */
-	onAnalysisSettled(
-		listener: (event: AnalysisSettledEvent) => void,
-	): () => void;
 }
 
 type DrivePush = {
 	readonly state: CacheState;
 	readonly driveSynced: boolean;
 	readonly driveError?: AppError;
-};
-
-/**
- * One item of deferred analysis work (MIK-019): the already-extracted page for
- * a bookmark whose pending record has already been persisted. `page` is held
- * only in this in-memory queue entry — it is never written to `deps.cache` or
- * `deps.repository` (docs/ai-analysis-v2.md "Non-goals"; docs/privacy-policy.md).
- */
-type QueuedAnalysisItem = {
-	readonly canonicalUrl: CanonicalUrl;
-	readonly target: ExtractionTarget;
-	readonly page: ExtractedPage;
-	readonly onProgress?: SaveProgress;
 };
 
 export function createBookmarkApp(deps: AppDeps): BookmarkApp {
@@ -308,11 +267,11 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
-	 * The synchronous fail tail for a *failed extraction* after a valid target:
-	 * mark the bookmark `failed` and push immediately — there is nothing to
-	 * analyze, so nothing is queued. (Re-analyze's separate activeTab
-	 * precondition — a `tab` extraction error — is handled by its caller before
-	 * ever reaching here, so that case never mutates the record.)
+	 * The fail tail for a *failed extraction* after a valid target: mark the
+	 * bookmark `failed` and push immediately — there is nothing to analyze.
+	 * (Re-analyze's separate activeTab precondition — a `tab` extraction error —
+	 * is handled by its caller before ever reaching here, so that case never
+	 * mutates the record.)
 	 */
 	async function finishExtractionFailure(
 		base: CacheState,
@@ -333,44 +292,39 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
-	 * The queued tail once a page has already been extracted (MIK-019): analyze
-	 * it and push the result to Drive. Loads a *fresh* `deps.cache.load()` at
-	 * process time rather than a snapshot captured at enqueue time, since
-	 * Drive/cache state may have changed while the item sat in the queue —
-	 * mirrors how `pushToDrive` is used elsewhere for conflict-safety.
+	 * The foreground tail once a page has been extracted (MIK-021): analyze it
+	 * and push the result to Drive before the save/re-analyze call resolves.
+	 * `page` lives only in this call's in-memory scope — it is never written to
+	 * `deps.cache` or `deps.repository` (docs/ai-analysis-v2.md "Non-goals";
+	 * docs/privacy-policy.md). If the initiating UI closes mid-analysis, the
+	 * whole JS context (and the excerpt with it) is dropped; the pending record
+	 * already persisted by the caller stays durable and re-analyzable.
 	 */
-	async function processQueuedAnalysis(
-		item: QueuedAnalysisItem,
+	async function finishAnalysis(
+		base: CacheState,
+		canonicalUrl: CanonicalUrl,
+		target: ExtractionTarget,
+		page: ExtractedPage,
+		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>> {
-		const cached = await deps.cache.load();
 		const now = deps.clock.now();
 		const updated = await analyzeExtractedPage(
-			cached.bookmarks,
-			item.canonicalUrl,
-			item.target,
-			item.page,
+			base.bookmarks,
+			canonicalUrl,
+			target,
+			page,
 			now,
-			item.onProgress,
+			onProgress,
 		);
 		if (!updated.ok) {
 			return err(fromCollectionError(updated.error));
 		}
-		item.onProgress?.("syncing");
+		onProgress?.("syncing");
 		const push = await pushToDrive(updated.value, {
-			prevLocation: cached.location,
+			prevLocation: base.location,
 		});
-		return outcomeFromPush(push, item.canonicalUrl);
+		return outcomeFromPush(push, canonicalUrl);
 	}
-
-	// One sequential in-memory analysis queue per `createBookmarkApp` instance
-	// (MIK-019): its lifetime is this instance's lifetime, i.e. the popup/
-	// options JS context. It is never persisted or hoisted anywhere durable, so
-	// closing that page drops it — and any `ExtractedPage` an item was still
-	// holding — without ever having written it anywhere.
-	const analysisQueue: AnalysisQueue<
-		QueuedAnalysisItem,
-		Result<SaveOutcome, AppError>
-	> = createAnalysisQueue(processQueuedAnalysis);
 
 	return {
 		async loadCachedState(): Promise<CacheState> {
@@ -514,16 +468,16 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				);
 			}
 
-			// 5. Extraction succeeded: defer the (slow, unbounded-latency) AI analysis
-			//    call to the in-memory queue and return now with the pending outcome.
-			//    The caller never awaits analysis; `onAnalysisSettled` reports later.
-			analysisQueue.enqueue({
+			// 5. Extraction succeeded: run AI analysis in the foreground and push the
+			//    final result before resolving, so the caller's receipt reflects the
+			//    terminal AI status (MIK-021).
+			return finishAnalysis(
+				pendingPush.state,
 				canonicalUrl,
-				target: { url: tab.url, title: tab.title },
-				page: extraction.value,
+				{ url: tab.url, title: tab.title },
+				extraction.value,
 				onProgress,
-			});
-			return outcomeFromPush(pendingPush, canonicalUrl);
+			);
 		},
 
 		async deleteBookmark(
@@ -603,20 +557,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				);
 			}
 
-			// Extraction succeeded: defer analysis to the queue, same as save.
-			analysisQueue.enqueue({
+			// Extraction succeeded: run analysis in the foreground, same as save.
+			return finishAnalysis(
+				pendingPush.state,
 				canonicalUrl,
-				target: { url: record.url, title: record.title },
-				page: extraction.value,
+				{ url: record.url, title: record.title },
+				extraction.value,
 				onProgress,
-			});
-			return outcomeFromPush(pendingPush, canonicalUrl);
-		},
-
-		onAnalysisSettled(listener) {
-			return analysisQueue.onSettled((item, result) => {
-				listener({ canonicalUrl: item.canonicalUrl, outcome: result });
-			});
+			);
 		},
 	};
 }
