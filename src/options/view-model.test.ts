@@ -315,6 +315,77 @@ describe("createOptionsController", () => {
 			expect(controller.getView().rows[0].selected).toBe(true);
 		});
 
+		it("clearSelection closes the detail and keeps query/filter state (MIK-022)", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({ id: "a", title: "Alpha", genre: "技術", aiStatus: "ready" }),
+				recordOf({ id: "b", title: "Beta", genre: "技術", aiStatus: "ready" }),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.setQuery("Alpha");
+			controller.setGenre("技術");
+			const url = controller.getView().rows[0].canonicalUrl;
+			controller.select(url);
+			expect(controller.getView().selected).toBeDefined();
+			expect(controller.getView().rows[0].selected).toBe(true);
+
+			controller.clearSelection();
+			const view = controller.getView();
+
+			expect(view.selected).toBeUndefined();
+			expect(view.rows[0].selected).toBe(false);
+			expect(view.filters).toEqual({ query: "Alpha", genre: "技術" });
+			expect(view.rows.map((r) => r.title)).toEqual(["Alpha"]);
+		});
+
+		it("keeps the selection open and updates the detail after re-analyze (MIK-022)", async () => {
+			const fake = new FakeUseCases();
+			const stale = recordOf({
+				id: "r",
+				url: "https://example.test/r",
+				title: "Stale",
+				aiStatus: "failed",
+			});
+			fake.cache = cacheOf([stale]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const url = controller.getView().rows[0].canonicalUrl;
+			controller.select(url);
+
+			const ready = recordOf({
+				id: "r",
+				url: "https://example.test/r",
+				title: "Stale",
+				description: "再分析済み",
+				aiStatus: "ready",
+				analysisMarkdown: "## 更新後\n\n新しい分析。",
+			});
+			fake.cache = cacheOf([ready]);
+			fake.reAnalyzeResult = { ok: true, value: outcomeOf(ready) };
+			await controller.reAnalyze(url);
+
+			const view = controller.getView();
+			expect(view.selected?.aiStatus).toBe("ready");
+			expect(view.selected?.analysisMarkdown).toBe("## 更新後\n\n新しい分析。");
+			expect(view.rows[0].selected).toBe(true);
+		});
+
+		it("exposes analysisProfileId on rows for the richer row metadata (MIK-022)", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({ id: "p", analysisProfileId: "github-repository" }),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			expect(controller.getView().rows[0].analysisProfileId).toBe(
+				"github-repository",
+			);
+		});
+
 		it("keeps the detail visible even when filtered out of the list", async () => {
 			const controller = controllerWith(
 				(() => {

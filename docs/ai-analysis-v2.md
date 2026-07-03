@@ -296,7 +296,11 @@ is kept for historical reference only.
 
 ### Options
 
-- Detail pane renders `analysisMarkdown` safely as Markdown.
+- Clicking a bookmark row opens a detail side sheet (fullscreen on narrow
+  viewports) that renders the full `analysisMarkdown` safely as Markdown via
+  `react-markdown` + `remark-gfm`: no `rehype-raw`, no
+  `dangerouslySetInnerHTML`, so raw HTML in AI output is never executed;
+  Markdown links open in a new tab with `rel="noreferrer"`.
 - Search includes `analysisMarkdown`.
 - Show which `analysisProfileId` generated the current analysis.
 - Provide custom skill CRUD:

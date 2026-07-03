@@ -58,9 +58,11 @@ export type RowView = {
 	readonly selected: boolean;
 	/** Whether a "Re-analyze" affordance should show (status is not `ready`). */
 	readonly canReAnalyze: boolean;
+	/** ID of the analysis profile shown as compact row metadata (MIK-022). */
+	readonly analysisProfileId?: string;
 };
 
-/** The right detail pane for the selected bookmark. */
+/** The detail side sheet for the selected (open) bookmark (MIK-022). */
 export type DetailView = {
 	readonly canonicalUrl: string;
 	readonly title: string;
@@ -368,6 +370,7 @@ function toRow(record: BookmarkRecord, selected: boolean): RowView {
 		updatedAt: record.updatedAt,
 		selected,
 		canReAnalyze: record.aiStatus !== "ready",
+		analysisProfileId: record.analysisProfileId,
 	};
 }
 

@@ -50,10 +50,13 @@ export const page: CSSProperties = {
 	lineHeight: 1.45,
 };
 
-/** The three-pane grid: left rail · center list · right detail. */
+/**
+ * The two-zone grid: left rail · center list. The bookmark detail is no longer
+ * a third pane — it opens as a side sheet overlay from a row click (MIK-022).
+ */
 export const ledger: CSSProperties = {
 	display: "grid",
-	gridTemplateColumns: "240px minmax(0, 1fr) 320px",
+	gridTemplateColumns: "240px minmax(0, 1fr)",
 	gap: 16,
 	alignItems: "start",
 	maxWidth: 1200,
@@ -142,6 +145,62 @@ export const truncate: CSSProperties = {
 	overflow: "hidden",
 	textOverflow: "ellipsis",
 	whiteSpace: "nowrap",
+};
+
+/** Two-line clamp for the richer row summary (inline-style line clamp). */
+export const summaryClamp: CSSProperties = {
+	display: "-webkit-box",
+	WebkitBoxOrient: "vertical",
+	WebkitLineClamp: 2,
+	overflow: "hidden",
+};
+
+/**
+ * Detail side sheet (MIK-022). The backdrop hosts the sheet flush against the
+ * viewport's right edge; on narrow screens the sheet goes fullscreen.
+ */
+export const sheetBackdrop: CSSProperties = {
+	position: "fixed",
+	inset: 0,
+	background: "rgba(58, 52, 43, 0.35)",
+	display: "flex",
+	justifyContent: "flex-end",
+	zIndex: 20,
+};
+
+export const sheet: CSSProperties = {
+	boxSizing: "border-box",
+	width: "min(60vw, 860px)",
+	height: "100%",
+	display: "flex",
+	flexDirection: "column",
+	background: palette.paper,
+	borderLeft: `1px solid ${palette.borderStrong}`,
+	boxShadow: "-12px 0 32px rgba(58, 52, 43, 0.18)",
+};
+
+export const sheetFullscreen: CSSProperties = {
+	...sheet,
+	width: "100%",
+	borderLeft: "none",
+};
+
+export const sheetHeader: CSSProperties = {
+	padding: "14px 20px 12px",
+	background: palette.paperRaised,
+	borderBottom: `1px solid ${palette.border}`,
+};
+
+export const sheetBody: CSSProperties = {
+	flex: 1,
+	overflowY: "auto",
+	padding: "14px 20px 24px",
+};
+
+export const sheetFooter: CSSProperties = {
+	padding: "12px 20px",
+	background: palette.paperRaised,
+	borderTop: `1px solid ${palette.border}`,
 };
 
 export const primaryButton: CSSProperties = {
