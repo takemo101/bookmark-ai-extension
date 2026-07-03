@@ -42,7 +42,10 @@ worth revisiting.
   - generic page.
 - Use skill-specific Markdown templates.
 - Target medium-to-long analysis, roughly 800-1500 Japanese characters
-  (roughly double that in characters for English output, MIK-029).
+  (roughly double that in characters for English output, MIK-029). This
+  long-form target is a fallback: it applies only when the selected skill's
+  instruction does not specify its own `analysisMarkdown` structure or length
+  (MIK-030).
 - Include `analysisMarkdown` in normal bookmark search.
 - Render `analysisMarkdown` safely as Markdown in the options detail pane:
   headings/lists/formatting are allowed, raw HTML is escaped or disabled.
@@ -184,6 +187,29 @@ rules. The target language is inferred deterministically from the page
 title/excerpt script counts, falling back to the browser UI language, then
 Japanese; `LanguageModel.availability()` / `create()` request the same language
 via `expectedOutputs`. The JSON keys are identical in both languages.
+
+### Output-shape priority (MIK-030)
+
+Within that layered model, the prompt makes the priority explicit:
+
+1. **Non-overridable fixed contract**: JSON-only output; exactly the keys
+   `description` / `genre` / `tags` / `analysisMarkdown`; the tags maximum;
+   the auto-selected output language; no copied raw excerpt; no raw HTML; no
+   external APIs/providers, API keys, or model selection.
+2. **Selected skill instruction**: may control the `analysisMarkdown` heading
+   structure, sections, length, and level of detail — including concise
+   custom shapes (e.g. a YouTube skill requesting only `## 動画概要` and
+   `## コメントピックアップ` with a short overview) — in addition to analysis
+   emphasis.
+3. **Default long-form fallback**: the roughly 800-1500 Japanese character
+   (double for English) detailed analysis with `##` headings and bullet lists
+   applies only when the selected skill's instruction does not specify a
+   structure or length.
+
+The prompt states the fixed contract as always taking precedence over the
+skill instruction, and states the long-form default as conditional on the
+instruction being silent about shape, so a concise skill is never forced back
+into generic long-form sections.
 
 Suggested output JSON:
 
@@ -335,11 +361,14 @@ is kept for historical reference only.
   - domain list;
   - wildcard URL patterns;
   - instruction textarea with authoring guidance next to the form: what the
-    instruction changes, per-source examples (GitHub repository / technical
-    article / official docs), safety warnings (no secrets, no raw page
-    persistence, no external APIs/providers, no output schema or
-    privacy-contract changes), and a plain-language explanation of
-    domain/pattern/priority matching.
+    instruction changes — analysis emphasis and the `analysisMarkdown` output
+    shape (headings, sections, length), which takes priority over the default
+    long-form format (MIK-030) — per-source examples (GitHub repository /
+    technical article / official docs / concise video page), safety warnings
+    (no secrets, no raw page persistence, no external APIs/providers, no
+    output language or model changes, no output schema or privacy-contract
+    changes), and a plain-language explanation of domain/pattern/priority
+    matching.
 - Built-in profiles are visible as defaults but not editable in the first
   implementation.
 

@@ -293,7 +293,10 @@ For the next AI analysis iteration, see
 long-form generated Markdown analysis, built-in and custom analysis skills,
 Drive-synced skill settings, and UI-open foreground analysis behavior while
 preserving the same privacy constraints: no external AI fallback and no
-persisted raw page excerpts.
+persisted raw page excerpts. A custom skill's instruction may control the
+`analysisMarkdown` output shape (headings, sections, length) with priority
+over the default long-form format (MIK-030); the JSON keys, output language,
+and privacy constraints remain non-overridable.
 
 ## Drive Write and Conflict Strategy
 
