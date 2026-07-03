@@ -427,7 +427,7 @@ function DetailPane({
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "10px 0 0" }}>
 					{detail.aiStatus === "pending"
-						? "AI analysis queued — running in the background."
+						? "AI analysis has not finished for this bookmark. Re-analyze it while its page is the active tab."
 						: "No AI description yet."}
 				</p>
 			)}
@@ -487,7 +487,7 @@ function DetailPane({
 						disabled={view.busy}
 						onClick={() => void controller.reAnalyze(detail.canonicalUrl)}
 					>
-						Re-analyze
+						{view.busy ? "Analyzing…" : "Re-analyze"}
 					</button>
 				) : null}
 				<button
@@ -501,6 +501,11 @@ function DetailPane({
 					Delete
 				</button>
 			</div>
+			{view.busy ? (
+				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
+					Analyzing in the foreground — keep this page open until it finishes.
+				</p>
+			) : null}
 		</aside>
 	);
 }

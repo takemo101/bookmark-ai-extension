@@ -47,18 +47,20 @@ worth revisiting.
 - Store only `analysisProfileId` on each bookmark record.
 - If skill settings change, existing bookmarks are not automatically reanalyzed;
   the user re-runs analysis manually.
-- On save, return quickly once a pending bookmark is persisted. AI analysis runs
-  through a queue instead of blocking the save UX.
-- Use existing `aiStatus: "pending"` for analysis waiting/processing states in
-  the initial implementation.
-- Raw page excerpts for queued analysis are only held temporarily in memory or a
-  non-durable session-level queue. They are not saved to Drive or persistent
-  local storage.
-- Initial queue processing runs while popup/options are open. If the UI closes,
-  pending bookmarks remain and can be analyzed when the user revisits the page or
-  manually re-analyzes from a valid active tab.
-- Service-worker background Prompt API processing should be investigated in a
-  separate experiment issue before committing to it.
+- On save, persist a pending bookmark durably first, then run extraction and
+  Prompt API analysis in the same foreground UI flow; the save/re-analyze
+  operation reports completion only after the record reaches a terminal AI
+  status (`ready`/`unavailable`/`failed`) and the final result is synced
+  (MIK-021).
+- Use existing `aiStatus: "pending"` for the persisted-but-not-yet-analyzed
+  state.
+- Raw page excerpts are only held temporarily in memory during the foreground
+  operation. They are not saved to Drive or persistent local storage.
+- Analysis runs while the popup/options page stays open. If the UI closes
+  mid-operation, the in-memory excerpt is dropped; the durable pending bookmark
+  remains and the user can re-analyze later from a valid active tab.
+- Service-worker/background/offscreen Prompt API processing is not pursued for
+  the MVP (MIK-020 conclusion, adopted by MIK-021).
 
 ## Non-goals
 
@@ -68,8 +70,8 @@ worth revisiting.
 - Do not broaden host permissions, add always-on content scripts, or add a
   crawler.
 - Do not make the extension a general bookmark manager replacement.
-- Do not implement service-worker background analysis until the Prompt API
-  behavior is verified in real Chrome.
+- Do not implement service-worker/background/offscreen analysis; the MVP uses
+  UI-open foreground analysis only (MIK-021).
 
 ## Data model
 
@@ -252,44 +254,44 @@ Focus:
 - why it may be worth revisiting;
 - useful keywords.
 
-## Queue behavior
+## Foreground analysis behavior
 
-### Initial implementation
+### Current implementation (MIK-021)
 
-- Save creates/updates a `pending` bookmark and returns quickly.
-- The current page excerpt is captured and placed in an in-memory queue while the
-  popup/options page is alive.
-- The queue analyzes entries sequentially to avoid overlapping Prompt API work.
+- Save creates/updates a `pending` bookmark and persists it durably first, so
+  nothing is lost if the flow is interrupted.
+- Extraction and Prompt API analysis then run in the initiating popup/options
+  foreground flow while the screen stays open; the operation resolves only
+  after analysis and the final sync settle. There is no analysis queue (the
+  MIK-019 in-memory queue was removed by MIK-021).
+- The current page excerpt is held only in the in-memory scope of that
+  operation.
 - On success, the bookmark is updated to `ready` with description, genre, tags,
   analysisMarkdown, and analysisProfileId.
 - If Prompt API is unavailable, the bookmark remains saved with
   `aiStatus: "unavailable"`.
 - If analysis fails, the bookmark becomes `failed` with a safe error message.
-- If the UI closes before analysis finishes, the queued excerpt is lost and the
-  bookmark remains `pending` or `failed`; the user can re-run analysis later from
-  a valid active tab.
+- If the UI closes before analysis finishes, the in-memory excerpt is dropped
+  and the bookmark remains `pending` (or the last durably written status); the
+  user can re-run analysis later from a valid active tab.
 
-### Service worker experiment
+### Service worker experiment (concluded)
 
-Before implementing background processing, create an experiment to verify whether
-real Chrome supports the needed Prompt API operations from an MV3 service worker:
-
-- availability probe;
-- session creation;
-- prompt execution;
-- lifecycle behavior during a slow prompt.
-
-See [`prompt-api-service-worker-experiment.md`](./prompt-api-service-worker-experiment.md) for the real-Chrome run protocol and run-record table for this experiment.
-
-Only if that experiment passes should a later issue add durable background queue
-processing.
+MIK-020 prepared an experiment harness to verify whether real Chrome supports
+the needed Prompt API operations from an MV3 service worker (see
+[`prompt-api-service-worker-experiment.md`](./prompt-api-service-worker-experiment.md)).
+Per MIK-021, service-worker/background/offscreen Prompt API processing is not
+being pursued now: the MVP uses UI-open foreground analysis. The experiment doc
+is kept for historical reference only.
 
 ## UI behavior
 
 ### Popup
 
-- Save returns after pending bookmark persistence.
-- Show that AI analysis is queued/running separately from bookmark saved state.
+- Save keeps the popup open and walks the visible progress trail
+  (saving → extracting → analyzing → syncing) until the flow finishes.
+- Tell the user to keep the popup open until analysis finishes; the receipt
+  shows the terminal AI status, never a "running in the background" state.
 - Keep recent bookmark display compact using `description`.
 
 ### Options
@@ -327,15 +329,14 @@ processing.
 - Merge built-in and custom skills at analysis time.
 - Apply file-level `updatedAt` last-writer-wins conflict handling.
 
-### Phase 3: Queue UX
+### Phase 3: Queue UX (superseded by MIK-021)
 
-- Split bookmark save completion from AI analysis completion.
-- Add an in-memory analysis queue for extracted page analysis.
-- Keep raw excerpts out of persistent storage.
-- Preserve pending bookmarks if the UI closes before analysis completes.
+- Historical: MIK-019 split save completion from AI analysis completion via an
+  in-memory queue. MIK-021 replaced this with the UI-open foreground flow
+  described in "Foreground analysis behavior"; raw excerpts stay out of
+  persistent storage and pending bookmarks still survive a UI close.
 
-### Phase 4: Service worker Prompt API experiment
+### Phase 4: Service worker Prompt API experiment (concluded)
 
-- Verify real Chrome service worker Prompt API support.
-- Record whether background queue processing is viable.
-- Decide whether to implement a later background processing issue.
+- MIK-020 built the experiment harness; per MIK-021 the decision is to not
+  pursue service-worker/background Prompt API processing now.

@@ -29,7 +29,6 @@ import type {
 } from "../extraction/index";
 import { ok as extractionOk, err as extractionErr } from "../extraction/index";
 import type { CacheState, LocalCache } from "../storage/index";
-import type { AnalysisSettledEvent } from "./bookmark-app";
 import { createBookmarkApp } from "./bookmark-app";
 import type {
 	ActiveTab,
@@ -123,9 +122,9 @@ class FakeAnalyzer implements AnalyzerPort {
 
 /**
  * An analyzer whose `analyze` call never resolves until the test explicitly
- * releases it — used to prove `saveCurrentTab`/`reAnalyzeBookmark` return
- * before queued analysis completes (MIK-019), rather than merely "usually
- * fast enough to look synchronous".
+ * releases it — used to prove `saveCurrentTab`/`reAnalyzeBookmark` genuinely
+ * wait for foreground analysis before resolving (MIK-021), and that the
+ * pending record is already durable before analysis completes.
  */
 class DeferredAnalyzer implements AnalyzerPort {
 	calls: AnalysisInput[] = [];
@@ -143,32 +142,6 @@ class DeferredAnalyzer implements AnalyzerPort {
 			throw new Error("no pending analyze() call to release");
 		}
 		resolve(outcome);
-	}
-}
-
-/**
- * An analyzer that fails the test the moment two `analyze` calls are ever
- * in flight at once, proving the queue truly serializes analysis rather than
- * merely enqueuing work that happens to run fast (MIK-019).
- */
-class ConcurrencyGuardAnalyzer implements AnalyzerPort {
-	calls: AnalysisInput[] = [];
-	maxInFlight = 0;
-	private inFlight = 0;
-	constructor(private outcome: AnalysisOutcome) {}
-	async analyze(input: AnalysisInput): Promise<AnalysisOutcome> {
-		this.calls.push(input);
-		this.inFlight += 1;
-		this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
-		if (this.inFlight > 1) {
-			this.inFlight -= 1;
-			throw new Error("concurrent analyze() calls detected");
-		}
-		// Yield a couple of turns so a wrongly-concurrent second call would have
-		// a real chance to start before this one finishes.
-		await new Promise((resolve) => setTimeout(resolve, 5));
-		this.inFlight -= 1;
-		return this.outcome;
 	}
 }
 
@@ -190,20 +163,6 @@ class FakeTabs implements TabProviderPort {
 	constructor(private result: Result<ActiveTab, AppError>) {}
 	async activeTab(): Promise<Result<ActiveTab, AppError>> {
 		return this.result;
-	}
-}
-
-/** Resolves to a different active tab on each successive call, cycling. */
-class SequenceTabs implements TabProviderPort {
-	private index = 0;
-	constructor(private results: Result<ActiveTab, AppError>[]) {}
-	async activeTab(): Promise<Result<ActiveTab, AppError>> {
-		const result = this.results[this.index % this.results.length];
-		this.index += 1;
-		if (!result) {
-			throw new Error("no tab configured");
-		}
-		return result;
 	}
 }
 
@@ -311,24 +270,6 @@ function makeHarness(
 	return { app, repo, analyzer, extractor, cache };
 }
 
-/**
- * Await the next queued-analysis settlement (MIK-019). Every test that enqueues
- * an analysis (i.e. a `saveCurrentTab`/`reAnalyzeBookmark` call whose extraction
- * succeeded) and cares about the *final* AI status/Drive push must await this
- * rather than reading the call's own return value, which now only reflects the
- * already-completed pending write.
- */
-function waitForSettled(
-	app: ReturnType<typeof createBookmarkApp>,
-): Promise<AnalysisSettledEvent> {
-	return new Promise((resolve) => {
-		const unsubscribe = app.onAnalysisSettled((event) => {
-			unsubscribe();
-			resolve(event);
-		});
-	});
-}
-
 /** Flush a handful of microtask turns for an independently-running promise chain. */
 async function flushMicrotasks(): Promise<void> {
 	for (let i = 0; i < 10; i += 1) {
@@ -338,7 +279,7 @@ async function flushMicrotasks(): Promise<void> {
 
 describe("createBookmarkApp", () => {
 	describe("saveCurrentTab", () => {
-		it('resolves with aiStatus "pending" without waiting for queued analysis to complete', async () => {
+		it("does not resolve until foreground analysis completes (MIK-021)", async () => {
 			const repo = new FakeRepository();
 			const analyzer = new DeferredAnalyzer();
 			const extractor = new FakeExtractor(
@@ -361,52 +302,40 @@ describe("createBookmarkApp", () => {
 				ids: fakeIds(),
 			});
 
-			const result = await app.saveCurrentTab();
+			let resolved = false;
+			const save = app.saveCurrentTab().then((result) => {
+				resolved = true;
+				return result;
+			});
 
-			expect(result.ok).toBe(true);
-			if (!result.ok) return;
-			// The pending record was persisted; analysis is still queued/running.
-			expect(result.value.aiStatus).toBe("pending");
-			expect(result.value.driveSynced).toBe(true);
-			expect(cache.state.bookmarks.size).toBe(1);
-			expect(repo.saveCalls).toBe(1);
-
-			// Give the (independently-running) queue pump a few microtask turns to
-			// reach the analyzer call — it never resolves without `release`, which
-			// is the proof `saveCurrentTab` above did not wait for it.
+			// The flow reaches the analyzer (pending persisted, extraction done) but
+			// the call itself must still be unresolved — analysis runs in the
+			// foreground, so the save cannot report completion before it settles.
 			await flushMicrotasks();
 			expect(analyzer.calls).toHaveLength(1);
+			expect(resolved).toBe(false);
 
-			// Release the analyzer so the queue doesn't leak into other tests.
 			analyzer.release(READY);
+			const result = await save;
+			expect(result.ok).toBe(true);
+			if (!result.ok) return;
+			expect(result.value.aiStatus).toBe("ready");
+			expect(result.value.driveSynced).toBe(true);
 		});
 
-		it("settles the bookmark ready via the queue once analysis completes", async () => {
+		it("resolves with the final ready record after foreground analysis", async () => {
 			const { app, repo, cache } = makeHarness();
 
 			const saved = await app.saveCurrentTab();
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
-			expect(saved.value.aiStatus).toBe("pending");
-
-			const settled = await waitForSettled(app);
-			expect(settled.canonicalUrl).toBe(saved.value.record.canonicalUrl);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
-			expect(settled.outcome.value.aiStatus).toBe("ready");
-			expect(settled.outcome.value.driveSynced).toBe(true);
-			expect(settled.outcome.value.record.description).toBe("説明文");
-			expect(settled.outcome.value.record.genre).toBe("開発ツール");
-			expect(settled.outcome.value.record.tags).toEqual([
-				"GitHub",
-				"TypeScript",
-			]);
-			expect(settled.outcome.value.record.analysisMarkdown).toBe(
-				"## 概要\n\n分析本文。",
-			);
-			expect(settled.outcome.value.record.analysisProfileId).toBe(
-				"github-repository",
-			);
+			expect(saved.value.aiStatus).toBe("ready");
+			expect(saved.value.driveSynced).toBe(true);
+			expect(saved.value.record.description).toBe("説明文");
+			expect(saved.value.record.genre).toBe("開発ツール");
+			expect(saved.value.record.tags).toEqual(["GitHub", "TypeScript"]);
+			expect(saved.value.record.analysisMarkdown).toBe("## 概要\n\n分析本文。");
+			expect(saved.value.record.analysisProfileId).toBe("github-repository");
 			// Pending was written first (create/update pending → persist → analyze),
 			// so Drive was saved twice: once pending, once final.
 			expect(repo.saveCalls).toBe(2);
@@ -444,13 +373,8 @@ describe("createBookmarkApp", () => {
 			const saved = await app.saveCurrentTab();
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
-			expect(saved.value.aiStatus).toBe("pending");
-
-			const settled = await waitForSettled(app);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
-			expect(settled.outcome.value.aiStatus).toBe("unavailable");
-			expect(settled.outcome.value.driveSynced).toBe(true);
+			expect(saved.value.aiStatus).toBe("unavailable");
+			expect(saved.value.driveSynced).toBe(true);
 			expect(analyzer.calls).toHaveLength(1);
 		});
 
@@ -464,14 +388,8 @@ describe("createBookmarkApp", () => {
 			const saved = await app.saveCurrentTab();
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
-
-			const settled = await waitForSettled(app);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
-			expect(settled.outcome.value.aiStatus).toBe("failed");
-			expect(settled.outcome.value.record.aiError).toBe(
-				"model returned no JSON",
-			);
+			expect(saved.value.aiStatus).toBe("failed");
+			expect(saved.value.record.aiError).toBe("model returned no JSON");
 		});
 
 		it("marks the bookmark failed when extraction fails and never calls AI", async () => {
@@ -489,80 +407,26 @@ describe("createBookmarkApp", () => {
 		});
 
 		it("saves locally and reports the failure when Drive is down", async () => {
-			const { app, repo, cache } = makeHarness();
+			const { app, cache, repo } = makeHarness();
 			repo.failKind = "network";
 
 			const saved = await app.saveCurrentTab();
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
-			expect(saved.value.driveSynced).toBe(false);
-
-			const settled = await waitForSettled(app);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
 			// AI still ran and applied locally; only the Drive write failed.
-			expect(settled.outcome.value.aiStatus).toBe("ready");
-			expect(settled.outcome.value.driveSynced).toBe(false);
-			expect(settled.outcome.value.driveError?.kind).toBe("drive");
+			expect(saved.value.aiStatus).toBe("ready");
+			expect(saved.value.driveSynced).toBe(false);
+			expect(saved.value.driveError?.kind).toBe("drive");
 			// The bookmark is preserved in the cache despite the Drive failure.
 			expect(cache.state.bookmarks.size).toBe(1);
 			expect(cache.state.sync.status).toBe("error");
 		});
 
-		it("processes queued analyses sequentially, never running the analyzer concurrently", async () => {
-			const repo = new FakeRepository();
-			const analyzer = new ConcurrencyGuardAnalyzer(READY);
-			const extractor = new FakeExtractor(
-				extractionOk(samplePage("https://example.test/generic", "Generic")),
-			);
-			const cache = new FakeCache();
-			const app = createBookmarkApp({
-				repository: repo,
-				analyzer,
-				extractor,
-				tabs: new SequenceTabs([
-					appOk({ id: 1, url: "https://a.example.test/", title: "A" }),
-					appOk({ id: 2, url: "https://b.example.test/", title: "B" }),
-				]),
-				cache,
-				clock: fakeClock(),
-				ids: fakeIds(),
-			});
-
-			const settlements: AnalysisSettledEvent[] = [];
-			const bothSettled = new Promise<void>((resolve) => {
-				app.onAnalysisSettled((event) => {
-					settlements.push(event);
-					if (settlements.length === 2) {
-						resolve();
-					}
-				});
-			});
-
-			// Fire both saves back-to-back without awaiting analysis in between.
-			const [first, second] = await Promise.all([
-				app.saveCurrentTab(),
-				app.saveCurrentTab(),
-			]);
-			expect(first.ok).toBe(true);
-			expect(second.ok).toBe(true);
-
-			await bothSettled;
-
-			expect(analyzer.maxInFlight).toBe(1);
-			expect(analyzer.calls).toHaveLength(2);
-			expect(settlements).toHaveLength(2);
-			for (const event of settlements) {
-				expect(event.outcome.ok).toBe(true);
-				if (!event.outcome.ok) continue;
-				expect(event.outcome.value.aiStatus).toBe("ready");
-			}
-		});
-
-		it("keeps the pending bookmark durably persisted even if the queued analysis never runs (UI closed)", async () => {
+		it("has already durably persisted the pending bookmark before analysis finishes (UI-close safety, MIK-021)", async () => {
 			const repo = new FakeRepository();
 			// An analyzer whose promise is never released simulates the popup/
-			// options page closing before the queue ever gets to process the item.
+			// options page closing mid-analysis: the foreground operation stops,
+			// but the pending record must already be durable by then.
 			const analyzer = new DeferredAnalyzer();
 			const extractor = new FakeExtractor(
 				extractionOk(samplePage("https://example.test/page", "Example Page")),
@@ -584,21 +448,21 @@ describe("createBookmarkApp", () => {
 				ids: fakeIds(),
 			});
 
-			const result = await app.saveCurrentTab();
-			expect(result.ok).toBe(true);
-			if (!result.ok) return;
+			const save = app.saveCurrentTab();
+			await flushMicrotasks();
+			expect(analyzer.calls).toHaveLength(1);
 
-			// The pending write's durability does not depend on the queue ever
-			// running: it is already true from `deps.cache.load()` and the fake
-			// repository's stored state, without ever draining the queue.
+			// The pending record already reached the cache and Drive before the
+			// analyzer resolved, so nothing durable is lost if the UI closes here.
 			const cached = await app.loadCachedState();
-			expect(
-				cached.bookmarks.get(result.value.record.canonicalUrl)?.aiStatus,
-			).toBe("pending");
-			expect(repo.remote.get(result.value.record.canonicalUrl)?.aiStatus).toBe(
-				"pending",
-			);
+			expect(cached.bookmarks.toArray()[0]?.aiStatus).toBe("pending");
+			expect(repo.remote.toArray()[0]?.aiStatus).toBe("pending");
 			expect(repo.saveCalls).toBe(1);
+
+			// Release so the in-flight save settles and does not leak across tests.
+			analyzer.release(READY);
+			const result = await save;
+			expect(result.ok).toBe(true);
 		});
 	});
 
@@ -644,7 +508,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			// Drive goes down; the delete only reaches the cache as a tombstone.
 			repo.failKind = "network";
@@ -683,7 +546,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			expect(saved.value.driveSynced).toBe(false);
-			await waitForSettled(app);
 			expect(cache.state.sync.pending).toBe(true);
 			expect(cache.state.bookmarks.size).toBe(1);
 			const canonicalUrl = saved.value.record.canonicalUrl;
@@ -711,7 +573,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			// Now AI works but Drive is down: the re-analyze is applied locally only.
 			analyzer.setOutcome(READY);
@@ -719,13 +580,8 @@ describe("createBookmarkApp", () => {
 			const reAnalyzed = await app.reAnalyzeBookmark(canonicalUrl);
 			expect(reAnalyzed.ok).toBe(true);
 			if (!reAnalyzed.ok) return;
-			expect(reAnalyzed.value.aiStatus).toBe("pending");
-
-			const settled = await waitForSettled(app);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
-			expect(settled.outcome.value.aiStatus).toBe("ready");
-			expect(settled.outcome.value.driveSynced).toBe(false);
+			expect(reAnalyzed.value.aiStatus).toBe("ready");
+			expect(reAnalyzed.value.driveSynced).toBe(false);
 			expect(cache.state.sync.pending).toBe(true);
 
 			// Drive recovers; the re-analyzed record is pushed, not lost.
@@ -767,7 +623,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			const result = await app.deleteBookmark(canonicalUrl);
 
@@ -793,7 +648,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			const deleted = await app.deleteBookmark(canonicalUrl);
 			expect(deleted.ok).toBe(true);
@@ -814,7 +668,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			// Device B holds the same live record in its own cache.
 			const deviceB = makeHarness({
@@ -847,23 +700,15 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			const firstSettled = await waitForSettled(app);
-			expect(firstSettled.outcome.ok).toBe(true);
-			if (!firstSettled.outcome.ok) return;
-			expect(firstSettled.outcome.value.aiStatus).toBe("unavailable");
+			expect(saved.value.aiStatus).toBe("unavailable");
 
-			// Now the Prompt API works; re-analyze should reach ready via the queue.
+			// Now the Prompt API works; re-analyze reaches ready in the foreground.
 			analyzer.setOutcome(READY);
 			const result = await app.reAnalyzeBookmark(canonicalUrl);
 			expect(result.ok).toBe(true);
 			if (!result.ok) return;
-			expect(result.value.aiStatus).toBe("pending");
-
-			const settled = await waitForSettled(app);
-			expect(settled.outcome.ok).toBe(true);
-			if (!settled.outcome.ok) return;
-			expect(settled.outcome.value.aiStatus).toBe("ready");
-			expect(settled.outcome.value.record.description).toBe("説明文");
+			expect(result.value.aiStatus).toBe("ready");
+			expect(result.value.record.description).toBe("説明文");
 		});
 
 		it("returns not-found for an unknown canonical URL", async () => {
@@ -883,7 +728,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 			const before = cache.state.bookmarks.get(canonicalUrl);
 			const savesBefore = repo.saveCalls;
 
@@ -918,7 +762,6 @@ describe("createBookmarkApp", () => {
 			expect(saved.ok).toBe(true);
 			if (!saved.ok) return;
 			const canonicalUrl = saved.value.record.canonicalUrl;
-			await waitForSettled(app);
 
 			// The page *is* the active tab (no `tab` error), but its content could not
 			// be read. This is a recoverable failure, not the activeTab precondition.
@@ -934,37 +777,6 @@ describe("createBookmarkApp", () => {
 			expect(result.value.aiStatus).toBe("failed");
 			expect(result.value.record.aiError).toContain("extraction failed");
 			expect(cache.state.bookmarks.get(canonicalUrl)?.aiStatus).toBe("failed");
-		});
-	});
-
-	describe("onAnalysisSettled", () => {
-		it("does not fire for a save whose extraction failed (nothing was ever queued)", async () => {
-			const { app } = makeHarness({
-				extraction: extractionErr({ field: "page", message: "no document" }),
-			});
-			const events: AnalysisSettledEvent[] = [];
-			app.onAnalysisSettled((event) => events.push(event));
-
-			await app.saveCurrentTab();
-			// Give any stray microtask a chance to fire before asserting silence.
-			await Promise.resolve();
-			await Promise.resolve();
-
-			expect(events).toHaveLength(0);
-		});
-
-		it("stops notifying a listener after it unsubscribes", async () => {
-			const { app } = makeHarness();
-			const events: AnalysisSettledEvent[] = [];
-			const unsubscribe = app.onAnalysisSettled((event) => events.push(event));
-			unsubscribe();
-
-			await app.saveCurrentTab();
-			await Promise.resolve();
-			await Promise.resolve();
-			await Promise.resolve();
-
-			expect(events).toHaveLength(0);
 		});
 	});
 
@@ -994,7 +806,6 @@ describe("createBookmarkApp", () => {
 			});
 
 			await app.saveCurrentTab();
-			await waitForSettled(app);
 
 			expect(analyzer.customProfileCalls).toHaveLength(1);
 			expect(analyzer.customProfileCalls[0]).toEqual([custom]);
@@ -1011,7 +822,6 @@ describe("createBookmarkApp", () => {
 
 			const result = await app.saveCurrentTab();
 			expect(result.ok).toBe(true);
-			await waitForSettled(app);
 
 			expect(analyzer.customProfileCalls).toEqual([[]]);
 		});
@@ -1020,22 +830,20 @@ describe("createBookmarkApp", () => {
 			const { app, analyzer } = makeHarness();
 
 			await app.saveCurrentTab();
-			await waitForSettled(app);
 
 			expect(analyzer.customProfileCalls).toEqual([[]]);
 		});
 	});
 
-	describe("privacy guardrails (MIK-019)", () => {
+	describe("privacy guardrails (MIK-019/MIK-021)", () => {
 		it("never persists the extracted page/excerpt to the cache or the Drive repository", async () => {
 			const { app, cache, repo } = makeHarness();
 
 			const saved = await app.saveCurrentTab();
 			expect(saved.ok).toBe(true);
-			await waitForSettled(app);
 
 			const rawExcerptText = "Some body text for the excerpt.";
-			// Every cache write across the whole save+settle cycle only ever
+			// Every cache write across the whole foreground save only ever
 			// contains parsed BookmarkRecord values, never the raw excerpt text.
 			for (const state of cache.saves) {
 				for (const record of state.bookmarks.toArray()) {

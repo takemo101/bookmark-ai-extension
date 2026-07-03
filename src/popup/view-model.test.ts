@@ -8,7 +8,6 @@ import {
 } from "../lib/bookmarks/index";
 import type { CacheState } from "../lib/storage/index";
 import type {
-	AnalysisSettledEvent,
 	AppError,
 	PopupEnvironment,
 	PopupUseCases,
@@ -101,14 +100,6 @@ class FakeUseCases implements PopupUseCases {
 	];
 	saveCalls = 0;
 	reAnalyzeArgs: CanonicalUrl[] = [];
-	settledListeners = new Set<(event: AnalysisSettledEvent) => void>();
-
-	/** Test helper: simulate a queued analysis settling (MIK-019). */
-	emitSettled(event: AnalysisSettledEvent) {
-		for (const listener of this.settledListeners) {
-			listener(event);
-		}
-	}
 
 	async currentTab() {
 		return this.tab;
@@ -138,10 +129,6 @@ class FakeUseCases implements PopupUseCases {
 			onProgress?.({ stage });
 		}
 		return this.reAnalyzeResult ?? this.saveResult;
-	}
-	onAnalysisSettled(listener: (event: AnalysisSettledEvent) => void) {
-		this.settledListeners.add(listener);
-		return () => this.settledListeners.delete(listener);
 	}
 }
 
@@ -365,58 +352,6 @@ describe("createPopupController", () => {
 			await Promise.all([first, second]);
 
 			expect(fake.saveCalls).toBe(1);
-		});
-	});
-
-	describe("pending analysis (MIK-019)", () => {
-		it("shows a distinct done state when analysis is still queued, and re-enables save", async () => {
-			const record = recordOf({ aiStatus: "pending", title: "Queued Tab" });
-			const fake = new FakeUseCases();
-			fake.saveResult = { ok: true, value: outcomeOf(record) };
-			fake.cache = cacheOf([record]);
-			const controller = controllerWith(fake);
-			await controller.init();
-
-			await controller.save();
-			const view = controller.getView();
-			const flow = view.flow;
-
-			expect(flow.kind).toBe("done");
-			if (flow.kind !== "done") return;
-			expect(flow.receipt.aiStatus).toBe("pending");
-			expect(flow.receipt.analysisPending).toBe(true);
-			expect(stageStatus(flow, "saving")).toBe("done");
-			expect(stageStatus(flow, "extracting")).toBe("done");
-			expect(stageStatus(flow, "analyzing")).toBe("active");
-			// The save itself is finished; only background analysis continues.
-			expect(view.canSave).toBe(true);
-		});
-
-		it("refreshes recents/sync when a queued analysis settles, without a manual refresh", async () => {
-			const pending = recordOf({ aiStatus: "pending", title: "Queued Tab" });
-			const fake = new FakeUseCases();
-			fake.cache = cacheOf([pending]);
-			const controller = controllerWith(fake);
-			await controller.init();
-
-			expect(controller.getView().recent[0].aiStatus).toBe("pending");
-
-			const ready = recordOf({
-				aiStatus: "ready",
-				title: "Queued Tab",
-				description: "分析完了",
-			});
-			fake.cache = cacheOf([ready]);
-			fake.emitSettled({
-				canonicalUrl: ready.canonicalUrl,
-				outcome: { ok: true, value: outcomeOf(ready) },
-			});
-			// `emitSettled` triggers an async refresh; let it complete.
-			await Promise.resolve();
-			await Promise.resolve();
-
-			expect(controller.getView().recent[0].aiStatus).toBe("ready");
-			expect(controller.getView().recent[0].description).toBe("分析完了");
 		});
 	});
 

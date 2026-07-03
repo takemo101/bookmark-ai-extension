@@ -227,12 +227,14 @@ Notes:
 7. Extension builds a structured excerpt with a character cap of roughly
    8k-12k characters.
 8. Extension writes or updates a pending bookmark record in Drive/local cache.
-9. Popup/options queues Prompt API analysis in memory and returns control to the
-   user after the pending write lands.
-10. While that UI context remains alive, the queue updates the bookmark record
-    with Japanese `description`, `genre`, `tags`, `aiStatus`, and analysis
-    timestamps; if the context closes first, the pending record remains
-    recoverable for later re-analysis.
+9. Popup/options runs Prompt API analysis in the foreground while the screen
+   stays open, then updates the bookmark record with Japanese `description`,
+   `genre`, `tags`, `aiStatus`, and analysis timestamps before reporting the
+   save as complete (MIK-021). Analysis is never handed off to a service
+   worker, offscreen document, or background queue.
+10. If the UI closes mid-flow, the in-memory excerpt is dropped (it is never
+    persisted) and the durable record remains `pending`, recoverable for later
+    re-analysis from a valid active tab.
 
 If AI is unavailable or fails:
 
@@ -282,9 +284,9 @@ Example desired output:
 For the next AI analysis iteration, see
 [`ai-analysis-v2.md`](ai-analysis-v2.md). It extends the MVP design with
 long-form generated Markdown analysis, built-in and custom analysis skills,
-Drive-synced skill settings, and non-durable queue behavior while preserving the
-same privacy constraints: no external AI fallback and no persisted raw page
-excerpts.
+Drive-synced skill settings, and UI-open foreground analysis behavior while
+preserving the same privacy constraints: no external AI fallback and no
+persisted raw page excerpts.
 
 ## Drive Write and Conflict Strategy
 
