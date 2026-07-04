@@ -70,6 +70,18 @@ MVP privacy rule:
 - Raw page text excerpts are not intentionally persisted by the extension.
 - If re-analysis is needed, the extension re-extracts content from the live page.
 
+## Site Favicons
+
+The extension shows website favicons next to saved bookmarks in its popup and
+options pages.
+
+- Favicons are resolved by Chrome itself, at display time, through Chrome's
+  extension-local favicon endpoint (the `favicon` permission).
+- The favicon lookup is derived from the saved bookmark URL only.
+- No external favicon service is used.
+- Favicon image data is never stored in `bookmarks.jsonl`, `settings.json`,
+  the local browser cache, or Google Drive.
+
 ## AI Processing
 
 The MVP uses Chrome Built-in AI / Prompt API when available.
@@ -152,3 +164,5 @@ Before publication, replace this section with:
 ## Change History
 
 - 2026-06-24: Initial MVP draft.
+- 2026-07-04: Added the Site Favicons section (Chrome-resolved, display-only,
+  never persisted).

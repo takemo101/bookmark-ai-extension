@@ -23,6 +23,7 @@ import {
 	resolveAnalysisProfileDisplay,
 } from "../lib/ai/index";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
+import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
 import type {
@@ -733,6 +734,12 @@ function LedgerRow({
 }) {
 	return (
 		<div style={row.selected ? rowSelected : rowStyle} onClick={onSelect}>
+			{/* Decorative site icon (MIK-032); the row's accessible text is the
+			    title/summary button next to it. marginTop aligns it with the
+			    first title line in this flex-start row. */}
+			<span style={{ marginTop: 1 }}>
+				<Favicon pageUrl={row.canonicalUrl} size={22} />
+			</span>
 			<button type="button" style={rowOpenButton} aria-expanded={row.selected}>
 				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
 					{row.title}
@@ -911,12 +918,21 @@ function DetailSheet({
 							✕
 						</button>
 					</div>
-					<h2
-						id="bookmark-detail-title"
-						style={{ fontSize: 17, margin: "6px 0 4px" }}
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+							margin: "6px 0 4px",
+						}}
 					>
-						{detail.title}
-					</h2>
+						{/* Keyed by URL: the sheet swaps records in place, so a failed
+						    favicon for one site must not stick to the next (MIK-032). */}
+						<Favicon key={detail.canonicalUrl} pageUrl={detail.url} size={28} />
+						<h2 id="bookmark-detail-title" style={{ fontSize: 17, margin: 0 }}>
+							{detail.title}
+						</h2>
+					</div>
 					<a
 						href={detail.url}
 						target="_blank"

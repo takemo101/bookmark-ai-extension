@@ -104,7 +104,7 @@ MVP permissions:
 
 ```json
 {
-  "permissions": ["identity", "storage", "activeTab", "scripting"],
+  "permissions": ["identity", "storage", "activeTab", "scripting", "favicon"],
   "host_permissions": ["https://www.googleapis.com/*"],
   "oauth2": {
     "client_id": "<injected from env>",
@@ -114,6 +114,13 @@ MVP permissions:
 ```
 
 Use `activeTab` + `scripting` for page extraction. Do not use always-on content scripts or broad host permissions in the MVP.
+
+The `favicon` permission only enables Chrome's extension-local favicon
+endpoint (`chrome-extension://<id>/_favicon/?pageUrl=…&size=…`), used to show
+site icons next to bookmarks in the popup and options UI. Favicon images are
+resolved by Chrome at render time from the bookmark URL and are never stored
+in bookmark records, settings, the local cache, or Drive; no external favicon
+service is used.
 
 ## Google Drive Storage
 
