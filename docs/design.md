@@ -508,6 +508,14 @@ This matches the manual posture documented in
 [`smoke-checklist.md`](smoke-checklist.md) (section 5 and its re-analysis note);
 re-analyze from the page's own tab, or save it again.
 
+Both screens render inside a shared Options shell (MIK-036): a persistent
+app header carries the product title (`Bookmark AI`) and the top-level screen
+navigation on every screen, and each screen opens with the same screen-header
+rhythm — a screen title plus a one-line subtitle (`Library` / `Research
+Ledger` and `Analysis skills` / the settings-file intro) — followed by its
+card-based body using the shared panel styling. The Library left rail hosts
+only controls (search, sync status, filters), never app branding.
+
 The options page has a top-level navigation with two screens (MIK-025):
 
 - **Library** (default): the two-zone ledger, floating sync action, and detail

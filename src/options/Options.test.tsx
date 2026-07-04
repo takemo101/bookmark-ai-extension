@@ -815,6 +815,60 @@ describe("Options top-level navigation (MIK-025)", () => {
 	});
 });
 
+describe("Options shared screen shell (MIK-036)", () => {
+	const libraryView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+	});
+
+	it("keeps the brand app header and nav visible on both screens", () => {
+		const library = renderWithSkills(libraryView, skillsViewOf());
+		const skills = renderWithSkills(
+			libraryView,
+			skillsViewOf(),
+			"analysis-skills",
+		);
+
+		for (const html of [library, skills]) {
+			expect(html).toContain(">Bookmark AI<");
+			expect(html).toContain('aria-label="Options screens"');
+			expect(html).toContain(">Library<");
+			expect(html).toContain(">Analysis skills<");
+		}
+	});
+
+	it("opens the Library screen with the shared title/subtitle header", () => {
+		const html = renderWithSkills(libraryView, skillsViewOf());
+
+		expect(html).toMatch(/<h2[^>]*>Library<\/h2>/);
+		expect(html).toContain("Research Ledger");
+		// The brand lives only in the app header now, never in the rail.
+		expect(html.match(/Bookmark AI/g)).toHaveLength(1);
+	});
+
+	it("opens the Analysis skills screen with the same header rhythm", () => {
+		const html = renderWithSkills(
+			libraryView,
+			skillsViewOf(),
+			"analysis-skills",
+		);
+
+		expect(html).toMatch(/<h2[^>]*>Analysis skills<\/h2>/);
+		expect(html).toContain("bookmark-ai/settings.json");
+		expect(html.match(/Bookmark AI/g)).toHaveLength(1);
+	});
+
+	it("keeps the brand header without nav when no skills controller is provided", () => {
+		const html = render(libraryView);
+
+		expect(html).toContain(">Bookmark AI<");
+		expect(html).not.toContain('aria-label="Options screens"');
+		expect(html).toMatch(/<h2[^>]*>Library<\/h2>/);
+	});
+});
+
 describe("Detail profile name and edit navigation (MIK-031)", () => {
 	function selectedView(analysisProfileId: string): OptionsView {
 		return viewOf({
