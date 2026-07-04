@@ -134,6 +134,19 @@ describe("createSkillsController", () => {
 		expect(view.sync.status).toBe("synced");
 	});
 
+	it("projects the settings last synced timestamp", async () => {
+		const useCases = new FakeSkillsUseCases();
+		useCases.cache = cacheOf(Settings.empty(), {
+			status: "synced",
+			lastSyncedAt: isoTimestamp("2026-01-06T12:34:56Z"),
+		});
+		const controller = createSkillsController(useCases);
+
+		await controller.init();
+
+		expect(controller.getView().sync.lastSyncedAt).toBe("2026-01-06T12:34:56Z");
+	});
+
 	it("lists built-in profiles read-only", async () => {
 		const controller = createSkillsController(new FakeSkillsUseCases());
 		await controller.init();

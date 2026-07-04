@@ -67,6 +67,7 @@ export type SkillsView = {
 	readonly busy: boolean;
 	readonly sync: {
 		readonly status: string;
+		readonly lastSyncedAt?: string;
 		readonly pendingLocalChanges: boolean;
 		readonly syncing: boolean;
 		readonly writing: boolean;
@@ -189,6 +190,7 @@ export function createSkillsController(
 			busy,
 			sync: {
 				status: state?.sync.status ?? "idle",
+				lastSyncedAt: state?.sync.lastSyncedAt,
 				pendingLocalChanges: state?.sync.pending === true,
 				syncing,
 				writing,
