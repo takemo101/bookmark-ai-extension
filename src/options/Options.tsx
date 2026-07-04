@@ -24,6 +24,7 @@ import {
 	resolveAnalysisProfileDisplay,
 } from "../lib/ai/index";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
+import type { AskAiController, AskAiView } from "./ask-ai-view-model";
 import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
@@ -95,10 +96,10 @@ import {
 } from "./styles";
 
 /**
- * The two top-level options screens (MIK-025). Presentation-only UI state:
- * switching screens never touches Drive/cache semantics.
+ * The top-level options screens (MIK-025, MIK-045). Presentation-only UI
+ * state: switching screens never touches Drive/cache semantics.
  */
-export type OptionsScreen = "library" | "analysis-skills";
+export type OptionsScreen = "library" | "analysis-skills" | "ask-ai";
 
 // Stable no-op store bindings so the optional skills-view subscription can be
 // called unconditionally (hooks may not be conditional) when no skills
@@ -109,12 +110,15 @@ const noSkillsView = () => undefined;
 export function Options({
 	controller,
 	skillsController,
+	askAiController,
 	initialScreen = "library",
 	language,
 }: {
 	controller: OptionsController;
 	/** Optional so existing tests/embeds can render without the skills screen. */
 	skillsController?: SkillsController;
+	/** Optional so existing tests/embeds can render without the Ask AI screen. */
+	askAiController?: AskAiController;
 	/** Test/embed hook: which screen renders first. Runtime starts on Library. */
 	initialScreen?: OptionsScreen;
 	/**
@@ -178,26 +182,42 @@ export function Options({
 		switchScreen("analysis-skills");
 	}
 
-	const showLibrary = screen === "library" || !skillsController;
+	// A screen whose controller was not injected falls back to the Library so a
+	// stale `initialScreen` can never render an empty page.
+	const activeScreen: OptionsScreen =
+		(screen === "analysis-skills" && !skillsController) ||
+		(screen === "ask-ai" && !askAiController)
+			? "library"
+			: screen;
+	const showLibrary = activeScreen === "library";
 
 	return (
 		<main style={page}>
 			{/* Shared app header (MIK-036): the product brand lives here on every
-			    screen; the nav renders only when the skills screen exists. */}
+			    screen; the nav renders only when another screen exists. */}
 			<header style={appHeader}>
 				<h1 style={brandTitle}>Bookmark AI</h1>
-				{skillsController ? (
+				{skillsController || askAiController ? (
 					<nav aria-label={m.navAria} style={{ display: "flex", gap: 8 }}>
 						<NavTab
 							label={m.library}
 							active={showLibrary}
 							onClick={() => switchScreen("library")}
 						/>
-						<NavTab
-							label={m.analysisSkills}
-							active={!showLibrary}
-							onClick={() => switchScreen("analysis-skills")}
-						/>
+						{skillsController ? (
+							<NavTab
+								label={m.analysisSkills}
+								active={activeScreen === "analysis-skills"}
+								onClick={() => switchScreen("analysis-skills")}
+							/>
+						) : null}
+						{askAiController ? (
+							<NavTab
+								label={m.askAi}
+								active={activeScreen === "ask-ai"}
+								onClick={() => switchScreen("ask-ai")}
+							/>
+						) : null}
 					</nav>
 				) : null}
 			</header>
@@ -236,8 +256,15 @@ export function Options({
 						/>
 					) : null}
 				</>
-			) : skillsController ? (
+			) : activeScreen === "analysis-skills" && skillsController ? (
 				<SkillsScreen skillsController={skillsController} m={m} />
+			) : askAiController ? (
+				<AskAiScreen
+					controller={askAiController}
+					sync={view.sync}
+					loading={view.loading}
+					m={m}
+				/>
 			) : null}
 		</main>
 	);
@@ -1411,6 +1438,157 @@ function FloatingSettingsSyncButton({
 				{detail}
 			</span>
 		</button>
+	);
+}
+
+/**
+ * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-042 design): the chat-like
+ * saved-bookmark recommendation surface, rendered with the same screen shell
+ * and rail/main workspace as the Library and Analysis skills. This slice is
+ * the shell only — the rail shows the bookmark cache freshness (reusing the
+ * Library's {@link SyncPanel} against the same `OptionsView.sync`) plus the
+ * scope/privacy notes, and the main area holds the empty chat state with
+ * clickable example prompts and the question form. Submit stays inert: no
+ * Prompt API call, no recommendation cards, no persisted chat — the
+ * conversation state lives only inside the injected {@link AskAiController}.
+ */
+function AskAiScreen({
+	controller,
+	sync,
+	loading,
+	m,
+}: {
+	controller: AskAiController;
+	sync: SyncView;
+	loading: boolean;
+	m: OptionsMessages;
+}) {
+	const view = useSyncExternalStore(
+		controller.subscribe,
+		controller.getView,
+		controller.getView,
+	);
+
+	return (
+		<section style={screenShell} aria-label={m.askAiScreenAria}>
+			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
+			<div style={workspaceBody}>
+				<AskAiRail sync={sync} loading={loading} m={m} />
+				<AskAiMain view={view} m={m} controller={controller} />
+			</div>
+		</section>
+	);
+}
+
+/**
+ * Ask AI left rail (MIK-045): the Library's bookmark Drive-sync readout —
+ * status, progress, and last synced time, so the user can judge cache
+ * freshness — followed by the scope note (all saved bookmarks from the local
+ * cache, never the open web) and the privacy note (short saved-bookmark info
+ * only; the chat itself is never saved).
+ */
+function AskAiRail({
+	sync,
+	loading,
+	m,
+}: {
+	sync: SyncView;
+	loading: boolean;
+	m: OptionsMessages;
+}) {
+	return (
+		<aside style={rail}>
+			<SyncPanel sync={sync} loading={loading} m={m} />
+			<section style={panel}>
+				<p style={railLabel}>{m.askAiAbout}</p>
+				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
+					{m.askAiScopeNote}
+				</p>
+				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "8px 0 0" }}>
+					{m.askAiPrivacyNote}
+				</p>
+			</section>
+		</aside>
+	);
+}
+
+/**
+ * Ask AI main area (MIK-045): the empty chat state with localized clickable
+ * example prompts above the question form. There is no transcript yet in this
+ * slice, so the empty state always renders; a clicked example fills the input
+ * through the controller. The submit button is disabled for empty/too-short
+ * questions (the controller applies the shared minimum-length policy) and
+ * while an answer placeholder is in flight, with `aria-busy` on the form.
+ */
+function AskAiMain({
+	view,
+	m,
+	controller,
+}: {
+	view: AskAiView;
+	m: OptionsMessages;
+	controller: AskAiController;
+}) {
+	const submitDisabled = !view.canSubmit || view.answering;
+	return (
+		<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+			<div style={panel}>
+				<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
+					{m.askAiEmptyIntro}
+				</p>
+				<div
+					style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
+				>
+					{m.askAiExamples.map((example) => (
+						<button
+							key={example}
+							type="button"
+							style={chip}
+							onClick={() => controller.useExample(example)}
+						>
+							{example}
+						</button>
+					))}
+				</div>
+			</div>
+			{view.answering ? (
+				<p
+					role="status"
+					style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}
+				>
+					{m.askAiAnswering}
+				</p>
+			) : null}
+			<form
+				style={{ ...panel, display: "flex", flexDirection: "column", gap: 8 }}
+				aria-busy={view.answering || undefined}
+				onSubmit={(event) => {
+					event.preventDefault();
+					controller.submit();
+				}}
+			>
+				<textarea
+					style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
+					value={view.question}
+					placeholder={m.askAiPlaceholder}
+					aria-label={m.askAiInputAria}
+					onChange={(e) => controller.setQuestion(e.target.value)}
+				/>
+				<div>
+					<button
+						type="submit"
+						style={
+							submitDisabled
+								? { ...primaryButton, ...disabledButton }
+								: primaryButton
+						}
+						disabled={submitDisabled}
+					>
+						{m.askAiSubmit}
+					</button>
+				</div>
+			</form>
+		</section>
 	);
 }
 
