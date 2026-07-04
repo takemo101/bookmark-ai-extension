@@ -11,6 +11,7 @@
  * Tolerance: models often wrap JSON in prose or ```code fences```. The parser
  * scans for the first balanced `{…}` object, so surrounding text is ignored.
  */
+import { extractJsonObject, isJsonObject } from "./json";
 import { type Result, err, ok } from "./result";
 import {
 	MAX_TAGS,
@@ -25,49 +26,6 @@ function parseError(
 	field?: string,
 ): AnalysisParseError {
 	return field === undefined ? { kind, message } : { kind, field, message };
-}
-
-/**
- * Extract the first balanced JSON object substring from arbitrary text,
- * respecting string literals and escapes so braces inside strings don't confuse
- * the scan. Returns null when no balanced object is present.
- */
-function extractJsonObject(text: string): string | null {
-	const start = text.indexOf("{");
-	if (start === -1) {
-		return null;
-	}
-	let depth = 0;
-	let inString = false;
-	let escaped = false;
-	for (let i = start; i < text.length; i++) {
-		const ch = text[i];
-		if (inString) {
-			if (escaped) {
-				escaped = false;
-			} else if (ch === "\\") {
-				escaped = true;
-			} else if (ch === '"') {
-				inString = false;
-			}
-			continue;
-		}
-		if (ch === '"') {
-			inString = true;
-		} else if (ch === "{") {
-			depth++;
-		} else if (ch === "}") {
-			depth--;
-			if (depth === 0) {
-				return text.slice(start, i + 1);
-			}
-		}
-	}
-	return null;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -135,7 +93,7 @@ export function parseAnalysis(
 		);
 	}
 
-	if (!isObject(decoded)) {
+	if (!isJsonObject(decoded)) {
 		return err(parseError("not-object", "AI output JSON was not an object"));
 	}
 
