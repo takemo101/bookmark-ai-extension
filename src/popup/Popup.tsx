@@ -12,9 +12,10 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
-// UI-only dependency (MIK-028): the safe Markdown renderer and its style
-// tokens, no Options controller state — the sanctioned reuse of the
-// no-raw-HTML rendering posture (docs/ai-analysis-v2.md "UI behavior").
+// UI-only dependencies (MIK-028, MIK-032): the safe Markdown renderer and the
+// decorative favicon tile, no Options controller state — the sanctioned reuse
+// of the no-raw-HTML rendering posture (docs/ai-analysis-v2.md "UI behavior").
+import { Favicon } from "../options/favicon";
 import { AnalysisMarkdown } from "../options/markdown";
 import { type PopupMessages, popupMessages } from "./i18n";
 import { openOptionsPage } from "./open-options";
@@ -501,6 +502,9 @@ function Recent({
 							alignItems: "center",
 						}}
 					>
+						{/* Decorative site icon (MIK-032); the accessible row text stays
+						    the title button next to it. */}
+						<Favicon pageUrl={item.url} size={16} />
 						<button
 							type="button"
 							title={item.description ?? item.url}
@@ -582,12 +586,21 @@ function RecentDetail({
 						✕
 					</button>
 				</div>
-				<h2
-					id="recent-detail-title"
-					style={{ fontSize: 15, margin: "10px 0 2px" }}
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 6,
+						margin: "10px 0 2px",
+					}}
 				>
-					{detail.title}
-				</h2>
+					{/* Keyed by URL: the overlay can swap records in place, so a failed
+					    favicon for one site must not stick to the next (MIK-032). */}
+					<Favicon key={detail.canonicalUrl} pageUrl={detail.url} size={18} />
+					<h2 id="recent-detail-title" style={{ fontSize: 15, margin: 0 }}>
+						{detail.title}
+					</h2>
+				</div>
 				<a
 					href={detail.url}
 					target="_blank"

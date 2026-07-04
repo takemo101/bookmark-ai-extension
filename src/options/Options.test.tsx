@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { OptionsScreen } from "./Options";
 import { lockScroll, Options, visibleFacetValues } from "./Options";
@@ -172,6 +172,53 @@ function renderWithSkills(
 		/>,
 	);
 }
+
+describe("Options bookmark favicons (MIK-032)", () => {
+	afterEach(() => {
+		delete (globalThis as { chrome?: unknown }).chrome;
+	});
+
+	function stubChromeRuntime(): void {
+		(globalThis as { chrome?: unknown }).chrome = {
+			runtime: {
+				getURL: (path: string) => `chrome-extension://test-ext${path}`,
+			},
+		};
+	}
+
+	const populatedView = viewOf({
+		rows: [rowOf({ selected: true })],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+		selected: detailOf(),
+	});
+
+	it("shows the fallback hostname initial off-extension in rows and detail", () => {
+		const html = render(populatedView);
+
+		// example.test → "E", once per row and once in the detail sheet header.
+		expect(html.match(/>E</g)).toHaveLength(2);
+		expect(html).not.toContain("_favicon");
+	});
+
+	it("shows _favicon images for rows and detail when Chrome resolves them", () => {
+		stubChromeRuntime();
+
+		const html = render(populatedView);
+
+		// Row (size 22) and detail header (size 28) both hit the local endpoint
+		// with the encoded bookmark URL; the images stay decorative.
+		expect(html).toContain(
+			"chrome-extension://test-ext/_favicon/?pageUrl=https%3A%2F%2Fexample.test%2Fx&amp;size=22",
+		);
+		expect(html).toContain(
+			"chrome-extension://test-ext/_favicon/?pageUrl=https%3A%2F%2Fexample.test%2Fx&amp;size=28",
+		);
+		expect(html).toContain('alt=""');
+		expect(html).not.toContain(">E<");
+	});
+});
 
 describe("Options detail sheet", () => {
 	it("renders no dialog and no legacy detail pane when nothing is selected", () => {
