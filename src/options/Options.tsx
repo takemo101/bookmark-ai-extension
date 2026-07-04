@@ -6,8 +6,9 @@
  * (left rail with search, sync state, genre/tag/status filters; center
  * bookmark rows with per-row quick delete) plus a floating Drive sync action
  * and a detail side sheet overlay (MIK-022, MIK-024) — and the Analysis
- * skills settings screen, where the custom skill create/edit form opens as a
- * modal with authoring guidance. It dispatches user intent back through the
+ * skills settings screen, which follows the same rail/main workspace body and
+ * floating sync pattern (MIK-038) and opens the custom skill create/edit form
+ * as a modal with authoring guidance. It dispatches user intent back through the
  * controllers and imports only the controllers, view types, style tokens, and
  * the pure profile-display resolver (MIK-031); no Drive client, Prompt API
  * client, JSONL parser, or merge internals appear here (AGENTS.md
@@ -57,7 +58,6 @@ import {
 	facetHeaderLabel,
 	floatingSyncButton,
 	guidanceBox,
-	ledger,
 	modalBackdrop,
 	modalBody,
 	modalCard,
@@ -91,6 +91,7 @@ import {
 	syncTone,
 	tagListExpanded,
 	truncate,
+	workspaceBody,
 } from "./styles";
 
 /**
@@ -204,7 +205,7 @@ export function Options({
 				<>
 					<div style={screenShell}>
 						<ScreenHeader title={m.library} subtitle={m.researchLedger} />
-						<div style={ledger}>
+						<div style={workspaceBody}>
 							<LeftRail view={view} m={m} controller={controller} />
 							<CenterList view={view} m={m} controller={controller} />
 						</div>
@@ -392,6 +393,25 @@ export function syncProgressText(
 }
 
 /**
+ * The small tone-colored status dot every sync readout and floating sync
+ * action opens with (MIK-038): one shape for the Library Drive sync and the
+ * Analysis skills settings sync.
+ */
+function SyncStatusDot({ status }: { status: string }) {
+	return (
+		<span
+			aria-hidden
+			style={{
+				width: 8,
+				height: 8,
+				borderRadius: 999,
+				background: statusColor(syncTone(status)),
+			}}
+		/>
+	);
+}
+
+/**
  * Left-rail Drive sync status readout (MIK-024): status, pending changes, last
  * synced time, and safe errors stay visible here, but the sync action itself
  * moved to {@link FloatingSyncButton} so the rail stays compact. In-flight
@@ -411,15 +431,7 @@ function SyncPanel({
 		<section style={panel}>
 			<p style={railLabel}>{m.driveSync}</p>
 			<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-				<span
-					aria-hidden
-					style={{
-						width: 8,
-						height: 8,
-						borderRadius: 999,
-						background: statusColor(syncTone(sync.status)),
-					}}
-				/>
+				<SyncStatusDot status={sync.status} />
 				<span style={{ fontSize: 13 }}>{sync.status}</span>
 			</div>
 			{progress ? (
@@ -489,15 +501,7 @@ function FloatingSyncButton({
 			onClick={onRefresh}
 			aria-label={m.syncAria}
 		>
-			<span
-				aria-hidden
-				style={{
-					width: 8,
-					height: 8,
-					borderRadius: 999,
-					background: statusColor(syncTone(sync.status)),
-				}}
-			/>
+			<SyncStatusDot status={sync.status} />
 			<span>{m.syncButton}</span>
 			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
 				{detail}
@@ -1151,9 +1155,12 @@ function DetailSheet({
  * "Analysis skills" settings screen (MIK-018, MIK-025,
  * docs/ai-analysis-v2.md "Settings file"): a pure projection of
  * {@link SkillsController.getView}, rendered as its own top-level screen
- * instead of a panel below the ledger. Shows the settings sync readout, the
- * fixed built-in profiles read-only, and full CRUD over Drive-synced custom
- * skills; the create/edit form opens as a modal. Never computes
+ * instead of a panel below the ledger. It follows the same workspace body as
+ * the Library (MIK-038): the left rail holds the settings sync readout and
+ * the settings-file guidance, the main area holds the Drive-synced custom
+ * skills (full CRUD) and the fixed built-in profiles read-only, and settings
+ * refresh lives in a floating sync action mirroring the Library's `Sync
+ * Drive` button. The create/edit form opens as a modal. Never computes
  * matching/priority itself — that stays inside `ai/profile.ts`'s
  * `selectAnalysisProfile`.
  */
@@ -1176,41 +1183,41 @@ function SkillsScreen({
 	useLockBodyScroll(view.formOpen);
 
 	return (
-		<section style={screenShell} aria-label={m.skillsScreenAria}>
-			<ScreenHeader
-				title={m.analysisSkills}
-				subtitle={
-					<>
-						{m.skillsIntro.before}
-						<code>bookmark-ai/settings.json</code>
-						{m.skillsIntro.after}
-					</>
-				}
+		<>
+			<section style={screenShell} aria-label={m.skillsScreenAria}>
+				<ScreenHeader title={m.analysisSkills} subtitle={m.skillsSubtitle} />
+				<div style={workspaceBody}>
+					<SkillsRail view={view} m={m} />
+					<SkillsMain view={view} m={m} skillsController={skillsController} />
+				</div>
+			</section>
+			<FloatingSettingsSyncButton
+				sync={view.sync}
+				busy={view.busy}
+				m={m}
+				onRefresh={() => void skillsController.refresh()}
 			/>
+			{view.formOpen ? (
+				<SkillFormModal view={view} skillsController={skillsController} m={m} />
+			) : null}
+		</>
+	);
+}
 
+/**
+ * Analysis skills left rail (MIK-038): the settings sync status/pending
+ * readout — the sync action itself floats, mirroring the Library rail — and
+ * the `bookmark-ai/settings.json` context copy that used to live in the
+ * screen subtitle.
+ */
+function SkillsRail({ view, m }: { view: SkillsView; m: OptionsMessages }) {
+	return (
+		<aside style={rail}>
 			<section style={panel}>
 				<p style={railLabel}>{m.settingsSync}</p>
-				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-					<span
-						aria-hidden
-						style={{
-							width: 8,
-							height: 8,
-							borderRadius: 999,
-							background: statusColor(syncTone(view.sync.status)),
-						}}
-					/>
+				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+					<SyncStatusDot status={view.sync.status} />
 					<span style={{ fontSize: 13 }}>{view.sync.status}</span>
-					<button
-						type="button"
-						style={
-							view.busy ? { ...subtleButton, ...disabledButton } : subtleButton
-						}
-						disabled={view.busy}
-						onClick={() => void skillsController.refresh()}
-					>
-						{m.refreshSettings}
-					</button>
 				</div>
 				{view.sync.pendingLocalChanges ? (
 					<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
@@ -1218,29 +1225,42 @@ function SkillsScreen({
 					</p>
 				) : null}
 			</section>
+			<section style={panel}>
+				<p style={railLabel}>{m.skillsAbout}</p>
+				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
+					{m.skillsIntro.before}
+					<code>bookmark-ai/settings.json</code>
+					{m.skillsIntro.after}
+				</p>
+			</section>
+		</aside>
+	);
+}
 
+/**
+ * Analysis skills main content (MIK-038): custom skills first (they are the
+ * editable surface, with the `Add custom` action), built-in profiles below as
+ * a read-only reference. Action errors keep rendering above the cards while
+ * the form modal is closed, exactly as before the rail/main split.
+ */
+function SkillsMain({
+	view,
+	m,
+	skillsController,
+}: {
+	view: SkillsView;
+	m: OptionsMessages;
+	skillsController: SkillsController;
+}) {
+	return (
+		<section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 			{!view.formOpen && view.actionError ? (
 				<Banner tone="danger" text={view.actionError} />
 			) : null}
-
 			{view.loading ? (
 				<Notice text={m.loadingSkills} />
 			) : (
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "1fr 1fr",
-						gap: 16,
-					}}
-				>
-					<div style={panel}>
-						<p style={railLabel}>{m.builtIn}</p>
-						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-							{view.builtIns.map((skill) => (
-								<BuiltInSkillRow key={skill.id} skill={skill} m={m} />
-							))}
-						</ul>
-					</div>
+				<>
 					<div style={panel}>
 						<div
 							style={{
@@ -1281,13 +1301,55 @@ function SkillsScreen({
 							</ul>
 						)}
 					</div>
-				</div>
+					<div style={panel}>
+						<p style={railLabel}>{m.builtIn}</p>
+						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+							{view.builtIns.map((skill) => (
+								<BuiltInSkillRow key={skill.id} skill={skill} m={m} />
+							))}
+						</ul>
+					</div>
+				</>
 			)}
-
-			{view.formOpen ? (
-				<SkillFormModal view={view} skillsController={skillsController} m={m} />
-			) : null}
 		</section>
+	);
+}
+
+/**
+ * Floating settings sync action (MIK-038): the Analysis skills counterpart of
+ * the Library's {@link FloatingSyncButton}. Dispatches the existing
+ * {@link SkillsController.refresh} path and is disabled while a skills action
+ * is busy — the same guard the old inline refresh button used (the controller
+ * drops overlapping actions too).
+ */
+function FloatingSettingsSyncButton({
+	sync,
+	busy,
+	m,
+	onRefresh,
+}: {
+	sync: SkillsView["sync"];
+	busy: boolean;
+	m: OptionsMessages;
+	onRefresh: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			style={
+				busy ? { ...floatingSyncButton, ...disabledButton } : floatingSyncButton
+			}
+			disabled={busy}
+			aria-busy={busy || undefined}
+			onClick={onRefresh}
+			aria-label={m.settingsSyncAria}
+		>
+			<SyncStatusDot status={sync.status} />
+			<span>{m.syncSettingsButton}</span>
+			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
+				{sync.status}
+			</span>
+		</button>
 	);
 }
 

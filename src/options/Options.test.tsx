@@ -22,7 +22,8 @@ import type {
  * groups collapse behind aria-expanded headers with active-filter summaries
  * (MIK-035), Drive sync floats instead of sitting in the rail, and the
  * Analysis skills settings screen renders separately from the ledger with a
- * modal skill form. Screen
+ * modal skill form and the same rail/main workspace body plus floating
+ * settings sync action as the Library (MIK-038). Screen
  * switching is exercised through the `initialScreen` prop because static
  * rendering cannot dispatch clicks. The scroll-lock and tag-cap logic are
  * unit-tested via their exported helpers because tests run in node, not
@@ -964,14 +965,14 @@ describe("Analysis skills settings screen (MIK-025)", () => {
 		expect(html.match(/>Delete</g)).toHaveLength(1);
 	});
 
-	it("shows the settings sync readout with a refresh action", () => {
+	it("shows the settings sync readout with pending info and a floating refresh", () => {
 		const html = renderSkills(
 			skillsViewOf({ sync: { status: "synced", pendingLocalChanges: true } }),
 		);
 
 		expect(html).toContain("Settings sync");
-		expect(html).toContain("Refresh settings");
 		expect(html).toContain("Local changes pending — will retry on next sync");
+		expect(html).toContain('aria-label="Sync analysis skill settings"');
 	});
 
 	it("surfaces action errors as an alert on the screen when the form is closed", () => {
@@ -981,6 +982,86 @@ describe("Analysis skills settings screen (MIK-025)", () => {
 
 		expect(html).toContain('role="alert"');
 		expect(html).toContain("Drive sync failed");
+	});
+});
+
+describe("Analysis skills workspace layout (MIK-038)", () => {
+	function renderSkills(skillsView: SkillsView): string {
+		return renderWithSkills(viewOf(), skillsView, "analysis-skills");
+	}
+
+	it("renders the same rail/main workspace body grid as the Library", () => {
+		const libraryView = viewOf({
+			rows: [rowOf()],
+			totalCount: 1,
+			filteredCount: 1,
+			empty: false,
+		});
+		const library = renderWithSkills(libraryView, skillsViewOf());
+		const skills = renderWithSkills(
+			libraryView,
+			skillsViewOf(),
+			"analysis-skills",
+		);
+
+		for (const html of [library, skills]) {
+			expect(html).toContain("grid-template-columns:240px");
+		}
+	});
+
+	it("moves the sync readout into the rail ahead of the skill cards", () => {
+		const html = renderSkills(skillsViewOf());
+
+		// Rail content (sync readout, settings-file guidance) renders before the
+		// main cards; there is no top-level sync card with an inline refresh
+		// button in the main flow anymore.
+		const order = [
+			"Settings sync",
+			"bookmark-ai/settings.json",
+			"Custom (Drive-synced)",
+			"Built-in (read-only)",
+		].map((s) => html.indexOf(s));
+		expect(order.every((i) => i >= 0)).toBe(true);
+		expect([...order].sort((a, b) => a - b)).toEqual(order);
+		expect(html).not.toContain("Refresh settings");
+	});
+
+	it("keeps the subtitle user-facing and the settings file path in the rail", () => {
+		const html = renderSkills(skillsViewOf());
+
+		expect(html).toContain("Tune how the AI analyzes the pages you save");
+		// The technical filename lives only in the rail guidance now.
+		expect(html.match(/bookmark-ai\/settings\.json/g)).toHaveLength(1);
+	});
+
+	it("offers refresh via an enabled floating settings sync action when idle", () => {
+		const html = renderSkills(skillsViewOf());
+
+		expect(html).toContain('aria-label="Sync analysis skill settings"');
+		expect(html).toContain("Sync settings");
+		expect(html).not.toContain("disabled");
+		expect(html).not.toContain('aria-busy="true"');
+	});
+
+	it("disables the floating settings sync action while an action is busy", () => {
+		const html = renderSkills(skillsViewOf({ busy: true }));
+
+		expect(html).toContain('aria-label="Sync analysis skill settings"');
+		expect(html).toContain("disabled");
+		expect(html).toContain('aria-busy="true"');
+	});
+
+	it("keeps the sync status visible in the rail while loading", () => {
+		const html = renderSkills(
+			skillsViewOf({
+				loading: true,
+				sync: { status: "idle", pendingLocalChanges: false },
+			}),
+		);
+
+		expect(html).toContain("Settings sync");
+		expect(html).toContain(">idle<");
+		expect(html).toContain("Loading analysis skills…");
 	});
 });
 

@@ -511,22 +511,32 @@ re-analyze from the page's own tab, or save it again.
 Both screens render inside a shared Options shell (MIK-036): a persistent
 app header carries the product title (`Bookmark AI`) and the top-level screen
 navigation on every screen, and each screen opens with the same screen-header
-rhythm — a screen title plus a one-line subtitle (`Library` / `Research
-Ledger` and `Analysis skills` / the settings-file intro) — followed by its
-card-based body using the shared panel styling. The Library left rail hosts
-only controls (search, sync status, filters), never app branding.
+rhythm — a screen title plus a one-line user-facing subtitle (`Library` /
+`Research Ledger` and `Analysis skills` / a plain-language tuning line).
+Below the header, both screens share the same workspace body and sync
+placement (MIK-038): a left rail for screen-specific status and guidance, a
+main area for the primary content, and a floating bottom-right sync action —
+so the two screens read as one app. The Library left rail hosts only controls
+(search, sync status, filters), never app branding; the Analysis skills rail
+hosts the settings sync readout and the `bookmark-ai/settings.json` guidance
+copy.
 
 The options page has a top-level navigation with two screens (MIK-025):
 
 - **Library** (default): the two-zone ledger, floating sync action, and detail
   side sheet described below.
 - **Analysis skills**: the settings screen for analysis skills, no longer a
-  panel below the bookmark list. It shows the settings sync status with a
-  refresh action, built-in profiles read-only, and custom skills (stored only
-  in `bookmark-ai/settings.json` on Drive) with
-  create/edit/delete/enable-disable. The create/edit form opens as a centered
-  modal dialog that closes via its Close/Cancel buttons, the Escape key, or a
-  backdrop click, and locks the page scroll while open. Instruction-authoring
+  panel below the bookmark list. It uses the shared rail/main workspace body
+  (MIK-038): the left rail shows the settings sync status/pending readout and
+  the settings-file context (custom skills are stored only in
+  `bookmark-ai/settings.json` on Drive); the main area shows custom skills
+  with create/edit/delete/enable-disable (and the `Add custom skill` action)
+  followed by built-in profiles read-only. Settings refresh is a floating
+  bottom-right `Sync settings` action analogous to the Library's `Sync Drive`
+  button — it dispatches the existing refresh path, shows the sync tone/
+  status, and is disabled while a skills action is busy. The create/edit form
+  opens as a centered modal dialog that closes via its Close/Cancel buttons,
+  the Escape key, or a backdrop click, and locks the page scroll while open. Instruction-authoring
   guidance sits next to the form: what the instruction changes, per-source
   examples (GitHub repository / technical article / official docs), safety
   warnings (no secrets, no raw page persistence, no external APIs/providers,
