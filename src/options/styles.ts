@@ -51,11 +51,13 @@ export const page: CSSProperties = {
 };
 
 /**
- * The two-zone grid: left rail · center list. The bookmark detail is no longer
- * a third pane — it opens as a side sheet overlay from a row click (MIK-022).
- * The page frame (max width, margins) comes from the shared {@link screenShell}.
+ * The shared two-zone workspace body (MIK-038): left rail · main content. Both
+ * the Library ledger (rail: search/sync/filters, main: bookmark rows, MIK-022)
+ * and the Analysis skills screen (rail: settings sync/guidance, main: skill
+ * cards) render inside this grid so the two screens share one body rhythm. The
+ * page frame (max width, margins) comes from the shared {@link screenShell}.
  */
-export const ledger: CSSProperties = {
+export const workspaceBody: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "240px minmax(0, 1fr)",
 	gap: 16,

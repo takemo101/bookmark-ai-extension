@@ -66,9 +66,14 @@ export type OptionsMessages = {
 	readonly closeDetailsAria: string;
 	readonly busyNotice: string;
 	readonly skillsScreenAria: string;
+	/** User-facing one-line subtitle under the Analysis skills screen title. */
+	readonly skillsSubtitle: string;
+	/** Rail guidance panel label holding the settings-file context (MIK-038). */
+	readonly skillsAbout: string;
 	readonly skillsIntro: { readonly before: string; readonly after: string };
 	readonly settingsSync: string;
-	readonly refreshSettings: string;
+	readonly syncSettingsButton: string;
+	readonly settingsSyncAria: string;
 	readonly loadingSkills: string;
 	readonly builtIn: string;
 	readonly custom: string;
@@ -155,13 +160,16 @@ const EN: OptionsMessages = {
 	closeDetailsAria: "Close details",
 	busyNotice: "Working — keep this page open until it finishes.",
 	skillsScreenAria: "Analysis skills settings",
+	skillsSubtitle: "Tune how the AI analyzes the pages you save",
+	skillsAbout: "About custom skills",
 	skillsIntro: {
 		before:
 			"Custom skills tune the AI analysis for matching pages. They are stored in ",
 		after: " in your Google Drive.",
 	},
 	settingsSync: "Settings sync",
-	refreshSettings: "Refresh settings",
+	syncSettingsButton: "Sync settings",
+	settingsSyncAria: "Sync analysis skill settings",
 	loadingSkills: "Loading analysis skills…",
 	builtIn: "Built-in (read-only)",
 	custom: "Custom (Drive-synced)",
@@ -265,13 +273,16 @@ const JA: OptionsMessages = {
 	closeDetailsAria: "詳細を閉じる",
 	busyNotice: "処理中です — 完了までこのページを開いたままにしてください。",
 	skillsScreenAria: "分析スキル設定",
+	skillsSubtitle: "保存するページのAI分析を調整します",
+	skillsAbout: "カスタムスキルについて",
 	skillsIntro: {
 		before:
 			"カスタムスキルは、一致するページのAI分析を調整します。Google Driveの ",
 		after: " に保存されます。",
 	},
 	settingsSync: "設定の同期",
-	refreshSettings: "設定を再読み込み",
+	syncSettingsButton: "設定を同期",
+	settingsSyncAria: "分析スキル設定を同期",
 	loadingSkills: "分析スキルを読み込み中…",
 	builtIn: "組み込み（読み取り専用）",
 	custom: "カスタム（Drive同期）",
