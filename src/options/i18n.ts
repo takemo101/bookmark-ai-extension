@@ -65,6 +65,24 @@ export type OptionsMessages = {
 	readonly close: string;
 	readonly closeDetailsAria: string;
 	readonly busyNotice: string;
+	readonly askAi: string;
+	readonly askAiScreenAria: string;
+	/** User-facing one-line subtitle under the Ask AI screen title (MIK-045). */
+	readonly askAiSubtitle: string;
+	/** Rail panel label for the Ask AI scope/privacy notes. */
+	readonly askAiAbout: string;
+	/** Local-cache/all-saved-bookmarks scope note — not the open web. */
+	readonly askAiScopeNote: string;
+	/** Short-bookmark-info usage and chat-is-never-saved note. */
+	readonly askAiPrivacyNote: string;
+	readonly askAiEmptyIntro: string;
+	/** Clickable example prompts shown in the empty chat state. */
+	readonly askAiExamples: readonly string[];
+	readonly askAiInputAria: string;
+	readonly askAiPlaceholder: string;
+	readonly askAiSubmit: string;
+	/** Non-streaming in-flight placeholder line while an answer is running. */
+	readonly askAiAnswering: string;
 	readonly skillsScreenAria: string;
 	/** User-facing one-line subtitle under the Analysis skills screen title. */
 	readonly skillsSubtitle: string;
@@ -161,6 +179,26 @@ const EN: OptionsMessages = {
 	close: "Close",
 	closeDetailsAria: "Close details",
 	busyNotice: "Working — keep this page open until it finishes.",
+	askAi: "Ask AI",
+	askAiScreenAria: "Ask AI about saved bookmarks",
+	askAiSubtitle:
+		"Ask in your own words and get recommendations from your saved bookmarks",
+	askAiAbout: "About Ask AI",
+	askAiScopeNote:
+		"Ask AI searches all your saved bookmarks in the local cache — it does not search the open web. Sync Drive from the Library to refresh the cache.",
+	askAiPrivacyNote:
+		"Only short saved-bookmark info (title, domain, description, genre, tags) is used, and this chat is never saved.",
+	askAiEmptyIntro:
+		"No questions yet. Ask about your saved bookmarks, or try an example:",
+	askAiExamples: [
+		"Find saved bookmarks about TypeScript testing",
+		"Show me GitHub repositories about AI tools",
+		"What should I read about Chrome extensions?",
+	],
+	askAiInputAria: "Ask AI question",
+	askAiPlaceholder: "Ask about your saved bookmarks…",
+	askAiSubmit: "Ask",
+	askAiAnswering: "Looking through your saved bookmarks…",
 	skillsScreenAria: "Analysis skills settings",
 	skillsSubtitle: "Tune how the AI analyzes the pages you save",
 	skillsAbout: "About custom skills",
@@ -276,6 +314,26 @@ const JA: OptionsMessages = {
 	close: "閉じる",
 	closeDetailsAria: "詳細を閉じる",
 	busyNotice: "処理中です — 完了までこのページを開いたままにしてください。",
+	askAi: "AIに聞く",
+	askAiScreenAria: "保存済みブックマークについてAIに聞く",
+	askAiSubtitle:
+		"自然な言葉で質問して、保存済みブックマークからおすすめを受け取ります",
+	askAiAbout: "AIに聞くについて",
+	askAiScopeNote:
+		"AIに聞くは、ローカルキャッシュ内のすべての保存済みブックマークを検索します。ウェブ全体は検索しません。キャッシュを最新にするにはライブラリでDriveと同期してください。",
+	askAiPrivacyNote:
+		"使うのは保存済みブックマークの短い情報（タイトル・ドメイン・説明・ジャンル・タグ）だけで、このチャットは保存されません。",
+	askAiEmptyIntro:
+		"まだ質問はありません。保存済みブックマークについて質問するか、例を試してください:",
+	askAiExamples: [
+		"TypeScriptのテストについて保存済みから探す",
+		"AIツール関連のGitHubリポジトリを見つける",
+		"Chrome拡張について読むべきものは？",
+	],
+	askAiInputAria: "AIへの質問",
+	askAiPlaceholder: "保存済みブックマークについて質問…",
+	askAiSubmit: "質問する",
+	askAiAnswering: "保存済みブックマークを確認中…",
 	skillsScreenAria: "分析スキル設定",
 	skillsSubtitle: "保存するページのAI分析を調整します",
 	skillsAbout: "カスタムスキルについて",

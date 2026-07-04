@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { AskAiController, AskAiView } from "./ask-ai-view-model";
 import type { OptionsScreen } from "./Options";
 import { lockScroll, Options, visibleFacetValues } from "./Options";
 import type { SkillsController, SkillsView } from "./skills-view-model";
@@ -176,6 +177,43 @@ function renderWithSkills(
 		<Options
 			controller={controllerOf(view)}
 			skillsController={skillsControllerOf(skillsView)}
+			initialScreen={initialScreen}
+			language={language}
+		/>,
+	);
+}
+
+function askAiViewOf(overrides: Partial<AskAiView> = {}): AskAiView {
+	return {
+		question: "",
+		canSubmit: false,
+		answering: false,
+		...overrides,
+	};
+}
+
+function askAiControllerOf(view: AskAiView): AskAiController {
+	return {
+		getView: () => view,
+		subscribe: () => () => {},
+		setQuestion: () => {},
+		useExample: () => {},
+		submit: () => {},
+	};
+}
+
+// All three controllers injected, mirroring the runtime composition root.
+function renderWithAskAi(
+	view: OptionsView,
+	askAiView: AskAiView,
+	initialScreen: OptionsScreen = "library",
+	language: "en" | "ja" = "en",
+): string {
+	return renderToStaticMarkup(
+		<Options
+			controller={controllerOf(view)}
+			skillsController={skillsControllerOf(skillsViewOf())}
+			askAiController={askAiControllerOf(askAiView)}
 			initialScreen={initialScreen}
 			language={language}
 		/>,
@@ -1206,5 +1244,131 @@ describe("Skill form modal (MIK-025)", () => {
 		expect(html).toContain('role="dialog"');
 		expect(html).toContain('role="alert"');
 		expect(html).toContain("name must be non-empty");
+	});
+});
+
+describe("Ask AI screen shell (MIK-045)", () => {
+	const syncedView = viewOf({
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+			lastSyncedAt: "2026-01-06T12:34:56.000Z",
+		},
+	});
+
+	it("adds an Ask AI tab to the nav alongside the existing screens", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf());
+
+		expect(html).toContain(">Library<");
+		expect(html).toContain(">Analysis skills<");
+		expect(html).toContain(">Ask AI<");
+	});
+
+	it("labels the nav tab AIに聞く for the ja language", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "library", "ja");
+
+		expect(html).toContain(">ライブラリ<");
+		expect(html).toContain(">分析スキル<");
+		expect(html).toContain(">AIに聞く<");
+	});
+
+	it("renders the Ask AI screen as a rail/main workspace without other screens", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(html).toContain('aria-label="Ask AI about saved bookmarks"');
+		expect(html).toMatch(/<h2[^>]*>Ask AI<\/h2>/);
+		// Same shared workspace grid as Library and Analysis skills (MIK-038).
+		expect(html).toContain("grid-template-columns:240px");
+		expect(html.match(/Bookmark AI/g)).toHaveLength(1);
+		// Neither the ledger nor the skills content leaks onto this screen.
+		expect(html).not.toContain('aria-label="Search bookmarks"');
+		expect(html).not.toContain('aria-label="Sync with Google Drive"');
+		expect(html).not.toContain("Built-in (read-only)");
+	});
+
+	it("shows the bookmark sync status and last synced time in the rail", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(html).toContain("Drive sync");
+		expect(html).toContain(">synced<");
+		expect(html).toContain("Last synced");
+		expect(html).toContain("2026");
+	});
+
+	it("explains the local-cache scope and chat non-persistence in the rail", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(html).toContain(
+			"Ask AI searches all your saved bookmarks in the local cache",
+		);
+		expect(html).toContain("it does not search the open web");
+		expect(html).toContain("Only short saved-bookmark info");
+		expect(html).toContain("this chat is never saved");
+	});
+
+	it("localizes the rail scope and privacy notes for the ja language", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai", "ja");
+
+		expect(html).toContain(
+			"ローカルキャッシュ内のすべての保存済みブックマークを検索します",
+		);
+		expect(html).toContain("ウェブ全体は検索しません");
+		expect(html).toContain("このチャットは保存されません");
+	});
+
+	it("renders the empty chat state with the localized example prompts", () => {
+		const en = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+		expect(en).toContain("Find saved bookmarks about TypeScript testing");
+		expect(en).toContain("Show me GitHub repositories about AI tools");
+		expect(en).toContain("What should I read about Chrome extensions?");
+
+		const ja = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai", "ja");
+		expect(ja).toContain("TypeScriptのテストについて保存済みから探す");
+		expect(ja).toContain("AIツール関連のGitHubリポジトリを見つける");
+		expect(ja).toContain("Chrome拡張について読むべきものは？");
+	});
+
+	it("disables submit for an empty or too-short question", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ question: "", canSubmit: false }),
+			"ask-ai",
+		);
+
+		expect(html).toContain('aria-label="Ask AI question"');
+		expect(html).toContain(">Ask<");
+		expect(html).toContain("disabled");
+	});
+
+	it("enables submit once the question passes the minimum length", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ question: "typescript testing", canSubmit: true }),
+			"ask-ai",
+		);
+
+		expect(html).toContain("typescript testing");
+		expect(html).not.toContain("disabled");
+		expect(html).not.toContain('aria-busy="true"');
+	});
+
+	it("disables submit and marks the form busy while answering", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ question: "typescript testing", answering: true }),
+			"ask-ai",
+		);
+
+		expect(html).toContain("disabled");
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("Looking through your saved bookmarks…");
+	});
+
+	it("renders no Ask AI tab when no Ask AI controller is provided", () => {
+		const html = renderWithSkills(syncedView, skillsViewOf());
+
+		expect(html).not.toContain(">Ask AI<");
 	});
 });
