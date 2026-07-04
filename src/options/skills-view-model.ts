@@ -230,14 +230,14 @@ export function createSkillsController(
 		},
 
 		async refresh() {
-			const result = await useCases.syncSettingsFromDrive();
-			if (result.ok) {
-				setState(result.value);
-				notify();
-				return;
-			}
-			setState(await useCases.loadCachedSettings());
-			notify();
+			await runAction(async () => {
+				const result = await useCases.syncSettingsFromDrive();
+				if (result.ok) {
+					setState(result.value);
+					return;
+				}
+				setState(await useCases.loadCachedSettings());
+			});
 		},
 
 		startCreate() {

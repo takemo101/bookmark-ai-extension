@@ -40,9 +40,18 @@ function cacheOf(
 	return { settings, sync };
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((res) => {
+		resolve = res;
+	});
+	return { promise, resolve };
+}
+
 class FakeSkillsUseCases implements SkillsUseCases {
 	cache: SettingsCacheState = cacheOf(Settings.empty());
 	syncResult: Result<SettingsCacheState, AppError> | null = null;
+	syncPromise: Promise<Result<SettingsCacheState, AppError>> | null = null;
 	createResult: Result<SettingsCacheState, AppError> | null = null;
 	updateResult: Result<SettingsCacheState, AppError> | null = null;
 	deleteResult: Result<SettingsCacheState, AppError> | null = null;
@@ -56,7 +65,10 @@ class FakeSkillsUseCases implements SkillsUseCases {
 		return this.cache;
 	}
 	async syncSettingsFromDrive() {
-		return this.syncResult ?? { ok: true as const, value: this.cache };
+		return (
+			this.syncPromise ??
+			this.syncResult ?? { ok: true as const, value: this.cache }
+		);
 	}
 	async createSkill(input: NewCustomSkillInput) {
 		this.createArgs.push(input);
@@ -126,6 +138,28 @@ describe("createSkillsController", () => {
 		const view = controller.getView();
 		expect(view.builtIns.length).toBeGreaterThan(0);
 		expect(view.builtIns.some((b) => b.id === "generic-page")).toBe(true);
+	});
+
+	it("marks refresh busy while settings sync is pending", async () => {
+		const useCases = new FakeSkillsUseCases();
+		const pending = deferred<Result<SettingsCacheState, AppError>>();
+		useCases.syncPromise = pending.promise;
+		const controller = createSkillsController(useCases);
+		const busySnapshots: boolean[] = [];
+		controller.subscribe(() => {
+			busySnapshots.push(controller.getView().busy);
+		});
+
+		const refresh = controller.refresh();
+
+		expect(controller.getView().busy).toBe(true);
+		expect(busySnapshots).toContain(true);
+
+		pending.resolve({ ok: true, value: useCases.cache });
+		await refresh;
+
+		expect(controller.getView().busy).toBe(false);
+		expect(busySnapshots.at(-1)).toBe(false);
 	});
 
 	it("startCreate() opens an empty form; submit() creates a skill", async () => {
