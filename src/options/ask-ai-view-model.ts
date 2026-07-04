@@ -12,22 +12,31 @@
  *   deps.loadBookmarks() — ALL locally cached records, never a Drive pull and
  *     never the Library's filtered view
  *   → findAskAiCandidates (local deterministic scoring)
+ *   → buildAskAiKeywordExtractionPrompt + deps.runKeywordExtractionPrompt
+ *     (MIK-047) — question and language only, NEVER bookmark data — whose
+ *     parsed keywords expand a second local scoring pass; any extraction
+ *     failure keeps the direct scoring result
  *   → buildAskAiRecommendationPrompt + deps.runRecommendationPrompt
  *   → parseAskAiRecommendation, mapping ids back to app-owned candidates
  *   → up to {@link MAX_ASK_AI_RESULT_CARDS} recommendation cards.
  *
- * Safe statuses short-circuit before any Prompt API call: too-short questions,
- * an empty library, and weak/no candidates render clarifying copy instead. A
- * runner throw (Prompt API unavailable), parser failure, or all-hallucinated
- * ids falls back to the local scored candidates with their deterministic
- * fallback reasons.
+ * Safe statuses short-circuit before any Prompt API call: too-short questions
+ * and an empty library render clarifying copy without touching extraction or
+ * recommendation; weak/no candidates (after any keyword expansion) do the same.
+ * Extracted keywords live only inside one `submit` call — never in state, never
+ * persisted. A recommendation runner throw (Prompt API unavailable), parser
+ * failure, or all-hallucinated ids falls back to the local scored candidates
+ * with their deterministic fallback reasons.
  *
  * Observable via `subscribe`/`getView` exactly like `OptionsController` and
  * `SkillsController`, so React binds it with `useSyncExternalStore`.
  */
 import {
+	type AskAiKeywordExtractionPrompt,
 	type AskAiRecommendationPrompt,
+	buildAskAiKeywordExtractionPrompt,
 	buildAskAiRecommendationPrompt,
+	parseAskAiKeywordExtraction,
 	parseAskAiRecommendation,
 } from "../lib/ai/index";
 import {
@@ -96,6 +105,15 @@ export type AskAiView = {
 export type AskAiDeps = {
 	/** Snapshot of ALL locally cached bookmark records. Must not touch Drive. */
 	loadBookmarks(): Promise<readonly BookmarkRecord[]>;
+	/**
+	 * Run the keyword-extraction prompt (built from the question and language
+	 * only, MIK-047) through the Prompt API and return the raw model text.
+	 * Throws when the Prompt API is unavailable or fails; the controller then
+	 * scores the original question directly.
+	 */
+	runKeywordExtractionPrompt(
+		request: AskAiKeywordExtractionPrompt,
+	): Promise<string>;
 	/**
 	 * Run the compact recommendation prompt through the Prompt API and return
 	 * the raw model text. Throws when the Prompt API is unavailable or fails;
@@ -248,6 +266,26 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 		}
 	}
 
+	/**
+	 * Extract ephemeral search keywords from the question alone (MIK-047). Any
+	 * failure — runner throw (Prompt API unavailable), unparseable/malformed
+	 * output, or no usable keywords — yields an empty list so the caller keeps
+	 * the direct question scoring result.
+	 */
+	async function extractKeywords(asked: string): Promise<readonly string[]> {
+		try {
+			const request = buildAskAiKeywordExtractionPrompt({
+				question: asked,
+				language: deps.language,
+			});
+			const raw = await deps.runKeywordExtractionPrompt(request);
+			const parsed = parseAskAiKeywordExtraction(raw);
+			return parsed.ok ? parsed.value.keywords : [];
+		} catch {
+			return [];
+		}
+	}
+
 	async function answer(asked: string): Promise<AskAiResultView> {
 		let records: readonly BookmarkRecord[];
 		try {
@@ -255,17 +293,27 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 		} catch {
 			return { kind: "error" };
 		}
-		const search = findAskAiCandidates(records, asked);
-		switch (search.kind) {
-			case "too-short-question":
-			case "empty-library":
-				return { kind: search.kind };
-			case "weak-candidates":
-				// Weak or no matches: ask a clarifying follow-up, never the AI.
-				return { kind: "weak-candidates" };
-			case "candidates":
-				return recommend(asked, search.candidates);
+		const direct = findAskAiCandidates(records, asked);
+		if (
+			direct.kind === "too-short-question" ||
+			direct.kind === "empty-library"
+		) {
+			// Policy short-circuits: no Prompt API call of any kind.
+			return { kind: direct.kind };
 		}
+		// Keyword expansion only ever adds query tokens, so it can rescue a weak
+		// direct match but never demote a strong one.
+		const keywords = await extractKeywords(asked);
+		const search =
+			keywords.length > 0
+				? findAskAiCandidates(records, asked, { expandedTerms: keywords })
+				: direct;
+		if (search.kind !== "candidates") {
+			// Weak or no matches even after expansion: ask a clarifying follow-up,
+			// never the recommendation AI.
+			return { kind: "weak-candidates" };
+		}
+		return recommend(asked, search.candidates);
 	}
 
 	return {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { AskAiRecommendationPrompt } from "../lib/ai/index";
+import type {
+	AskAiKeywordExtractionPrompt,
+	AskAiRecommendationPrompt,
+} from "../lib/ai/index";
 import {
 	type BookmarkRecord,
 	parseBookmarkRecord,
@@ -39,16 +42,25 @@ function fakeDeps(
 		output?: string;
 		runError?: Error;
 		loadError?: Error;
+		/** Raw keyword-extraction model output; empty (unparseable) by default. */
+		extractionOutput?: string;
+		extractionError?: Error;
 		language?: "en" | "ja";
 	} = {},
 ) {
 	const promptCalls: AskAiRecommendationPrompt[] = [];
+	const extractionCalls: AskAiKeywordExtractionPrompt[] = [];
 	let loadCalls = 0;
 	const deps: AskAiDeps = {
 		async loadBookmarks() {
 			if (options.loadError) throw options.loadError;
 			loadCalls += 1;
 			return options.records ?? [];
+		},
+		async runKeywordExtractionPrompt(request) {
+			extractionCalls.push(request);
+			if (options.extractionError) throw options.extractionError;
+			return options.extractionOutput ?? "";
 		},
 		async runRecommendationPrompt(request) {
 			promptCalls.push(request);
@@ -60,8 +72,13 @@ function fakeDeps(
 	return {
 		deps,
 		promptCalls,
+		extractionCalls,
 		loadCalls: () => loadCalls,
 	};
+}
+
+function extractionOutput(keywords: readonly string[]): string {
+	return JSON.stringify({ keywords });
 }
 
 function aiOutput(
@@ -242,6 +259,9 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 			async loadBookmarks() {
 				return records;
 			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
 			runRecommendationPrompt(request) {
 				promptCalls.push(request);
 				return pending;
@@ -257,10 +277,11 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 
 		// A second submit while in flight is dropped, not queued.
 		await controller.submit();
-		expect(promptCalls).toHaveLength(1);
 
 		release(aiOutput([{ id: "bm-ts", reason: "Match." }]));
 		await submitted;
+		// Only the first submit ran a recommendation prompt.
+		expect(promptCalls).toHaveLength(1);
 		expect(controller.getView().answering).toBe(false);
 		expect(controller.getView().result?.kind).toBe("recommendations");
 	});
@@ -381,5 +402,171 @@ describe("Ask AI local fallback (MIK-046)", () => {
 			kind: "recommendations",
 			source: "local",
 		});
+	});
+});
+
+describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
+	const japaneseRecords = [
+		record({
+			id: "bm-test-design",
+			canonicalUrl: "https://ja.test/test-design",
+			url: "https://ja.test/test-design",
+			title: "テスト設計の基礎",
+		}),
+	];
+	const japaneseQuestion = "前に読んだ、テスト設計で参考になりそうなやつ";
+
+	const englishRecords = [
+		record({
+			id: "bm-testing",
+			canonicalUrl: "https://en.test/testing",
+			url: "https://en.test/testing",
+			title: "Unit testing strategies",
+		}),
+	];
+	const englishQuestion = "which bookmark helps me design good checks?";
+
+	it("turns a weak Japanese natural-language question into AI recommendations via extracted keywords", async () => {
+		const { deps, extractionCalls, promptCalls } = fakeDeps({
+			records: japaneseRecords,
+			extractionOutput: extractionOutput(["テスト設計", "テスト"]),
+			output: aiOutput([
+				{ id: "bm-test-design", reason: "テスト設計の本です。" },
+			]),
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(japaneseQuestion);
+		await controller.submit();
+
+		expect(extractionCalls).toHaveLength(1);
+		expect(promptCalls).toHaveLength(1);
+		const result = controller.getView().result;
+		expect(result).toMatchObject({ kind: "recommendations", source: "ai" });
+		if (result?.kind !== "recommendations") throw new Error("no cards");
+		expect(result.cards[0].canonicalUrl).toBe("https://ja.test/test-design");
+	});
+
+	it("turns a weak English natural-language question into AI recommendations via extracted keywords", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records: englishRecords,
+			extractionOutput: extractionOutput(["testing", "test design"]),
+			output: aiOutput([{ id: "bm-testing", reason: "Covers test design." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(englishQuestion);
+		await controller.submit();
+
+		expect(promptCalls).toHaveLength(1);
+		const result = controller.getView().result;
+		expect(result).toMatchObject({ kind: "recommendations", source: "ai" });
+		if (result?.kind !== "recommendations") throw new Error("no cards");
+		expect(result.cards[0].canonicalUrl).toBe("https://en.test/testing");
+	});
+
+	it("sends only the question to the extraction prompt — never bookmark data", async () => {
+		const { deps, extractionCalls } = fakeDeps({
+			records: japaneseRecords,
+			extractionOutput: extractionOutput(["テスト設計"]),
+			output: aiOutput([{ id: "bm-test-design", reason: "合います。" }]),
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(japaneseQuestion);
+		await controller.submit();
+
+		expect(extractionCalls).toHaveLength(1);
+		const sent = JSON.stringify(extractionCalls[0]);
+		expect(sent).toContain(japaneseQuestion);
+		expect(sent).not.toContain("テスト設計の基礎");
+		expect(sent).not.toContain("https://ja.test/test-design");
+		expect(sent).not.toContain("bm-test-design");
+	});
+
+	it("falls back to weak-candidates when extraction throws (Prompt API unavailable)", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records: japaneseRecords,
+			extractionError: new Error("prompt api down"),
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(japaneseQuestion);
+		await controller.submit();
+
+		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(promptCalls).toHaveLength(0);
+	});
+
+	it("falls back to direct scoring when extraction output is malformed", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records: japaneseRecords,
+			extractionOutput: "sorry, no JSON here",
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(japaneseQuestion);
+		await controller.submit();
+
+		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(promptCalls).toHaveLength(0);
+	});
+
+	it("falls back to direct scoring when extraction returns no keywords", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records: japaneseRecords,
+			extractionOutput: extractionOutput([]),
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion(japaneseQuestion);
+		await controller.submit();
+
+		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(promptCalls).toHaveLength(0);
+	});
+
+	it("still recommends from direct strong matches when extraction fails", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records: [
+				record({
+					id: "bm-ts",
+					canonicalUrl: "https://ts.test/handbook",
+					url: "https://ts.test/handbook",
+					title: "TypeScript testing handbook",
+				}),
+			],
+			extractionError: new Error("prompt api down"),
+			output: aiOutput([{ id: "bm-ts", reason: "Direct match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion("typescript testing");
+		await controller.submit();
+
+		expect(promptCalls).toHaveLength(1);
+		expect(controller.getView().result).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+	});
+
+	it("never calls extraction for too-short questions or an empty library", async () => {
+		const tooShort = fakeDeps({ records: japaneseRecords });
+		const shortController = createAskAiController(tooShort.deps);
+		shortController.setQuestion("a");
+		await shortController.submit();
+		expect(tooShort.extractionCalls).toHaveLength(0);
+
+		const empty = fakeDeps({ records: [] });
+		const emptyController = createAskAiController(empty.deps);
+		emptyController.setQuestion("typescript testing");
+		await emptyController.submit();
+		expect(empty.extractionCalls).toHaveLength(0);
 	});
 });

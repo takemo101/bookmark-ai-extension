@@ -97,10 +97,12 @@ export function createRuntimeUseCases(): OptionsUseCases {
  * Build the real {@link AskAiDeps} for the "Ask AI" screen (MIK-046). The
  * bookmark source is a plain `chrome.storage.local` cache read — submitting a
  * question never triggers a Drive pull, and the full cached collection is used
- * regardless of any Library filters. The recommendation runner opens a Prompt
- * API session with the recommendation prompt's own system instruction and
- * throws when the API cannot run, which the controller turns into local
- * fallback cards. Nothing here can persist the chat.
+ * regardless of any Library filters. Both prompt runs — keyword extraction
+ * (MIK-047, built from the question and language only) and recommendation —
+ * go through the same Prompt API runner, each opening a session with its own
+ * prompt's system instruction; a throw makes the controller fall back to
+ * direct scoring / local fallback cards. Nothing here can persist the chat or
+ * the extracted keywords.
  */
 export function createRuntimeAskAiDeps(): AskAiDeps {
 	const cache = createChromeLocalCache();
@@ -111,6 +113,9 @@ export function createRuntimeAskAiDeps(): AskAiDeps {
 	return {
 		async loadBookmarks() {
 			return (await cache.load()).bookmarks.toArray();
+		},
+		runKeywordExtractionPrompt(request) {
+			return run(request, language);
 		},
 		runRecommendationPrompt(request) {
 			return run(request, language);
