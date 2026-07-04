@@ -85,6 +85,14 @@ export type OptionsMessages = {
 	readonly askAiClear: string;
 	/** Accessible label of the chat transcript log (MIK-048). */
 	readonly askAiTranscriptAria: string;
+	/** Faint role label above a user turn bubble (MIK-049). */
+	readonly askAiUserTurnLabel: string;
+	/** Faint role label above an assistant turn (MIK-049). */
+	readonly askAiAssistantTurnLabel: string;
+	/** Visible text of the jump-to-latest overlay button (MIK-049). */
+	readonly askAiLatest: string;
+	/** Accessible label of the jump-to-latest overlay button (MIK-049). */
+	readonly askAiLatestAria: string;
 	/** Non-streaming in-flight placeholder line while an answer is running. */
 	readonly askAiAnswering: string;
 	/** Safe status copy for the MIK-046 non-answer results. */
@@ -214,6 +222,10 @@ const EN: OptionsMessages = {
 	askAiSubmit: "Ask",
 	askAiClear: "Clear chat",
 	askAiTranscriptAria: "Ask AI conversation",
+	askAiUserTurnLabel: "You",
+	askAiAssistantTurnLabel: "AI",
+	askAiLatest: "Latest",
+	askAiLatestAria: "Jump to latest",
 	askAiAnswering: "Looking through your saved bookmarks…",
 	askAiTooShort: "Please ask a slightly longer question.",
 	askAiEmptyLibrary:
@@ -363,6 +375,10 @@ const JA: OptionsMessages = {
 	askAiSubmit: "質問する",
 	askAiClear: "チャットをクリア",
 	askAiTranscriptAria: "AIとの会話",
+	askAiUserTurnLabel: "あなた",
+	askAiAssistantTurnLabel: "AI",
+	askAiLatest: "最新へ",
+	askAiLatestAria: "最新のメッセージへ移動",
 	askAiAnswering: "保存済みブックマークを確認中…",
 	askAiTooShort: "もう少し長い質問を入力してください。",
 	askAiEmptyLibrary:

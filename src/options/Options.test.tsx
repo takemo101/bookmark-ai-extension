@@ -8,7 +8,14 @@ import type {
 	AskAiView,
 } from "./ask-ai-view-model";
 import type { OptionsScreen } from "./Options";
-import { lockScroll, Options, visibleFacetValues } from "./Options";
+import {
+	askAiDistanceFromBottom,
+	askAiLatestButtonVisible,
+	askAiShouldAutoFollow,
+	lockScroll,
+	Options,
+	visibleFacetValues,
+} from "./Options";
 import type { SkillsController, SkillsView } from "./skills-view-model";
 import type {
 	DetailView,
@@ -1674,5 +1681,163 @@ describe("Ask AI chat session UI (MIK-048)", () => {
 		expect(html).toMatch(/<textarea[^>]*disabled/);
 		expect(html).toContain('aria-busy="true"');
 		expect(html).toContain("Looking through your saved bookmarks…");
+	});
+});
+
+describe("Ask AI chat layout polish (MIK-049)", () => {
+	const syncedView = viewOf({
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+		},
+	});
+
+	const answer: AskAiResultView = {
+		kind: "recommendations",
+		source: "ai",
+		message: "Here are your matches.",
+		cards: [
+			{
+				canonicalUrl: "https://ts.test/handbook",
+				title: "TypeScript testing handbook",
+				domain: "ts.test",
+				tags: ["typescript"],
+				aiStatus: "ready" as const,
+				reason: "Covers exactly this topic.",
+			},
+		],
+	};
+
+	it("renders a chat surface with a scrollable transcript and a bottom-pinned composer", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages: chatOf("typescript testing", answer) }),
+			"ask-ai",
+		);
+
+		// The chat shell claims the viewport height so the composer stays pinned
+		// while only the transcript viewport scrolls.
+		expect(html).toContain("height:calc(100vh - 180px)");
+		expect(html).toContain("flex-shrink:0");
+		// The transcript log lives inside the scroll viewport, above the composer.
+		expect(html.indexOf('role="log"')).toBeGreaterThan(-1);
+		expect(html.indexOf('role="log"')).toBeLessThan(html.indexOf("<form"));
+	});
+
+	it("centers the welcome/examples state before the first message", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(html).toContain("No questions yet");
+		expect(html).toContain("Find saved bookmarks about TypeScript testing");
+		expect(html).toContain("justify-content:center");
+		expect(html).toContain("text-align:center");
+	});
+
+	it("labels user and assistant turns as distinct chat bubbles", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages: chatOf("typescript testing", answer) }),
+			"ask-ai",
+		);
+
+		expect(html).toContain(">You<");
+		expect(html).toContain(">AI<");
+		// The user turn is a right-aligned bubble; the assistant turn stretches.
+		expect(html).toContain("align-self:flex-end");
+		expect(html).toContain("typescript testing");
+		expect(html).toContain("Here are your matches.");
+	});
+
+	it("localizes the turn labels for the ja language", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages: chatOf("typescript testing", answer) }),
+			"ask-ai",
+			"ja",
+		);
+
+		expect(html).toContain(">あなた<");
+		expect(html).toContain(">AI<");
+	});
+
+	it("shows a chat-like animated thinking indicator while answering", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: chatOf("typescript testing", answer),
+				answering: true,
+				canClear: true,
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain('role="status"');
+		expect(html).toContain("Looking through your saved bookmarks…");
+		// The dot animation ships with the indicator (no CSS framework).
+		expect(html).toContain("askai-thinking");
+	});
+
+	it("hides the jump-to-latest button until the user scrolls away", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages: chatOf("typescript testing", answer) }),
+			"ask-ai",
+		);
+
+		expect(html).not.toContain("Jump to latest");
+	});
+
+	it("keeps Clear chat inside the pinned composer", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: chatOf("typescript testing", answer),
+				canClear: true,
+			}),
+			"ask-ai",
+		);
+
+		const formStart = html.indexOf("<form");
+		expect(formStart).toBeGreaterThan(-1);
+		expect(html.indexOf(">Clear chat<")).toBeGreaterThan(formStart);
+	});
+});
+
+describe("Ask AI scroll-follow helpers (MIK-049)", () => {
+	it("computes the distance from the bottom of the viewport", () => {
+		expect(
+			askAiDistanceFromBottom({
+				scrollTop: 100,
+				scrollHeight: 400,
+				clientHeight: 200,
+			}),
+		).toBe(100);
+		expect(
+			askAiDistanceFromBottom({
+				scrollTop: 200,
+				scrollHeight: 400,
+				clientHeight: 200,
+			}),
+		).toBe(0);
+	});
+
+	it("auto-follows only while the user is near the bottom", () => {
+		expect(askAiShouldAutoFollow(0)).toBe(true);
+		expect(askAiShouldAutoFollow(16)).toBe(true);
+		expect(askAiShouldAutoFollow(17)).toBe(false);
+		expect(askAiShouldAutoFollow(300)).toBe(false);
+	});
+
+	it("shows the latest button past the show threshold and hides it with hysteresis", () => {
+		// Hidden → needs to pass the (higher) show threshold.
+		expect(askAiLatestButtonVisible(120, false)).toBe(false);
+		expect(askAiLatestButtonVisible(121, false)).toBe(true);
+		// Visible → stays until the (lower) hide threshold is crossed.
+		expect(askAiLatestButtonVisible(80, true)).toBe(true);
+		expect(askAiLatestButtonVisible(41, true)).toBe(true);
+		expect(askAiLatestButtonVisible(40, true)).toBe(false);
+		expect(askAiLatestButtonVisible(0, true)).toBe(false);
 	});
 });

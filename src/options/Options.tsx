@@ -54,6 +54,16 @@ import type { AiStatus } from "./view-types";
 import {
 	aiStatusTone,
 	appHeader,
+	askAiAssistantTurn,
+	askAiChatShell,
+	askAiComposer,
+	askAiLatestButton,
+	askAiTurnLabel,
+	askAiUserBubble,
+	askAiUserTurn,
+	askAiViewport,
+	askAiViewportShell,
+	askAiWelcome,
 	brandTitle,
 	chip,
 	chipActive,
@@ -1531,17 +1541,69 @@ function AskAiRail({
 	);
 }
 
+/** How close to the bottom (px) still counts as following the conversation. */
+const ASK_AI_AUTO_FOLLOW_THRESHOLD = 16;
+/** Scrolled further away than this shows the jump-to-latest button. */
+const ASK_AI_SHOW_LATEST_THRESHOLD = 120;
+/** Once visible, the button hides only after coming back within this. */
+const ASK_AI_HIDE_LATEST_THRESHOLD = 40;
+
+/** The scroll metrics the follow/latest decisions need; lets tests use plain objects. */
+export type AskAiViewportMetrics = {
+	readonly scrollTop: number;
+	readonly scrollHeight: number;
+	readonly clientHeight: number;
+};
+
+/** Pixels between the current scroll position and the transcript bottom. */
+export function askAiDistanceFromBottom(metrics: AskAiViewportMetrics): number {
+	return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight;
+}
+
 /**
- * Ask AI main area (MIK-045, MIK-046, MIK-048): the sitesurf-inspired chat
- * surface. Before the first user message it shows the welcome state with
- * localized clickable example prompts; afterwards it renders the full
- * transcript — user turns as right-aligned bubbles, assistant turns through
- * {@link AskAiResult} — followed by the composer. Chat state lives in the
- * controller's memory and vanishes with the page. Enter sends, Shift+Enter
- * inserts a newline, IME composition never sends; the composer is disabled
- * while an answer is in flight, with `aria-busy` on the form. The clear-chat
- * button hard-resets the conversation (transcript, input, Prompt API session,
- * narrowed context) through {@link AskAiController.clearSession}.
+ * Whether new messages should keep auto-scrolling the viewport (MIK-049,
+ * sitesurf's ChatArea behavior): following stops as soon as the user is
+ * meaningfully away from the bottom. Exported for tests only — pure view
+ * logic, no DOM.
+ */
+export function askAiShouldAutoFollow(distanceFromBottom: number): boolean {
+	return distanceFromBottom <= ASK_AI_AUTO_FOLLOW_THRESHOLD;
+}
+
+/**
+ * Whether the jump-to-latest button is visible, with hysteresis (MIK-049):
+ * a hidden button appears only past the higher show threshold, a visible one
+ * survives until the user comes back within the lower hide threshold — so it
+ * never flickers around one boundary. Exported for tests only.
+ */
+export function askAiLatestButtonVisible(
+	distanceFromBottom: number,
+	visible: boolean,
+): boolean {
+	return visible
+		? distanceFromBottom > ASK_AI_HIDE_LATEST_THRESHOLD
+		: distanceFromBottom > ASK_AI_SHOW_LATEST_THRESHOLD;
+}
+
+/**
+ * Ask AI main area (MIK-045, MIK-046, MIK-048; MIK-049 chat layout): the
+ * sitesurf-aligned chat surface. The shell is a fixed-height flex column —
+ * only the transcript viewport scrolls while the composer stays pinned at the
+ * bottom. Before the first user message the viewport centers the welcome
+ * state with localized clickable example prompts; afterwards it renders the
+ * full transcript — user turns as right-aligned labeled bubbles, assistant
+ * turns through {@link AskAiResult} — plus a chat-like thinking indicator
+ * while an answer is in flight. New messages auto-scroll the viewport while
+ * the user is near the bottom; scrolling away stops the follow and floats a
+ * jump-to-latest button that scrolls back down and resumes following.
+ *
+ * Chat state lives in the controller's memory and vanishes with the page;
+ * scroll follow/latest state is view-only local state. Enter sends,
+ * Shift+Enter inserts a newline, IME composition never sends; the composer is
+ * disabled while an answer is in flight, with `aria-busy` on the form. The
+ * clear-chat button stays inside the pinned composer and hard-resets the
+ * conversation (transcript, input, Prompt API session, narrowed context)
+ * through {@link AskAiController.clearSession}.
  */
 function AskAiMain({
 	view,
@@ -1554,128 +1616,246 @@ function AskAiMain({
 	controller: AskAiController;
 	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
+	const viewportRef = useRef<HTMLDivElement>(null);
+	// A ref, not state: follow changes on every scroll event and must never
+	// re-render the transcript by itself.
+	const autoFollowRef = useRef(true);
+	const [showLatest, setShowLatest] = useState(false);
+
+	function scrollToBottom(): void {
+		const viewport = viewportRef.current;
+		if (viewport) {
+			viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+		}
+	}
+
+	// New turns (and the thinking indicator) keep the bottom in view while the
+	// user is following; a user who scrolled up is never yanked back down.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: view.messages/view.answering are the scroll triggers, not hook inputs.
+	useEffect(() => {
+		if (autoFollowRef.current) {
+			scrollToBottom();
+		}
+	}, [view.messages, view.answering]);
+
+	function handleScroll(): void {
+		const viewport = viewportRef.current;
+		if (!viewport) {
+			return;
+		}
+		const distance = askAiDistanceFromBottom(viewport);
+		autoFollowRef.current = askAiShouldAutoFollow(distance);
+		setShowLatest((visible) => askAiLatestButtonVisible(distance, visible));
+	}
+
+	function handleLatestClick(): void {
+		autoFollowRef.current = true;
+		setShowLatest(false);
+		scrollToBottom();
+	}
+
+	return (
+		<section style={askAiChatShell}>
+			<div style={askAiViewportShell}>
+				<div ref={viewportRef} onScroll={handleScroll} style={askAiViewport}>
+					{view.messages.length === 0 ? (
+						<AskAiWelcome m={m} controller={controller} />
+					) : (
+						<div
+							role="log"
+							aria-label={m.askAiTranscriptAria}
+							style={{ display: "flex", flexDirection: "column", gap: 12 }}
+						>
+							{view.messages.map((message) =>
+								message.role === "user" ? (
+									<div key={message.id} style={askAiUserTurn}>
+										<p style={askAiTurnLabel}>{m.askAiUserTurnLabel}</p>
+										<p style={askAiUserBubble}>{message.text}</p>
+									</div>
+								) : (
+									<div key={message.id} style={askAiAssistantTurn}>
+										<p style={askAiTurnLabel}>{m.askAiAssistantTurnLabel}</p>
+										<AskAiResult
+											result={message.result}
+											m={m}
+											onOpenBookmark={onOpenBookmark}
+										/>
+									</div>
+								),
+							)}
+						</div>
+					)}
+					{view.answering ? <AskAiThinkingIndicator m={m} /> : null}
+				</div>
+				{showLatest ? (
+					<button
+						type="button"
+						style={askAiLatestButton}
+						aria-label={m.askAiLatestAria}
+						onClick={handleLatestClick}
+					>
+						<span aria-hidden>↓</span>
+						<span>{m.askAiLatest}</span>
+					</button>
+				) : null}
+			</div>
+			<AskAiComposer view={view} m={m} controller={controller} />
+		</section>
+	);
+}
+
+/**
+ * Centered welcome/examples landing state before the first message (MIK-049,
+ * sitesurf's WelcomeScreen shape): intro copy plus clickable example prompts,
+ * vertically centered in the otherwise empty transcript viewport.
+ */
+function AskAiWelcome({
+	m,
+	controller,
+}: {
+	m: OptionsMessages;
+	controller: AskAiController;
+}) {
+	return (
+		<div style={askAiWelcome}>
+			<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
+				{m.askAiEmptyIntro}
+			</p>
+			<div
+				style={{
+					display: "flex",
+					flexWrap: "wrap",
+					justifyContent: "center",
+					gap: 6,
+				}}
+			>
+				{m.askAiExamples.map((example) => (
+					<button
+						key={example}
+						type="button"
+						style={chip}
+						onClick={() => controller.useExample(example)}
+					>
+						{example}
+					</button>
+				))}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Chat-like thinking indicator while an answer is in flight (MIK-049,
+ * sitesurf's StreamingIndicator shape): three pulsing dots next to the
+ * existing in-flight copy, rendered as an assistant-side row inside the
+ * transcript viewport. The pulse keyframes ship inline with the indicator —
+ * the project has no CSS tooling — and the dots are decorative; the
+ * accessible signal stays the `role="status"` text.
+ */
+function AskAiThinkingIndicator({ m }: { m: OptionsMessages }) {
+	return (
+		<div
+			role="status"
+			style={{ display: "flex", alignItems: "center", gap: 8 }}
+		>
+			<style>
+				{"@keyframes askai-thinking{0%,80%,100%{opacity:.25}40%{opacity:1}}"}
+			</style>
+			<span aria-hidden style={{ display: "inline-flex", gap: 4 }}>
+				{[0, 1, 2].map((dot) => (
+					<span
+						key={dot}
+						style={{
+							width: 6,
+							height: 6,
+							borderRadius: 999,
+							background: palette.inkFaint,
+							animation: `askai-thinking 1.2s ease-in-out ${dot * 0.16}s infinite`,
+						}}
+					/>
+				))}
+			</span>
+			<span style={{ fontSize: 12, color: palette.inkSoft }}>
+				{m.askAiAnswering}
+			</span>
+		</div>
+	);
+}
+
+/**
+ * The composer pinned to the bottom of the Ask AI chat shell (MIK-049):
+ * unchanged MIK-048 behavior — Enter sends, Shift+Enter newline, IME-safe,
+ * disabled while answering with `aria-busy` on the form, and the clear-chat
+ * hard reset kept right next to submit.
+ */
+function AskAiComposer({
+	view,
+	m,
+	controller,
+}: {
+	view: AskAiView;
+	m: OptionsMessages;
+	controller: AskAiController;
+}) {
 	const submitDisabled = !view.canSubmit || view.answering;
 	const clearDisabled = !view.canClear;
 	return (
-		<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-			{view.messages.length === 0 ? (
-				<div style={panel}>
-					<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
-						{m.askAiEmptyIntro}
-					</p>
-					<div
-						style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
-					>
-						{m.askAiExamples.map((example) => (
-							<button
-								key={example}
-								type="button"
-								style={chip}
-								onClick={() => controller.useExample(example)}
-							>
-								{example}
-							</button>
-						))}
-					</div>
-				</div>
-			) : (
-				<div
-					role="log"
-					aria-label={m.askAiTranscriptAria}
-					style={{ display: "flex", flexDirection: "column", gap: 12 }}
-				>
-					{view.messages.map((message) =>
-						message.role === "user" ? (
-							<p
-								key={message.id}
-								style={{
-									...panel,
-									alignSelf: "flex-end",
-									maxWidth: "85%",
-									fontSize: 13,
-									color: palette.ink,
-									margin: 0,
-									whiteSpace: "pre-wrap",
-								}}
-							>
-								{message.text}
-							</p>
-						) : (
-							<AskAiResult
-								key={message.id}
-								result={message.result}
-								m={m}
-								onOpenBookmark={onOpenBookmark}
-							/>
-						),
-					)}
-				</div>
-			)}
-			{view.answering ? (
-				<p
-					role="status"
-					style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}
-				>
-					{m.askAiAnswering}
-				</p>
-			) : null}
-			<form
-				style={{ ...panel, display: "flex", flexDirection: "column", gap: 8 }}
-				aria-busy={view.answering || undefined}
-				onSubmit={(event) => {
-					event.preventDefault();
-					void controller.submit();
+		<form
+			style={askAiComposer}
+			aria-busy={view.answering || undefined}
+			onSubmit={(event) => {
+				event.preventDefault();
+				void controller.submit();
+			}}
+		>
+			<textarea
+				style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
+				value={view.question}
+				placeholder={m.askAiPlaceholder}
+				aria-label={m.askAiInputAria}
+				disabled={view.answering}
+				onChange={(e) => controller.setQuestion(e.target.value)}
+				onKeyDown={(event) => {
+					if (
+						isAskAiComposerSubmitKey({
+							key: event.key,
+							shiftKey: event.shiftKey,
+							isComposing: event.nativeEvent.isComposing,
+						})
+					) {
+						event.preventDefault();
+						if (view.canSubmit) {
+							void controller.submit();
+						}
+					}
 				}}
-			>
-				<textarea
-					style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
-					value={view.question}
-					placeholder={m.askAiPlaceholder}
-					aria-label={m.askAiInputAria}
-					disabled={view.answering}
-					onChange={(e) => controller.setQuestion(e.target.value)}
-					onKeyDown={(event) => {
-						if (
-							isAskAiComposerSubmitKey({
-								key: event.key,
-								shiftKey: event.shiftKey,
-								isComposing: event.nativeEvent.isComposing,
-							})
-						) {
-							event.preventDefault();
-							if (view.canSubmit) {
-								void controller.submit();
-							}
-						}
-					}}
-				/>
-				<div style={{ display: "flex", gap: 8 }}>
-					<button
-						type="submit"
-						style={
-							submitDisabled
-								? { ...primaryButton, ...disabledButton }
-								: primaryButton
-						}
-						disabled={submitDisabled}
-					>
-						{m.askAiSubmit}
-					</button>
-					<button
-						type="button"
-						style={
-							clearDisabled
-								? { ...subtleButton, ...disabledButton }
-								: subtleButton
-						}
-						disabled={clearDisabled}
-						onClick={() => controller.clearSession()}
-					>
-						{m.askAiClear}
-					</button>
-				</div>
-			</form>
-		</section>
+			/>
+			<div style={{ display: "flex", gap: 8 }}>
+				<button
+					type="submit"
+					style={
+						submitDisabled
+							? { ...primaryButton, ...disabledButton }
+							: primaryButton
+					}
+					disabled={submitDisabled}
+				>
+					{m.askAiSubmit}
+				</button>
+				<button
+					type="button"
+					style={
+						clearDisabled
+							? { ...subtleButton, ...disabledButton }
+							: subtleButton
+					}
+					disabled={clearDisabled}
+					onClick={() => controller.clearSession()}
+				>
+					{m.askAiClear}
+				</button>
+			</div>
+		</form>
 	);
 }
 
