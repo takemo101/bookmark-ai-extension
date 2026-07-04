@@ -72,6 +72,8 @@ export type OptionsMessages = {
 	readonly skillsAbout: string;
 	readonly skillsIntro: { readonly before: string; readonly after: string };
 	readonly settingsSync: string;
+	readonly settingsSyncingDrive: string;
+	readonly settingsWritingDrive: string;
 	readonly syncSettingsButton: string;
 	readonly settingsSyncAria: string;
 	readonly loadingSkills: string;
@@ -168,6 +170,8 @@ const EN: OptionsMessages = {
 		after: " in your Google Drive.",
 	},
 	settingsSync: "Settings sync",
+	settingsSyncingDrive: "Syncing settings with Google Drive…",
+	settingsWritingDrive: "Writing settings changes to Google Drive…",
 	syncSettingsButton: "Sync settings",
 	settingsSyncAria: "Sync analysis skill settings",
 	loadingSkills: "Loading analysis skills…",
@@ -281,6 +285,8 @@ const JA: OptionsMessages = {
 		after: " に保存されます。",
 	},
 	settingsSync: "設定の同期",
+	settingsSyncingDrive: "設定をGoogle Driveと同期中…",
+	settingsWritingDrive: "設定の変更をGoogle Driveに書き込み中…",
 	syncSettingsButton: "設定を同期",
 	settingsSyncAria: "分析スキル設定を同期",
 	loadingSkills: "分析スキルを読み込み中…",
