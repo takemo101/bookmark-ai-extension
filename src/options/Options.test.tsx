@@ -198,7 +198,7 @@ function askAiControllerOf(view: AskAiView): AskAiController {
 		subscribe: () => () => {},
 		setQuestion: () => {},
 		useExample: () => {},
-		submit: () => {},
+		submit: async () => {},
 	};
 }
 
@@ -1370,5 +1370,180 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		const html = renderWithSkills(syncedView, skillsViewOf());
 
 		expect(html).not.toContain(">Ask AI<");
+	});
+});
+
+describe("Ask AI recommendations (MIK-046)", () => {
+	const syncedView = viewOf({
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+		},
+	});
+
+	const cards = [
+		{
+			canonicalUrl: "https://ts.test/handbook",
+			title: "TypeScript testing handbook",
+			domain: "ts.test",
+			genre: "技術",
+			tags: ["typescript"],
+			description: "A short saved description.",
+			aiStatus: "ready" as const,
+			reason: "Covers exactly this topic.",
+		},
+		{
+			canonicalUrl: "https://vitest.test/guide",
+			title: "Vitest guide",
+			domain: "vitest.test",
+			tags: [],
+			aiStatus: "pending" as const,
+			reason: "Matched title",
+		},
+	];
+
+	it("renders AI recommendation cards as buttons with titles and reasons", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "typescript testing",
+				result: {
+					kind: "recommendations",
+					source: "ai",
+					message: "Here are your matches.",
+					cards,
+				},
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain("Here are your matches.");
+		expect(html).toContain("TypeScript testing handbook");
+		expect(html).toContain("Covers exactly this topic.");
+		expect(html).toContain("Vitest guide");
+		expect(html).toContain(
+			'aria-label="Open details for TypeScript testing handbook"',
+		);
+		expect(html).toContain('aria-label="Open details for Vitest guide"');
+		// The submitted question stays visible with the latest answer.
+		expect(html).toContain("typescript testing");
+		// No fallback notice on an AI-sourced answer.
+		expect(html).not.toContain("keyword matches");
+	});
+
+	it("marks local fallback results with the fallback notice and reasons", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "typescript",
+				result: { kind: "recommendations", source: "local", cards },
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain(
+			"these are keyword matches from your saved bookmarks",
+		);
+		expect(html).toContain("Matched title");
+		expect(html).toContain("TypeScript testing handbook");
+	});
+
+	it("shows the clarifying message for weak candidates", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "hm",
+				result: { kind: "weak-candidates" },
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain("could not find a strong match");
+		expect(html).not.toContain('aria-label="Open details for');
+	});
+
+	it("shows safe messages for too-short questions and an empty library", () => {
+		const tooShort = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "a",
+				result: { kind: "too-short-question" },
+			}),
+			"ask-ai",
+		);
+		expect(tooShort).toContain("longer question");
+
+		const emptyLibrary = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "typescript",
+				result: { kind: "empty-library" },
+			}),
+			"ask-ai",
+		);
+		expect(emptyLibrary).toContain("no saved bookmarks yet");
+	});
+
+	it("shows a safe error banner when the flow fails unexpectedly", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "typescript",
+				result: { kind: "error" },
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain('role="alert"');
+		expect(html).toContain("try again");
+	});
+
+	it("localizes the fallback notice and clarify message for the ja language", () => {
+		const fallback = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				askedQuestion: "typescript",
+				result: { kind: "recommendations", source: "local", cards },
+			}),
+			"ask-ai",
+			"ja",
+		);
+		expect(fallback).toContain("キーワード一致");
+
+		const clarify = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ askedQuestion: "hm", result: { kind: "weak-candidates" } }),
+			"ask-ai",
+			"ja",
+		);
+		expect(clarify).toContain("見つかりませんでした");
+	});
+
+	it("opens the existing bookmark detail sheet over the Ask AI screen", () => {
+		const html = renderWithAskAi(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				selected: detailOf(),
+			}),
+			askAiViewOf({
+				askedQuestion: "typescript testing",
+				result: {
+					kind: "recommendations",
+					source: "ai",
+					message: "Here are your matches.",
+					cards,
+				},
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain('role="dialog"');
+		expect(html).toContain('aria-labelledby="bookmark-detail-title"');
+		expect(html).toContain("Selected bookmark");
 	});
 });

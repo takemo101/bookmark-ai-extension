@@ -83,6 +83,17 @@ export type OptionsMessages = {
 	readonly askAiSubmit: string;
 	/** Non-streaming in-flight placeholder line while an answer is running. */
 	readonly askAiAnswering: string;
+	/** The submitted question echoed above the latest answer (MIK-046). */
+	readonly askAiYouAsked: (question: string) => string;
+	/** Safe status copy for the MIK-046 non-answer results. */
+	readonly askAiTooShort: string;
+	readonly askAiEmptyLibrary: string;
+	readonly askAiClarify: string;
+	readonly askAiError: string;
+	/** Notice above local-fallback cards when the AI could not answer. */
+	readonly askAiFallbackNotice: string;
+	readonly askAiResultsAria: string;
+	readonly askAiCardAria: (title: string) => string;
 	readonly skillsScreenAria: string;
 	/** User-facing one-line subtitle under the Analysis skills screen title. */
 	readonly skillsSubtitle: string;
@@ -199,6 +210,18 @@ const EN: OptionsMessages = {
 	askAiPlaceholder: "Ask about your saved bookmarks…",
 	askAiSubmit: "Ask",
 	askAiAnswering: "Looking through your saved bookmarks…",
+	askAiYouAsked: (question) => `You asked: ${question}`,
+	askAiTooShort: "Please ask a slightly longer question.",
+	askAiEmptyLibrary:
+		"You have no saved bookmarks yet — save a page from the popup first.",
+	askAiClarify:
+		"I could not find a strong match in your saved bookmarks. Try adding a topic, technology, or site name and ask again.",
+	askAiError:
+		"Something went wrong while checking your saved bookmarks. Please try again.",
+	askAiFallbackNotice:
+		"On-device AI is not available right now, so these are keyword matches from your saved bookmarks.",
+	askAiResultsAria: "Ask AI recommendations",
+	askAiCardAria: (title) => `Open details for ${title}`,
 	skillsScreenAria: "Analysis skills settings",
 	skillsSubtitle: "Tune how the AI analyzes the pages you save",
 	skillsAbout: "About custom skills",
@@ -334,6 +357,18 @@ const JA: OptionsMessages = {
 	askAiPlaceholder: "保存済みブックマークについて質問…",
 	askAiSubmit: "質問する",
 	askAiAnswering: "保存済みブックマークを確認中…",
+	askAiYouAsked: (question) => `質問: ${question}`,
+	askAiTooShort: "もう少し長い質問を入力してください。",
+	askAiEmptyLibrary:
+		"保存済みブックマークがまだありません。まずポップアップからページを保存してください。",
+	askAiClarify:
+		"保存済みブックマークからはっきり合うものが見つかりませんでした。トピック・技術名・サイト名などを足して聞き直してください。",
+	askAiError:
+		"保存済みブックマークの確認中に問題が発生しました。もう一度お試しください。",
+	askAiFallbackNotice:
+		"オンデバイスAIが今は使えないため、保存済みブックマークからのキーワード一致を表示しています。",
+	askAiResultsAria: "AIのおすすめ",
+	askAiCardAria: (title) => `「${title}」の詳細を開く`,
 	skillsScreenAria: "分析スキル設定",
 	skillsSubtitle: "保存するページのAI分析を調整します",
 	skillsAbout: "カスタムスキルについて",
