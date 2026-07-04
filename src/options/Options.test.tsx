@@ -49,6 +49,7 @@ function detailOf(overrides: Partial<DetailView> = {}): DetailView {
 function rowOf(overrides: Partial<RowView> = {}): RowView {
 	return {
 		canonicalUrl: "https://example.test/x",
+		url: "https://example.test/x",
 		title: "Selected bookmark",
 		summary: "短い説明",
 		genre: "技術",
@@ -217,6 +218,31 @@ describe("Options bookmark favicons (MIK-032)", () => {
 		);
 		expect(html).toContain('alt=""');
 		expect(html).not.toContain(">E<");
+	});
+
+	it("looks up row favicons by the original URL, not the canonical URL (MIK-034)", () => {
+		stubChromeRuntime();
+
+		// Canonicalization strips `www.`, tracking params, and the trailing
+		// slash; Chrome's _favicon endpoint knows the visited original.
+		const html = render(
+			viewOf({
+				rows: [
+					rowOf({
+						url: "https://www.apple.com/jp/?utm_source=test",
+						canonicalUrl: "https://apple.com/jp",
+					}),
+				],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+		);
+
+		expect(html).toContain(
+			"chrome-extension://test-ext/_favicon/?pageUrl=https%3A%2F%2Fwww.apple.com%2Fjp%2F%3Futm_source%3Dtest&amp;size=22",
+		);
+		expect(html).not.toContain("pageUrl=https%3A%2F%2Fapple.com%2Fjp");
 	});
 });
 

@@ -181,6 +181,26 @@ describe("createOptionsController", () => {
 			expect(controller.getView().sync.pendingLocalChanges).toBe(true);
 		});
 
+		it("keeps the original URL on rows for favicon lookup (MIK-034)", async () => {
+			const fake = new FakeUseCases();
+			// Canonicalization drops `www.`, the tracking param, and the trailing
+			// slash, so the row must carry both URL forms distinctly.
+			fake.cache = cacheOf([
+				recordOf({
+					id: "apple",
+					url: "https://www.apple.com/jp/?utm_source=test",
+					title: "Apple",
+				}),
+			]);
+			const controller = controllerWith(fake);
+
+			await controller.init();
+			const row = controller.getView().rows[0];
+
+			expect(row.url).toBe("https://www.apple.com/jp/?utm_source=test");
+			expect(row.canonicalUrl).toBe("https://apple.com/jp");
+		});
+
 		it("reports the empty state when there are no bookmarks", async () => {
 			const fake = new FakeUseCases();
 			const controller = controllerWith(fake);

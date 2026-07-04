@@ -736,9 +736,10 @@ function LedgerRow({
 		<div style={row.selected ? rowSelected : rowStyle} onClick={onSelect}>
 			{/* Decorative site icon (MIK-032); the row's accessible text is the
 			    title/summary button next to it. marginTop aligns it with the
-			    first title line in this flex-start row. */}
+			    first title line in this flex-start row. Looked up by the original
+			    visited URL, not the canonical form (MIK-034). */}
 			<span style={{ marginTop: 1 }}>
-				<Favicon pageUrl={row.canonicalUrl} size={22} />
+				<Favicon pageUrl={row.url} size={22} />
 			</span>
 			<button type="button" style={rowOpenButton} aria-expanded={row.selected}>
 				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
