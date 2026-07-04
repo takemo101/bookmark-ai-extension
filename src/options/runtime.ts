@@ -45,7 +45,10 @@ import {
 	createSystemClock,
 	err as appErr,
 } from "../lib/app/index";
-import { createChromePromptClient } from "../lib/ai/index";
+import {
+	createChromeAskAiRecommendationRunner,
+	createChromePromptClient,
+} from "../lib/ai/index";
 import { detectUiLanguage } from "../lib/i18n/index";
 import {
 	createChromeDriveRuntime,
@@ -55,6 +58,7 @@ import {
 	createChromeLocalCache,
 	createChromeSettingsCache,
 } from "../lib/storage/index";
+import type { AskAiDeps } from "./ask-ai-view-model";
 import { type OptionsUseCases, createOptionsUseCases } from "./use-cases";
 import { type SkillsUseCases, createSkillsUseCases } from "./skills-use-cases";
 
@@ -87,6 +91,32 @@ export function createRuntimeUseCases(): OptionsUseCases {
 		fallbackLanguage: detectUiLanguage(),
 	});
 	return createOptionsUseCases(app);
+}
+
+/**
+ * Build the real {@link AskAiDeps} for the "Ask AI" screen (MIK-046). The
+ * bookmark source is a plain `chrome.storage.local` cache read — submitting a
+ * question never triggers a Drive pull, and the full cached collection is used
+ * regardless of any Library filters. The recommendation runner opens a Prompt
+ * API session with the recommendation prompt's own system instruction and
+ * throws when the API cannot run, which the controller turns into local
+ * fallback cards. Nothing here can persist the chat.
+ */
+export function createRuntimeAskAiDeps(): AskAiDeps {
+	const cache = createChromeLocalCache();
+	const run = createChromeAskAiRecommendationRunner();
+	// The browser UI language decides both prompt and expected output language,
+	// matching the analyzer's language posture (MIK-029).
+	const language = detectUiLanguage();
+	return {
+		async loadBookmarks() {
+			return (await cache.load()).bookmarks.toArray();
+		},
+		runRecommendationPrompt(request) {
+			return run(request, language);
+		},
+		language,
+	};
 }
 
 /** Build the real {@link SkillsUseCases} for the options "Analysis skills" panel. */

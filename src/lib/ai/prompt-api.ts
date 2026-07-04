@@ -172,3 +172,63 @@ export function createChromePromptClient(
 		},
 	};
 }
+
+/**
+ * The subset of an Ask AI recommendation prompt the runner needs: its own
+ * system instruction (never the analysis system prompt) and the prompt text.
+ * Structurally satisfied by `AskAiRecommendationPrompt` (MIK-044).
+ */
+export type AskAiPromptRequest = {
+	readonly systemInstruction: string;
+	readonly prompt: string;
+};
+
+/**
+ * Runs one Ask AI recommendation prompt and returns the raw model text.
+ * Throws {@link PromptApiUnavailableError} when the Prompt API cannot run
+ * right now, so the caller falls back to local candidate cards (MIK-046).
+ */
+export type AskAiRecommendationRunner = (
+	request: AskAiPromptRequest,
+	language?: SupportedLanguage,
+) => Promise<string>;
+
+/**
+ * Build an {@link AskAiRecommendationRunner} backed by the browser Prompt API.
+ * Unlike {@link createChromePromptClient} — whose sessions are pinned to the
+ * analysis system prompt — each run opens a session with the recommendation
+ * prompt's own system instruction. A missing namespace, a throwing probe, or
+ * any availability other than `"available"` (a model still downloading is not
+ * usable for an interactive answer) throws {@link PromptApiUnavailableError}.
+ */
+export function createChromeAskAiRecommendationRunner(
+	namespace: PromptModelNamespace | null = resolveNamespace(),
+): AskAiRecommendationRunner {
+	return async (request, language = "ja") => {
+		if (!namespace) {
+			throw new PromptApiUnavailableError();
+		}
+		let availability: PromptApiAvailability;
+		try {
+			availability = normalizeAvailability(
+				await namespace.availability({
+					expectedOutputs: expectedTextOutputs(language),
+				}),
+			);
+		} catch {
+			throw new PromptApiUnavailableError();
+		}
+		if (availability !== "available") {
+			throw new PromptApiUnavailableError();
+		}
+		const session = await namespace.create({
+			initialPrompts: [{ role: "system", content: request.systemInstruction }],
+			expectedOutputs: expectedTextOutputs(language),
+		});
+		try {
+			return await session.prompt(request.prompt);
+		} finally {
+			session.destroy?.();
+		}
+	};
+}

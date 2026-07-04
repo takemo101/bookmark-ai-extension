@@ -24,7 +24,12 @@ import {
 	resolveAnalysisProfileDisplay,
 } from "../lib/ai/index";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
-import type { AskAiController, AskAiView } from "./ask-ai-view-model";
+import type {
+	AskAiCardView,
+	AskAiController,
+	AskAiResultView,
+	AskAiView,
+} from "./ask-ai-view-model";
 import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
@@ -236,25 +241,6 @@ export function Options({
 						m={m}
 						onRefresh={() => void controller.refresh()}
 					/>
-					{view.selected ? (
-						<DetailSheet
-							detail={view.selected}
-							profile={
-								view.selected.analysisProfileId
-									? resolveAnalysisProfileDisplay(
-											view.selected.analysisProfileId,
-											skillsView?.custom ?? [],
-										)
-									: undefined
-							}
-							busy={view.busy}
-							m={m}
-							controller={controller}
-							onEditCustomProfile={
-								skillsController ? openCustomProfileEdit : undefined
-							}
-						/>
-					) : null}
 				</>
 			) : activeScreen === "analysis-skills" && skillsController ? (
 				<SkillsScreen skillsController={skillsController} m={m} />
@@ -264,6 +250,30 @@ export function Options({
 					sync={view.sync}
 					loading={view.loading}
 					m={m}
+					onOpenBookmark={(canonicalUrl) => controller.select(canonicalUrl)}
+				/>
+			) : null}
+			{/* The detail sheet overlays whichever screen selected it: Library rows
+			    and Ask AI recommendation cards both route through
+			    `controller.select` (MIK-046), and switching screens clears the
+			    selection, so it can never linger behind another screen. */}
+			{view.selected ? (
+				<DetailSheet
+					detail={view.selected}
+					profile={
+						view.selected.analysisProfileId
+							? resolveAnalysisProfileDisplay(
+									view.selected.analysisProfileId,
+									skillsView?.custom ?? [],
+								)
+							: undefined
+					}
+					busy={view.busy}
+					m={m}
+					controller={controller}
+					onEditCustomProfile={
+						skillsController ? openCustomProfileEdit : undefined
+					}
 				/>
 			) : null}
 		</main>
@@ -1457,11 +1467,14 @@ function AskAiScreen({
 	sync,
 	loading,
 	m,
+	onOpenBookmark,
 }: {
 	controller: AskAiController;
 	sync: SyncView;
 	loading: boolean;
 	m: OptionsMessages;
+	/** Route a recommendation card into the existing detail-opening path. */
+	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
 	const view = useSyncExternalStore(
 		controller.subscribe,
@@ -1474,7 +1487,12 @@ function AskAiScreen({
 			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
 			<div style={workspaceBody}>
 				<AskAiRail sync={sync} loading={loading} m={m} />
-				<AskAiMain view={view} m={m} controller={controller} />
+				<AskAiMain
+					view={view}
+					m={m}
+					controller={controller}
+					onOpenBookmark={onOpenBookmark}
+				/>
 			</div>
 		</section>
 	);
@@ -1513,21 +1531,24 @@ function AskAiRail({
 }
 
 /**
- * Ask AI main area (MIK-045): the empty chat state with localized clickable
- * example prompts above the question form. There is no transcript yet in this
- * slice, so the empty state always renders; a clicked example fills the input
- * through the controller. The submit button is disabled for empty/too-short
- * questions (the controller applies the shared minimum-length policy) and
- * while an answer placeholder is in flight, with `aria-busy` on the form.
+ * Ask AI main area (MIK-045, MIK-046): the empty chat state with localized
+ * clickable example prompts, the latest question/answer exchange, and the
+ * question form. Only the latest exchange renders — chat state lives in the
+ * controller's memory and vanishes with the page. A clicked example fills the
+ * input through the controller. The submit button is disabled for
+ * empty/too-short questions (the controller applies the shared minimum-length
+ * policy) and while an answer is in flight, with `aria-busy` on the form.
  */
 function AskAiMain({
 	view,
 	m,
 	controller,
+	onOpenBookmark,
 }: {
 	view: AskAiView;
 	m: OptionsMessages;
 	controller: AskAiController;
+	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
 	const submitDisabled = !view.canSubmit || view.answering;
 	return (
@@ -1551,6 +1572,20 @@ function AskAiMain({
 					))}
 				</div>
 			</div>
+			{!view.answering && view.result ? (
+				<>
+					{view.askedQuestion ? (
+						<p style={{ fontSize: 12, color: palette.inkFaint, margin: 0 }}>
+							{m.askAiYouAsked(view.askedQuestion)}
+						</p>
+					) : null}
+					<AskAiResult
+						result={view.result}
+						m={m}
+						onOpenBookmark={onOpenBookmark}
+					/>
+				</>
+			) : null}
 			{view.answering ? (
 				<p
 					role="status"
@@ -1564,7 +1599,7 @@ function AskAiMain({
 				aria-busy={view.answering || undefined}
 				onSubmit={(event) => {
 					event.preventDefault();
-					controller.submit();
+					void controller.submit();
 				}}
 			>
 				<textarea
@@ -1589,6 +1624,134 @@ function AskAiMain({
 				</div>
 			</form>
 		</section>
+	);
+}
+
+/**
+ * The latest Ask AI answer (MIK-046): recommendation cards for an AI or
+ * local-fallback answer, or the safe status copy for too-short questions, an
+ * empty library, weak candidates, and unexpected errors. Pure projection of
+ * the controller's `result` — the localization of status kinds happens here.
+ */
+function AskAiResult({
+	result,
+	m,
+	onOpenBookmark,
+}: {
+	result: AskAiResultView;
+	m: OptionsMessages;
+	onOpenBookmark: (canonicalUrl: string) => void;
+}) {
+	switch (result.kind) {
+		case "too-short-question":
+			return <Notice text={m.askAiTooShort} />;
+		case "empty-library":
+			return <Notice text={m.askAiEmptyLibrary} />;
+		case "weak-candidates":
+			return <Notice text={m.askAiClarify} />;
+		case "error":
+			return <Banner tone="danger" text={m.askAiError} />;
+		case "recommendations":
+			return (
+				<section style={panel} aria-label={m.askAiResultsAria}>
+					{result.message && result.message.length > 0 ? (
+						<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
+							{result.message}
+						</p>
+					) : null}
+					{result.source === "local" ? (
+						<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
+							{m.askAiFallbackNotice}
+						</p>
+					) : null}
+					<ul
+						style={{
+							listStyle: "none",
+							margin: "10px 0 0",
+							padding: 0,
+							display: "flex",
+							flexDirection: "column",
+							gap: 8,
+						}}
+					>
+						{result.cards.map((card) => (
+							<li key={card.canonicalUrl}>
+								<AskAiCard card={card} m={m} onOpen={onOpenBookmark} />
+							</li>
+						))}
+					</ul>
+				</section>
+			);
+	}
+}
+
+/**
+ * One recommendation card (MIK-046): a single button — keyboard-reachable like
+ * the ledger rows — that opens the existing bookmark detail sheet through
+ * `controller.select`. Shows app-owned bookmark data plus the model or local
+ * fallback reason; never a full URL.
+ */
+function AskAiCard({
+	card,
+	m,
+	onOpen,
+}: {
+	card: AskAiCardView;
+	m: OptionsMessages;
+	onOpen: (canonicalUrl: string) => void;
+}) {
+	return (
+		<div style={rowStyle}>
+			<button
+				type="button"
+				style={rowOpenButton}
+				aria-label={m.askAiCardAria(card.title)}
+				onClick={() => onOpen(card.canonicalUrl)}
+			>
+				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
+					{card.title}
+				</div>
+				<div
+					style={{
+						display: "flex",
+						flexWrap: "wrap",
+						gap: 6,
+						marginTop: 2,
+						alignItems: "center",
+					}}
+				>
+					<span style={{ fontSize: 11, color: palette.inkFaint }}>
+						{card.domain}
+					</span>
+					{card.genre ? (
+						<span style={{ fontSize: 11, color: palette.accent }}>
+							{card.genre}
+						</span>
+					) : null}
+					{card.tags.slice(0, 4).map((t) => (
+						<span key={t} style={{ fontSize: 11, color: palette.inkFaint }}>
+							#{t}
+						</span>
+					))}
+				</div>
+				{card.description ? (
+					<div
+						style={{
+							fontSize: 12,
+							color: palette.inkSoft,
+							marginTop: 2,
+							...summaryClamp,
+						}}
+					>
+						{card.description}
+					</div>
+				) : null}
+				<div style={{ fontSize: 12, color: palette.accent, marginTop: 4 }}>
+					{card.reason}
+				</div>
+			</button>
+			<StatusPill status={card.aiStatus} />
+		</div>
 	);
 }
 

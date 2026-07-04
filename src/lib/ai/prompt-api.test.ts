@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	PromptApiUnavailableError,
+	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
 } from "./prompt-api";
 
@@ -148,6 +149,117 @@ describe("createChromePromptClient", () => {
 			}),
 		});
 		await expect(client.prompt("question")).rejects.toThrow("prompt failed");
+		expect(destroyed).toBe(true);
+	});
+});
+
+/**
+ * The MIK-046 Ask AI recommendation runner: same fake-namespace approach. It
+ * uses the recommendation prompt's own system instruction (never the analysis
+ * system prompt) and throws PromptApiUnavailableError whenever the Prompt API
+ * cannot run right now, so the Ask AI controller falls back to local cards.
+ */
+describe("createChromeAskAiRecommendationRunner", () => {
+	const request = {
+		systemInstruction: "recommend saved bookmarks as JSON",
+		prompt: "User question:\nfind typescript notes",
+	};
+
+	it("throws PromptApiUnavailableError when no namespace is present", async () => {
+		const run = createChromeAskAiRecommendationRunner(null);
+		await expect(run(request)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("throws PromptApiUnavailableError when the model is not available yet", async () => {
+		for (const state of ["unavailable", "downloadable", "downloading"]) {
+			const run = createChromeAskAiRecommendationRunner({
+				availability: async () => state,
+				create: async () => ({ prompt: async () => "" }),
+			});
+			await expect(run(request)).rejects.toBeInstanceOf(
+				PromptApiUnavailableError,
+			);
+		}
+	});
+
+	it("throws PromptApiUnavailableError when the availability probe throws", async () => {
+		const run = createChromeAskAiRecommendationRunner({
+			availability: async () => {
+				throw new Error("boom");
+			},
+			create: async () => ({ prompt: async () => "" }),
+		});
+		await expect(run(request)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("runs the recommendation prompt with its own system instruction and destroys the session", async () => {
+		let destroyed = false;
+		let promptedWith = "";
+		let createOptions: unknown;
+		const run = createChromeAskAiRecommendationRunner({
+			availability: async () => "available",
+			create: async (options) => {
+				createOptions = options;
+				return {
+					prompt: async (input: string) => {
+						promptedWith = input;
+						return '{"message":"ok","recommendations":[]}';
+					},
+					destroy: () => {
+						destroyed = true;
+					},
+				};
+			},
+		});
+
+		const out = await run(request, "en");
+
+		expect(out).toBe('{"message":"ok","recommendations":[]}');
+		expect(promptedWith).toBe(request.prompt);
+		expect(createOptions).toMatchObject({
+			initialPrompts: [
+				{ role: "system", content: "recommend saved bookmarks as JSON" },
+			],
+			expectedOutputs: [{ type: "text", languages: ["en"] }],
+		});
+		expect(destroyed).toBe(true);
+	});
+
+	it("defaults the expected output language to Japanese", async () => {
+		let createOptions: unknown;
+		const run = createChromeAskAiRecommendationRunner({
+			availability: async () => "available",
+			create: async (options) => {
+				createOptions = options;
+				return { prompt: async () => "out" };
+			},
+		});
+
+		expect(await run(request)).toBe("out");
+		expect(createOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["ja"] }],
+		});
+	});
+
+	it("destroys the session even when the recommendation prompt throws", async () => {
+		let destroyed = false;
+		const run = createChromeAskAiRecommendationRunner({
+			availability: async () => "available",
+			create: async () => ({
+				prompt: async () => {
+					throw new Error("prompt failed");
+				},
+				destroy: () => {
+					destroyed = true;
+				},
+			}),
+		});
+
+		await expect(run(request)).rejects.toThrow("prompt failed");
 		expect(destroyed).toBe(true);
 	});
 });
