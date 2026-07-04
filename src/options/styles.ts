@@ -53,20 +53,18 @@ export const page: CSSProperties = {
 /**
  * The two-zone grid: left rail · center list. The bookmark detail is no longer
  * a third pane — it opens as a side sheet overlay from a row click (MIK-022).
+ * The page frame (max width, margins) comes from the shared {@link screenShell}.
  */
 export const ledger: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "240px minmax(0, 1fr)",
 	gap: 16,
 	alignItems: "start",
-	maxWidth: 1200,
-	margin: "0 auto",
-	padding: "20px 24px 32px",
 };
 
 /**
- * Top-level options navigation bar (MIK-025): switches between the Library
- * ledger and the Analysis skills settings screen.
+ * Shared app header (MIK-025, MIK-036): the product brand on the left, the
+ * Library / Analysis skills navigation on the right, on every screen.
  */
 export const appHeader: CSSProperties = {
 	maxWidth: 1200,
@@ -74,7 +72,42 @@ export const appHeader: CSSProperties = {
 	padding: "16px 24px 0",
 	display: "flex",
 	alignItems: "center",
+	justifyContent: "space-between",
 	gap: 8,
+};
+
+/** The product title inside the shared app header (MIK-036). */
+export const brandTitle: CSSProperties = {
+	fontSize: 18,
+	margin: 0,
+};
+
+/**
+ * Shared screen frame (MIK-036): both the Library ledger and the Analysis
+ * skills screen render inside this centered column, opening with a
+ * {@link screenTitle}/{@link screenSubtitle} header so the two screens share
+ * one layout rhythm.
+ */
+export const screenShell: CSSProperties = {
+	maxWidth: 1200,
+	margin: "0 auto",
+	padding: "20px 24px 32px",
+	display: "flex",
+	flexDirection: "column",
+	gap: 14,
+};
+
+/** Screen title inside the shared screen header (MIK-036). */
+export const screenTitle: CSSProperties = {
+	fontSize: 18,
+	margin: 0,
+};
+
+/** One-line screen subtitle under the screen title (MIK-036). */
+export const screenSubtitle: CSSProperties = {
+	fontSize: 12,
+	color: palette.inkSoft,
+	margin: "4px 0 0",
 };
 
 export const navTab: CSSProperties = {
@@ -94,16 +127,6 @@ export const navTabActive: CSSProperties = {
 	background: palette.accent,
 	border: `1px solid ${palette.accent}`,
 	fontWeight: 600,
-};
-
-/** Analysis skills settings screen frame (MIK-025). */
-export const settingsScreen: CSSProperties = {
-	maxWidth: 1200,
-	margin: "0 auto",
-	padding: "20px 24px 32px",
-	display: "flex",
-	flexDirection: "column",
-	gap: 14,
 };
 
 /**

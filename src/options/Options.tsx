@@ -15,7 +15,7 @@
  * `controller`/`skillsController` props, so the component is trivially
  * renderable with fakes in tests.
  */
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
@@ -46,6 +46,7 @@ import type { AiStatus } from "./view-types";
 import {
 	aiStatusTone,
 	appHeader,
+	brandTitle,
 	chip,
 	chipActive,
 	dangerButton,
@@ -74,8 +75,10 @@ import {
 	rowDeleteButton,
 	rowOpenButton,
 	rowSelected,
+	screenShell,
+	screenSubtitle,
+	screenTitle,
 	searchInput,
-	settingsScreen,
 	sheet,
 	sheetBackdrop,
 	sheetBody,
@@ -178,8 +181,11 @@ export function Options({
 
 	return (
 		<main style={page}>
-			{skillsController ? (
-				<header style={appHeader}>
+			{/* Shared app header (MIK-036): the product brand lives here on every
+			    screen; the nav renders only when the skills screen exists. */}
+			<header style={appHeader}>
+				<h1 style={brandTitle}>Bookmark AI</h1>
+				{skillsController ? (
 					<nav aria-label={m.navAria} style={{ display: "flex", gap: 8 }}>
 						<NavTab
 							label={m.library}
@@ -192,13 +198,16 @@ export function Options({
 							onClick={() => switchScreen("analysis-skills")}
 						/>
 					</nav>
-				</header>
-			) : null}
+				) : null}
+			</header>
 			{showLibrary ? (
 				<>
-					<div style={ledger}>
-						<LeftRail view={view} m={m} controller={controller} />
-						<CenterList view={view} m={m} controller={controller} />
+					<div style={screenShell}>
+						<ScreenHeader title={m.library} subtitle={m.researchLedger} />
+						<div style={ledger}>
+							<LeftRail view={view} m={m} controller={controller} />
+							<CenterList view={view} m={m} controller={controller} />
+						</div>
 					</div>
 					<FloatingSyncButton
 						sync={view.sync}
@@ -230,6 +239,27 @@ export function Options({
 				<SkillsScreen skillsController={skillsController} m={m} />
 			) : null}
 		</main>
+	);
+}
+
+/**
+ * Shared screen header (MIK-036): every top-level screen opens with the same
+ * title/subtitle rhythm inside the {@link screenShell} frame, so Library and
+ * Analysis skills read as two screens of one app. The subtitle accepts nodes
+ * because the skills intro embeds the Drive settings filename as `<code>`.
+ */
+function ScreenHeader({
+	title,
+	subtitle,
+}: {
+	title: string;
+	subtitle: ReactNode;
+}) {
+	return (
+		<header>
+			<h2 style={screenTitle}>{title}</h2>
+			<p style={screenSubtitle}>{subtitle}</p>
+		</header>
 	);
 }
 
@@ -302,13 +332,6 @@ function LeftRail({
 
 	return (
 		<aside style={rail}>
-			<header>
-				<h1 style={{ fontSize: 18, margin: "0 0 2px" }}>Bookmark AI</h1>
-				<p style={{ fontSize: 11, margin: 0, color: palette.inkFaint }}>
-					{m.researchLedger}
-				</p>
-			</header>
-
 			<section style={panel}>
 				<p style={railLabel}>{m.search}</p>
 				<input
@@ -1153,15 +1176,17 @@ function SkillsScreen({
 	useLockBodyScroll(view.formOpen);
 
 	return (
-		<section style={settingsScreen} aria-label={m.skillsScreenAria}>
-			<header>
-				<h2 style={{ fontSize: 18, margin: 0 }}>{m.analysisSkills}</h2>
-				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "4px 0 0" }}>
-					{m.skillsIntro.before}
-					<code>bookmark-ai/settings.json</code>
-					{m.skillsIntro.after}
-				</p>
-			</header>
+		<section style={screenShell} aria-label={m.skillsScreenAria}>
+			<ScreenHeader
+				title={m.analysisSkills}
+				subtitle={
+					<>
+						{m.skillsIntro.before}
+						<code>bookmark-ai/settings.json</code>
+						{m.skillsIntro.after}
+					</>
+				}
+			/>
 
 			<section style={panel}>
 				<p style={railLabel}>{m.settingsSync}</p>
