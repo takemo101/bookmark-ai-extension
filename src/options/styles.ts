@@ -497,6 +497,123 @@ export const disabledButton: CSSProperties = {
 	cursor: "default",
 };
 
+/**
+ * Ask AI chat surface (MIK-049, sitesurf-inspired layout): the main area of
+ * the Ask AI screen becomes a fixed-height flex column — scrollable transcript
+ * viewport on top, composer pinned at the bottom — so the composer never
+ * scrolls away with the conversation. The height is viewport-derived because
+ * the options page itself scrolls: 180 ≈ app header + screen header + shell
+ * paddings above the workspace body.
+ */
+export const askAiChatShell: CSSProperties = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+	height: "calc(100vh - 180px)",
+	minHeight: 320,
+};
+
+/** Hosts the scroll viewport plus the floating jump-to-latest overlay. */
+export const askAiViewportShell: CSSProperties = {
+	position: "relative",
+	flex: 1,
+	minHeight: 0,
+};
+
+/** The one scrolling element of the chat surface. */
+export const askAiViewport: CSSProperties = {
+	boxSizing: "border-box",
+	height: "100%",
+	overflowY: "auto",
+	overflowX: "hidden",
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+	padding: "2px 2px 10px",
+};
+
+/** Centered welcome/examples landing state before the first message. */
+export const askAiWelcome: CSSProperties = {
+	flex: 1,
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	textAlign: "center",
+	gap: 10,
+	padding: "0 16px",
+};
+
+/** Faint uppercase role label above a chat turn (You / AI). */
+export const askAiTurnLabel: CSSProperties = {
+	fontSize: 10,
+	textTransform: "uppercase",
+	letterSpacing: 1,
+	color: palette.inkFaint,
+	margin: "0 0 4px",
+};
+
+/** A right-aligned user turn: label plus bubble as one column. */
+export const askAiUserTurn: CSSProperties = {
+	alignSelf: "flex-end",
+	maxWidth: "85%",
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "flex-end",
+};
+
+/** The raised user message bubble (Warm Library, chat-cornered). */
+export const askAiUserBubble: CSSProperties = {
+	margin: 0,
+	padding: "10px 14px",
+	fontSize: 13,
+	color: palette.ink,
+	whiteSpace: "pre-wrap",
+	background: palette.selected,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: "14px 14px 4px 14px",
+};
+
+/** A full-width assistant turn wrapper around the existing result panel. */
+export const askAiAssistantTurn: CSSProperties = {
+	alignSelf: "stretch",
+	minWidth: 0,
+};
+
+/**
+ * Floating jump-to-latest overlay button, centered above the composer. Only
+ * rendered while the user has scrolled away from the bottom.
+ */
+export const askAiLatestButton: CSSProperties = {
+	position: "absolute",
+	left: "50%",
+	bottom: 12,
+	transform: "translateX(-50%)",
+	zIndex: 5,
+	display: "inline-flex",
+	alignItems: "center",
+	gap: 6,
+	padding: "6px 12px",
+	fontFamily: fontStack,
+	fontSize: 12,
+	fontWeight: 600,
+	color: palette.accent,
+	background: palette.paperRaised,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 999,
+	boxShadow: "0 4px 12px rgba(58, 52, 43, 0.18)",
+	cursor: "pointer",
+};
+
+/** The composer panel pinned to the bottom of the chat shell. */
+export const askAiComposer: CSSProperties = {
+	...panel,
+	display: "flex",
+	flexDirection: "column",
+	gap: 8,
+	flexShrink: 0,
+};
+
 /** A status dot/badge color for the AI status and sync badges. */
 export function statusColor(
 	tone: "ok" | "warn" | "danger" | "neutral",
