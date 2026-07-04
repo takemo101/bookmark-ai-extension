@@ -94,8 +94,8 @@ function createChromeEnvironmentProvider(
 		async environment() {
 			// Probe identity (non-interactive) and Prompt API independently so a
 			// disconnected account never blocks the AI badge and vice versa. The
-			// probe requests the UI language's expected outputs (MIK-029) — the most
-			// likely analysis output language for this user.
+			// probe requests the UI language's expected outputs — the analysis
+			// output language for this user (MIK-033).
 			const [connection, promptApi] = await Promise.all([
 				probeConnection(),
 				promptClient.availability(detectUiLanguage()),
@@ -121,8 +121,8 @@ export function createRuntimeUseCases(): PopupUseCases {
 		// (MIK-018), never a Drive round-trip, so saving from the popup gains no
 		// extra latency (docs/ai-analysis-v2.md "Settings file").
 		settingsProvider: createSettingsProviderPort(createChromeSettingsCache()),
-		// The browser UI language, the analyzer's fallback output language when a
-		// page's own text is ambiguous (MIK-029).
+		// The current browser UI language: the analyzer's output language
+		// (MIK-033).
 		fallbackLanguage: detectUiLanguage(),
 	});
 	return createPopupUseCases(

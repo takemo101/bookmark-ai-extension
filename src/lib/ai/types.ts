@@ -20,9 +20,10 @@ import type { SupportedLanguage } from "../i18n/index";
  * input only and is never persisted — see docs/privacy-policy.md "Page Text
  * Excerpts".
  *
- * `fallbackLanguage` (MIK-029) is the caller's UI/browser language: the
- * analyzer infers the output language from the page text itself and uses this
- * only when the text is ambiguous, defaulting to Japanese when omitted.
+ * `fallbackLanguage` (MIK-029; the name is historical) is the caller's current
+ * UI/browser language. When present it *is* the analysis output language
+ * (MIK-033); the analyzer infers a language from the page text only when it is
+ * omitted, defaulting to Japanese.
  */
 export type AnalysisInput = {
 	readonly title: string;

@@ -168,10 +168,10 @@ export type AppDeps = {
 	 */
 	readonly settingsProvider?: SettingsProviderPort;
 	/**
-	 * The UI/browser language, used as the analyzer's fallback output language
-	 * when a page's own text is ambiguous (MIK-029). Resolved once at the
-	 * composition root (Chrome-free here); omitted reproduces the historical
-	 * Japanese-fallback behavior exactly.
+	 * The current UI/browser language, used as the analyzer's output language
+	 * (MIK-033; the field name is historical from MIK-029). Resolved once at the
+	 * composition root (Chrome-free here); omitted falls back to page-text
+	 * inference, then Japanese.
 	 */
 	readonly fallbackLanguage?: SupportedLanguage;
 };

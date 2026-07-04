@@ -23,7 +23,11 @@
  * matches. Omitting the argument (or passing an empty array) reproduces the
  * built-in-only Phase 1 behavior exactly.
  */
-import { DEFAULT_LANGUAGE, inferOutputLanguage } from "../i18n/index";
+import {
+	DEFAULT_LANGUAGE,
+	type SupportedLanguage,
+	inferOutputLanguage,
+} from "../i18n/index";
 import { parseAnalysis } from "./parse";
 import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 import type { AnalysisProfile } from "./profile";
@@ -38,19 +42,33 @@ function describeError(error: unknown): string {
 	return String(error);
 }
 
+/**
+ * Select the analysis output language for one input (MIK-033).
+ *
+ * The caller's current UI/browser language (`fallbackLanguage` — the name is
+ * historical from MIK-029) wins whenever it resolved to a supported language,
+ * so a Japanese-UI user gets Japanese analysis even on an all-English page
+ * (e.g. a GitHub repository). Page-text inference remains only as a defensive
+ * fallback when no UI/browser language was provided, keeping the historical
+ * behavior: infer from title + excerpt, then Japanese.
+ */
+export function selectOutputLanguage(input: AnalysisInput): SupportedLanguage {
+	return (
+		input.fallbackLanguage ??
+		inferOutputLanguage(`${input.title}\n${input.excerpt}`, DEFAULT_LANGUAGE)
+	);
+}
+
 export async function analyzePage(
 	client: PromptClient,
 	input: AnalysisInput,
 	customProfiles: readonly AnalysisProfile[] = [],
 ): Promise<AnalysisOutcome> {
-	// The output language is inferred from the page's own text (title +
-	// excerpt), falling back to the caller's UI/browser language, then Japanese
-	// (MIK-029). Resolved before the availability probe so the probe can request
-	// the same language-specific expected outputs the session will use.
-	const language = inferOutputLanguage(
-		`${input.title}\n${input.excerpt}`,
-		input.fallbackLanguage ?? DEFAULT_LANGUAGE,
-	);
+	// The output language follows the caller's current UI/browser language, with
+	// page-text inference only as a fallback (MIK-033; see selectOutputLanguage).
+	// Resolved before the availability probe so the probe can request the same
+	// language-specific expected outputs the session will use.
+	const language = selectOutputLanguage(input);
 
 	let availability: Awaited<ReturnType<PromptClient["availability"]>>;
 	try {

@@ -269,9 +269,13 @@ Use Chrome Built-in AI / Prompt API only in MVP.
 
 - No Gemini API key fallback in MVP.
 - No OpenAI fallback in MVP.
-- Generated output language: Japanese or English (MIK-029). The language is
-  inferred per page from the title/excerpt text with a deterministic script
-  heuristic; ambiguous pages fall back to the browser UI language, then
+- Generated output language: Japanese or English, following the current
+  browser UI language (MIK-033; revising MIK-029's page-inference-first
+  policy). When the UI/browser language resolves to a supported language it is
+  the output language, regardless of the page's own text — an English GitHub
+  page with a Japanese UI produces Japanese analysis. Only when no UI/browser
+  language is available does the analyzer fall back to inferring the language
+  from the title/excerpt text with a deterministic script heuristic, then
   Japanese. `LanguageModel.availability()` / `create()` request the selected
   language via `expectedOutputs`. No languages beyond English/Japanese.
 - Generate `description`, `genre`, and `tags` in a single analysis call.

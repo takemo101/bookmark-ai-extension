@@ -177,15 +177,17 @@ ignore/report invalid skill definitions safely.
 Use a layered prompt model:
 
 1. **Core contract** (fixed): JSON-only, target output language (Japanese or
-   English, auto-selected per page — MIK-029), schema, no copied raw excerpt.
+   English, following the current UI/browser language — MIK-033), schema, no
+   copied raw excerpt.
 2. **Built-in or custom skill instruction**: domain-specific analysis emphasis.
 3. **Page input**: title, URL, structured excerpt.
 
 The core contract must not be user-editable. Custom skill instructions can change
 analysis emphasis but cannot override the output language, schema, or privacy
-rules. The target language is inferred deterministically from the page
-title/excerpt script counts, falling back to the browser UI language, then
-Japanese; `LanguageModel.availability()` / `create()` request the same language
+rules. The target language is the current browser UI language (MIK-033); only
+when no supported UI/browser language is available is it inferred
+deterministically from the page title/excerpt script counts, then Japanese.
+`LanguageModel.availability()` / `create()` request the same language
 via `expectedOutputs`. The JSON keys are identical in both languages.
 
 ### Output-shape priority (MIK-030)

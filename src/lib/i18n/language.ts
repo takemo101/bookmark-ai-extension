@@ -4,8 +4,9 @@
  * One small, dependency-free contract for every layer that needs a language:
  *   - the UI (Popup/Options dictionaries) resolves its display language from
  *     the browser UI language;
- *   - the AI analyzer infers the analysis *output* language from the page's
- *     own text, falling back to the UI/browser language, then Japanese.
+ *   - the AI analyzer uses that same UI/browser language as the analysis
+ *     *output* language (MIK-033), inferring from the page's own text only
+ *     when no UI/browser language was provided, then Japanese.
  *
  * Everything here is pure and deterministic except {@link detectUiLanguage},
  * which reads the browser globals defensively (absent in Node tests) and is a

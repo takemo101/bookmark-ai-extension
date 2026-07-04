@@ -82,8 +82,8 @@ export function createRuntimeUseCases(): OptionsUseCases {
 		clock: createSystemClock(),
 		ids: createCryptoIdGenerator(),
 		settingsProvider: createSettingsProviderPort(settingsCache),
-		// The browser UI language, the analyzer's fallback output language when a
-		// page's own text is ambiguous (MIK-029).
+		// The current browser UI language: the analyzer's output language
+		// (MIK-033).
 		fallbackLanguage: detectUiLanguage(),
 	});
 	return createOptionsUseCases(app);

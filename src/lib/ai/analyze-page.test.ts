@@ -167,7 +167,7 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.reason).toContain("probe blew up");
 	});
 
-	it("infers an English output language and threads it to the client (MIK-029)", async () => {
+	it("infers the output language from page text when no UI language is provided (MIK-029)", async () => {
 		const availabilityLanguages: unknown[] = [];
 		const promptLanguages: unknown[] = [];
 		let seen = "";
@@ -199,11 +199,25 @@ describe("analyzePage status/error mapping", () => {
 		expect(seen).not.toContain("日本語");
 	});
 
-	it("keeps Japanese output for a clearly Japanese page even with an English fallback", async () => {
+	// An English-content GitHub repository page, the motivating MIK-033 case:
+	// page text alone would infer English, but the current UI language must win.
+	const ENGLISH_GITHUB_INPUT: AnalysisInput = {
+		title: "facebook/react: The library for web and native user interfaces",
+		url: "https://github.com/facebook/react",
+		excerpt:
+			"React is a JavaScript library for building user interfaces. " +
+			"Declarative, component-based, and learn-once-write-anywhere.",
+	};
+
+	it("uses Japanese for English GitHub content when the UI language is Japanese (MIK-033)", async () => {
+		const availabilityLanguages: unknown[] = [];
 		const promptLanguages: unknown[] = [];
 		let seen = "";
 		const client: PromptClient = {
-			availability: async () => "available",
+			availability: async (language) => {
+				availabilityLanguages.push(language);
+				return "available";
+			},
 			prompt: async (input, language) => {
 				promptLanguages.push(language);
 				seen = input;
@@ -215,18 +229,48 @@ describe("analyzePage status/error mapping", () => {
 			},
 		};
 		const outcome = await analyzePage(client, {
-			title: "Chrome拡張の作り方",
-			url: "https://example.com",
-			excerpt:
-				"この記事ではChrome拡張機能の設計と実装手順を日本語で解説します。",
-			fallbackLanguage: "en",
+			...ENGLISH_GITHUB_INPUT,
+			fallbackLanguage: "ja",
 		});
 		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready") return;
+		expect(outcome.profileId).toBe("github-repository");
+		expect(availabilityLanguages).toEqual(["ja"]);
 		expect(promptLanguages).toEqual(["ja"]);
 		expect(seen).toContain("日本語");
 	});
 
-	it("uses the fallback language when the page text is ambiguous", async () => {
+	it("keeps English for the same GitHub content when the UI language is English (MIK-033)", async () => {
+		const availabilityLanguages: unknown[] = [];
+		const promptLanguages: unknown[] = [];
+		let seen = "";
+		const client: PromptClient = {
+			availability: async (language) => {
+				availabilityLanguages.push(language);
+				return "available";
+			},
+			prompt: async (input, language) => {
+				promptLanguages.push(language);
+				seen = input;
+				return JSON.stringify({
+					description: "desc",
+					tags: [],
+					analysisMarkdown: "## Overview\n\nBody.",
+				});
+			},
+		};
+		const outcome = await analyzePage(client, {
+			...ENGLISH_GITHUB_INPUT,
+			fallbackLanguage: "en",
+		});
+		expect(outcome.status).toBe("ready");
+		expect(availabilityLanguages).toEqual(["en"]);
+		expect(promptLanguages).toEqual(["en"]);
+		expect(seen).toContain("in English");
+		expect(seen).not.toContain("日本語");
+	});
+
+	it("lets the UI language win even when the page text disagrees (MIK-033)", async () => {
 		const promptLanguages: unknown[] = [];
 		const client: PromptClient = {
 			availability: async () => "available",
@@ -239,15 +283,40 @@ describe("analyzePage status/error mapping", () => {
 				});
 			},
 		};
-		// Too short to carry any script signal → fallback decides.
-		const ambiguous = { title: "?", url: "https://example.com", excerpt: "!" };
-		await analyzePage(client, { ...ambiguous, fallbackLanguage: "en" });
+		// A clearly Japanese page with an English UI now produces English.
+		await analyzePage(client, {
+			title: "Chrome拡張の作り方",
+			url: "https://example.com",
+			excerpt:
+				"この記事ではChrome拡張機能の設計と実装手順を日本語で解説します。",
+			fallbackLanguage: "en",
+		});
 		expect(promptLanguages).toEqual(["en"]);
-		await analyzePage(client, { ...ambiguous, fallbackLanguage: "ja" });
-		expect(promptLanguages).toEqual(["en", "ja"]);
-		// Omitted fallback preserves the historical Japanese default.
-		await analyzePage(client, ambiguous);
-		expect(promptLanguages).toEqual(["en", "ja", "ja"]);
+	});
+
+	it("falls back safely when no UI language is provided", async () => {
+		const promptLanguages: unknown[] = [];
+		const client: PromptClient = {
+			availability: async () => "available",
+			prompt: async (_input, language) => {
+				promptLanguages.push(language);
+				return JSON.stringify({
+					description: "desc",
+					tags: [],
+					analysisMarkdown: "## Overview\n\nBody.",
+				});
+			},
+		};
+		// Ambiguous page text (too short for a script signal) → Japanese default.
+		await analyzePage(client, {
+			title: "?",
+			url: "https://example.com",
+			excerpt: "!",
+		});
+		expect(promptLanguages).toEqual(["ja"]);
+		// Clearly English page text → inferred English.
+		await analyzePage(client, ENGLISH_GITHUB_INPUT);
+		expect(promptLanguages).toEqual(["ja", "en"]);
 	});
 
 	it("prefers a higher-priority custom profile over a matching built-in", async () => {
