@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { AskAiController, AskAiView } from "./ask-ai-view-model";
+import type {
+	AskAiChatMessage,
+	AskAiController,
+	AskAiResultView,
+	AskAiView,
+} from "./ask-ai-view-model";
 import type { OptionsScreen } from "./Options";
 import { lockScroll, Options, visibleFacetValues } from "./Options";
 import type { SkillsController, SkillsView } from "./skills-view-model";
@@ -188,6 +193,8 @@ function askAiViewOf(overrides: Partial<AskAiView> = {}): AskAiView {
 		question: "",
 		canSubmit: false,
 		answering: false,
+		messages: [],
+		canClear: false,
 		...overrides,
 	};
 }
@@ -199,6 +206,7 @@ function askAiControllerOf(view: AskAiView): AskAiController {
 		setQuestion: () => {},
 		useExample: () => {},
 		submit: async () => {},
+		clearSession: () => {},
 	};
 }
 
@@ -1345,7 +1353,11 @@ describe("Ask AI screen shell (MIK-045)", () => {
 	it("enables submit once the question passes the minimum length", () => {
 		const html = renderWithAskAi(
 			syncedView,
-			askAiViewOf({ question: "typescript testing", canSubmit: true }),
+			askAiViewOf({
+				question: "typescript testing",
+				canSubmit: true,
+				canClear: true,
+			}),
 			"ask-ai",
 		);
 
@@ -1372,6 +1384,14 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).not.toContain(">Ask AI<");
 	});
 });
+
+/** A one-exchange transcript: the submitted question plus its answer. */
+function chatOf(question: string, result: AskAiResultView): AskAiChatMessage[] {
+	return [
+		{ id: "m-user", role: "user", text: question },
+		{ id: "m-assistant", role: "assistant", result },
+	];
+}
 
 describe("Ask AI recommendations (MIK-046)", () => {
 	const syncedView = viewOf({
@@ -1408,13 +1428,12 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const html = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "typescript testing",
-				result: {
+				messages: chatOf("typescript testing", {
 					kind: "recommendations",
 					source: "ai",
 					message: "Here are your matches.",
 					cards,
-				},
+				}),
 			}),
 			"ask-ai",
 		);
@@ -1427,7 +1446,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 			'aria-label="Open details for TypeScript testing handbook"',
 		);
 		expect(html).toContain('aria-label="Open details for Vitest guide"');
-		// The submitted question stays visible with the latest answer.
+		// The submitted question stays visible as a user turn in the transcript.
 		expect(html).toContain("typescript testing");
 		// No fallback notice on an AI-sourced answer.
 		expect(html).not.toContain("keyword matches");
@@ -1437,8 +1456,11 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const html = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "typescript",
-				result: { kind: "recommendations", source: "local", cards },
+				messages: chatOf("typescript", {
+					kind: "recommendations",
+					source: "local",
+					cards,
+				}),
 			}),
 			"ask-ai",
 		);
@@ -1454,8 +1476,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const html = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "hm",
-				result: { kind: "weak-candidates" },
+				messages: chatOf("hm", { kind: "weak-candidates" }),
 			}),
 			"ask-ai",
 		);
@@ -1468,8 +1489,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const tooShort = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "a",
-				result: { kind: "too-short-question" },
+				messages: chatOf("a", { kind: "too-short-question" }),
 			}),
 			"ask-ai",
 		);
@@ -1478,8 +1498,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const emptyLibrary = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "typescript",
-				result: { kind: "empty-library" },
+				messages: chatOf("typescript", { kind: "empty-library" }),
 			}),
 			"ask-ai",
 		);
@@ -1490,8 +1509,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const html = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "typescript",
-				result: { kind: "error" },
+				messages: chatOf("typescript", { kind: "error" }),
 			}),
 			"ask-ai",
 		);
@@ -1504,8 +1522,11 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		const fallback = renderWithAskAi(
 			syncedView,
 			askAiViewOf({
-				askedQuestion: "typescript",
-				result: { kind: "recommendations", source: "local", cards },
+				messages: chatOf("typescript", {
+					kind: "recommendations",
+					source: "local",
+					cards,
+				}),
 			}),
 			"ask-ai",
 			"ja",
@@ -1514,7 +1535,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 
 		const clarify = renderWithAskAi(
 			syncedView,
-			askAiViewOf({ askedQuestion: "hm", result: { kind: "weak-candidates" } }),
+			askAiViewOf({ messages: chatOf("hm", { kind: "weak-candidates" }) }),
 			"ask-ai",
 			"ja",
 		);
@@ -1531,13 +1552,12 @@ describe("Ask AI recommendations (MIK-046)", () => {
 				selected: detailOf(),
 			}),
 			askAiViewOf({
-				askedQuestion: "typescript testing",
-				result: {
+				messages: chatOf("typescript testing", {
 					kind: "recommendations",
 					source: "ai",
 					message: "Here are your matches.",
 					cards,
-				},
+				}),
 			}),
 			"ask-ai",
 		);
@@ -1545,5 +1565,114 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		expect(html).toContain('role="dialog"');
 		expect(html).toContain('aria-labelledby="bookmark-detail-title"');
 		expect(html).toContain("Selected bookmark");
+	});
+});
+
+describe("Ask AI chat session UI (MIK-048)", () => {
+	const syncedView = viewOf({
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+		},
+	});
+
+	const answer: AskAiResultView = {
+		kind: "recommendations",
+		source: "ai",
+		message: "Here are your matches.",
+		cards: [
+			{
+				canonicalUrl: "https://ts.test/handbook",
+				title: "TypeScript testing handbook",
+				domain: "ts.test",
+				tags: ["typescript"],
+				aiStatus: "ready" as const,
+				reason: "Covers exactly this topic.",
+			},
+		],
+	};
+
+	it("keeps the welcome/examples panel before the first user message", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(html).toContain("No questions yet");
+		expect(html).toContain("Find saved bookmarks about TypeScript testing");
+	});
+
+	it("replaces the welcome panel with the transcript once the chat starts", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages: chatOf("typescript testing", answer) }),
+			"ask-ai",
+		);
+
+		expect(html).not.toContain("No questions yet");
+		expect(html).toContain('aria-label="Ask AI conversation"');
+		expect(html).toContain("typescript testing");
+		expect(html).toContain("Here are your matches.");
+	});
+
+	it("renders every turn of a multi-exchange transcript in order", () => {
+		const messages: AskAiChatMessage[] = [
+			...chatOf("typescript testing", answer),
+			{ id: "m-user-2", role: "user", text: "which one is newest?" },
+			{
+				id: "m-assistant-2",
+				role: "assistant",
+				result: { kind: "weak-candidates" },
+			},
+		];
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({ messages }),
+			"ask-ai",
+		);
+
+		expect(html).toContain("typescript testing");
+		expect(html).toContain("which one is newest?");
+		expect(html).toContain("could not find a strong match");
+		expect(html.indexOf("typescript testing")).toBeLessThan(
+			html.indexOf("which one is newest?"),
+		);
+	});
+
+	it("renders a clear-chat button that is disabled until there is something to clear", () => {
+		const idle = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+		expect(idle).toContain(">Clear chat<");
+		expect(idle).toContain("disabled");
+
+		const active = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: chatOf("typescript testing", answer),
+				canClear: true,
+			}),
+			"ask-ai",
+		);
+		expect(active).toContain(">Clear chat<");
+	});
+
+	it("localizes the clear-chat button for the ja language", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai", "ja");
+
+		expect(html).toContain(">チャットをクリア<");
+	});
+
+	it("disables the composer while an answer is in flight", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: chatOf("typescript testing", answer),
+				answering: true,
+				canClear: true,
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toMatch(/<textarea[^>]*disabled/);
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("Looking through your saved bookmarks…");
 	});
 });

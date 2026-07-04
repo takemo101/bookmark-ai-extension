@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type {
 	AskAiKeywordExtractionPrompt,
@@ -8,15 +8,25 @@ import {
 	type BookmarkRecord,
 	parseBookmarkRecord,
 } from "../lib/bookmarks/index";
-import { type AskAiDeps, createAskAiController } from "./ask-ai-view-model";
+import {
+	type AskAiChatMessage,
+	type AskAiController,
+	type AskAiDeps,
+	type AskAiPromptSession,
+	type AskAiResultView,
+	createAskAiController,
+	isAskAiComposerSubmitKey,
+} from "./ask-ai-view-model";
 
 /**
- * Controller tests for the Ask AI screen: the MIK-045 in-memory question state
- * plus the MIK-046 recommendation flow — local candidate scoring over ALL
- * cached bookmarks (never a filtered view), Prompt API prompt/parse through an
+ * Controller tests for the Ask AI screen: the MIK-045 in-memory question state,
+ * the MIK-046 recommendation flow — local candidate scoring over ALL cached
+ * bookmarks (never a filtered view), Prompt API prompt/parse through an
  * injected runner, local deterministic fallback cards, and safe statuses for
- * too-short / empty-library / weak-candidate questions. Chat state stays in
- * memory only: the deps expose no persistence surface at all.
+ * too-short / empty-library / weak-candidate questions — and the MIK-048 chat
+ * session: transcript turns, a volatile per-chat Prompt API session, hybrid
+ * follow-up retrieval, and clear-session as the explicit hard reset. Chat state
+ * stays in memory only: the deps expose no persistence surface at all.
  */
 
 function record(overrides: Record<string, unknown> = {}): BookmarkRecord {
@@ -40,6 +50,8 @@ function fakeDeps(
 	options: {
 		records?: readonly BookmarkRecord[];
 		output?: string;
+		/** Per-call recommendation outputs, used in order before `output`. */
+		outputs?: readonly string[];
 		runError?: Error;
 		loadError?: Error;
 		/** Raw keyword-extraction model output; empty (unparseable) by default. */
@@ -65,7 +77,7 @@ function fakeDeps(
 		async runRecommendationPrompt(request) {
 			promptCalls.push(request);
 			if (options.runError) throw options.runError;
-			return options.output ?? "";
+			return options.outputs?.[promptCalls.length - 1] ?? options.output ?? "";
 		},
 		language: options.language ?? "en",
 	};
@@ -88,14 +100,43 @@ function aiOutput(
 	return JSON.stringify({ message, recommendations });
 }
 
+/** The latest assistant turn's result, mirroring what the UI renders last. */
+function lastResult(controller: AskAiController): AskAiResultView | undefined {
+	const messages = controller.getView().messages;
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const message = messages[i];
+		if (message.role === "assistant") {
+			return message.result;
+		}
+	}
+	return undefined;
+}
+
+function userTexts(controller: AskAiController): string[] {
+	return controller
+		.getView()
+		.messages.filter(
+			(message): message is Extract<AskAiChatMessage, { role: "user" }> =>
+				message.role === "user",
+		)
+		.map((message) => message.text);
+}
+
+async function ask(controller: AskAiController, question: string) {
+	controller.setQuestion(question);
+	await controller.submit();
+}
+
 describe("Ask AI view model question state (MIK-045)", () => {
-	it("starts with an empty, non-submittable, idle view without a result", () => {
+	it("starts with an empty, non-submittable, idle view without messages", () => {
 		const controller = createAskAiController(fakeDeps().deps);
 
 		expect(controller.getView()).toEqual({
 			question: "",
 			canSubmit: false,
 			answering: false,
+			messages: [],
+			canClear: false,
 		});
 	});
 
@@ -137,18 +178,43 @@ describe("Ask AI view model question state (MIK-045)", () => {
 	});
 });
 
+describe("Ask AI composer submit key (MIK-048)", () => {
+	it("sends on plain Enter", () => {
+		expect(isAskAiComposerSubmitKey({ key: "Enter", shiftKey: false })).toBe(
+			true,
+		);
+	});
+
+	it("inserts a newline (does not send) on Shift+Enter", () => {
+		expect(isAskAiComposerSubmitKey({ key: "Enter", shiftKey: true })).toBe(
+			false,
+		);
+	});
+
+	it("never sends while composing with an IME", () => {
+		expect(
+			isAskAiComposerSubmitKey({
+				key: "Enter",
+				shiftKey: false,
+				isComposing: true,
+			}),
+		).toBe(false);
+	});
+
+	it("ignores non-Enter keys", () => {
+		expect(isAskAiComposerSubmitKey({ key: "a", shiftKey: false })).toBe(false);
+	});
+});
+
 describe("Ask AI safe statuses without AI calls (MIK-046)", () => {
 	it("reports too-short-question and never calls the Prompt API", async () => {
 		const { deps, promptCalls } = fakeDeps({ records: [record()] });
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("a");
-		await controller.submit();
+		await ask(controller, "a");
 
-		expect(controller.getView().result).toEqual({
-			kind: "too-short-question",
-		});
-		expect(controller.getView().askedQuestion).toBe("a");
+		expect(lastResult(controller)).toEqual({ kind: "too-short-question" });
+		expect(userTexts(controller)).toEqual(["a"]);
 		expect(controller.getView().answering).toBe(false);
 		expect(promptCalls).toHaveLength(0);
 	});
@@ -157,10 +223,9 @@ describe("Ask AI safe statuses without AI calls (MIK-046)", () => {
 		const { deps, promptCalls } = fakeDeps({ records: [] });
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript testing");
-		await controller.submit();
+		await ask(controller, "typescript testing");
 
-		expect(controller.getView().result).toEqual({ kind: "empty-library" });
+		expect(lastResult(controller)).toEqual({ kind: "empty-library" });
 		expect(promptCalls).toHaveLength(0);
 	});
 
@@ -171,10 +236,9 @@ describe("Ask AI safe statuses without AI calls (MIK-046)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript");
-		await controller.submit();
+		await ask(controller, "typescript");
 
-		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
 		expect(promptCalls).toHaveLength(0);
 	});
 
@@ -182,10 +246,9 @@ describe("Ask AI safe statuses without AI calls (MIK-046)", () => {
 		const { deps } = fakeDeps({ loadError: new Error("cache broke") });
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript testing");
-		await controller.submit();
+		await ask(controller, "typescript testing");
 
-		expect(controller.getView().result).toEqual({ kind: "error" });
+		expect(lastResult(controller)).toEqual({ kind: "error" });
 		expect(controller.getView().answering).toBe(false);
 	});
 });
@@ -214,10 +277,9 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript testing");
-		await controller.submit();
+		await ask(controller, "typescript testing");
 
-		const result = controller.getView().result;
+		const result = lastResult(controller);
 		expect(result).toMatchObject({
 			kind: "recommendations",
 			source: "ai",
@@ -240,8 +302,7 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript testing");
-		await controller.submit();
+		await ask(controller, "typescript testing");
 
 		expect(promptCalls).toHaveLength(1);
 		expect(promptCalls[0].prompt).toContain("typescript testing");
@@ -283,7 +344,7 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 		// Only the first submit ran a recommendation prompt.
 		expect(promptCalls).toHaveLength(1);
 		expect(controller.getView().answering).toBe(false);
-		expect(controller.getView().result?.kind).toBe("recommendations");
+		expect(lastResult(controller)?.kind).toBe("recommendations");
 	});
 
 	it("scores every cached record from loadBookmarks — Library filters play no part", async () => {
@@ -311,11 +372,10 @@ describe("Ask AI recommendation success (MIK-046)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript");
-		await controller.submit();
+		await ask(controller, "typescript");
 
 		expect(loadCalls()).toBe(1);
-		const result = controller.getView().result;
+		const result = lastResult(controller);
 		if (result?.kind !== "recommendations") throw new Error("no cards");
 		expect(result.cards.map((c) => c.canonicalUrl).sort()).toEqual([
 			"https://a.test/1",
@@ -339,18 +399,16 @@ describe("Ask AI local fallback (MIK-046)", () => {
 	async function submitFor(options: {
 		output?: string;
 		runError?: Error;
-	}): Promise<ReturnType<ReturnType<typeof createAskAiController>["getView"]>> {
+	}): Promise<AskAiResultView | undefined> {
 		const { deps } = fakeDeps({ records: strongRecords, ...options });
 		const controller = createAskAiController(deps);
-		controller.setQuestion("typescript");
-		await controller.submit();
-		return controller.getView();
+		await ask(controller, "typescript");
+		return lastResult(controller);
 	}
 
 	it("falls back to at most 5 local cards with deterministic reasons when the runner throws", async () => {
-		const view = await submitFor({ runError: new Error("prompt api down") });
+		const result = await submitFor({ runError: new Error("prompt api down") });
 
-		const result = view.result;
 		if (result?.kind !== "recommendations") throw new Error("no cards");
 		expect(result.source).toBe("local");
 		expect(result.cards).toHaveLength(5);
@@ -360,9 +418,9 @@ describe("Ask AI local fallback (MIK-046)", () => {
 	});
 
 	it("falls back to local cards when the AI output cannot be parsed", async () => {
-		const view = await submitFor({ output: "sorry, no JSON here" });
+		const result = await submitFor({ output: "sorry, no JSON here" });
 
-		expect(view.result).toMatchObject({
+		expect(result).toMatchObject({
 			kind: "recommendations",
 			source: "local",
 		});
@@ -383,22 +441,21 @@ describe("Ask AI local fallback (MIK-046)", () => {
 			language: "ja",
 		});
 		const controller = createAskAiController(deps);
-		controller.setQuestion("typescript");
 
-		await controller.submit();
+		await ask(controller, "typescript");
 
-		const result = controller.getView().result;
+		const result = lastResult(controller);
 		if (result?.kind !== "recommendations") throw new Error("no cards");
 		expect(result.source).toBe("local");
 		expect(result.cards[0].reason).toBe("タイトル、タグに一致しました");
 	});
 
 	it("falls back to local cards when the AI returns only unknown ids", async () => {
-		const view = await submitFor({
+		const result = await submitFor({
 			output: aiOutput([{ id: "hallucinated-id", reason: "nope" }]),
 		});
 
-		expect(view.result).toMatchObject({
+		expect(result).toMatchObject({
 			kind: "recommendations",
 			source: "local",
 		});
@@ -437,12 +494,11 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(japaneseQuestion);
-		await controller.submit();
+		await ask(controller, japaneseQuestion);
 
 		expect(extractionCalls).toHaveLength(1);
 		expect(promptCalls).toHaveLength(1);
-		const result = controller.getView().result;
+		const result = lastResult(controller);
 		expect(result).toMatchObject({ kind: "recommendations", source: "ai" });
 		if (result?.kind !== "recommendations") throw new Error("no cards");
 		expect(result.cards[0].canonicalUrl).toBe("https://ja.test/test-design");
@@ -456,11 +512,10 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(englishQuestion);
-		await controller.submit();
+		await ask(controller, englishQuestion);
 
 		expect(promptCalls).toHaveLength(1);
-		const result = controller.getView().result;
+		const result = lastResult(controller);
 		expect(result).toMatchObject({ kind: "recommendations", source: "ai" });
 		if (result?.kind !== "recommendations") throw new Error("no cards");
 		expect(result.cards[0].canonicalUrl).toBe("https://en.test/testing");
@@ -475,8 +530,7 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(japaneseQuestion);
-		await controller.submit();
+		await ask(controller, japaneseQuestion);
 
 		expect(extractionCalls).toHaveLength(1);
 		const sent = JSON.stringify(extractionCalls[0]);
@@ -494,10 +548,9 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(japaneseQuestion);
-		await controller.submit();
+		await ask(controller, japaneseQuestion);
 
-		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
 		expect(promptCalls).toHaveLength(0);
 	});
 
@@ -509,10 +562,9 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(japaneseQuestion);
-		await controller.submit();
+		await ask(controller, japaneseQuestion);
 
-		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
 		expect(promptCalls).toHaveLength(0);
 	});
 
@@ -524,10 +576,9 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion(japaneseQuestion);
-		await controller.submit();
+		await ask(controller, japaneseQuestion);
 
-		expect(controller.getView().result).toEqual({ kind: "weak-candidates" });
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
 		expect(promptCalls).toHaveLength(0);
 	});
 
@@ -546,11 +597,10 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 		});
 		const controller = createAskAiController(deps);
 
-		controller.setQuestion("typescript testing");
-		await controller.submit();
+		await ask(controller, "typescript testing");
 
 		expect(promptCalls).toHaveLength(1);
-		expect(controller.getView().result).toMatchObject({
+		expect(lastResult(controller)).toMatchObject({
 			kind: "recommendations",
 			source: "ai",
 		});
@@ -559,14 +609,714 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 	it("never calls extraction for too-short questions or an empty library", async () => {
 		const tooShort = fakeDeps({ records: japaneseRecords });
 		const shortController = createAskAiController(tooShort.deps);
-		shortController.setQuestion("a");
-		await shortController.submit();
+		await ask(shortController, "a");
 		expect(tooShort.extractionCalls).toHaveLength(0);
 
 		const empty = fakeDeps({ records: [] });
 		const emptyController = createAskAiController(empty.deps);
-		emptyController.setQuestion("typescript testing");
-		await emptyController.submit();
+		await ask(emptyController, "typescript testing");
 		expect(empty.extractionCalls).toHaveLength(0);
+	});
+});
+
+describe("Ask AI chat transcript (MIK-048)", () => {
+	const records = [
+		record({
+			id: "bm-ts",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "TypeScript testing handbook",
+		}),
+	];
+
+	it("appends a user turn then an assistant turn per submit", async () => {
+		const { deps } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		const messages = controller.getView().messages;
+		expect(messages).toHaveLength(2);
+		expect(messages[0]).toMatchObject({
+			role: "user",
+			text: "typescript testing",
+		});
+		expect(messages[1]).toMatchObject({ role: "assistant" });
+		expect(lastResult(controller)?.kind).toBe("recommendations");
+	});
+
+	it("preserves the full transcript across multiple submits with unique ids", async () => {
+		const { deps } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		await ask(controller, "which one covers testing?");
+
+		const messages = controller.getView().messages;
+		expect(messages).toHaveLength(4);
+		expect(userTexts(controller)).toEqual([
+			"typescript testing",
+			"which one covers testing?",
+		]);
+		expect(new Set(messages.map((m) => m.id)).size).toBe(4);
+	});
+
+	it("clears the composer input when a question is submitted", async () => {
+		const { deps } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		expect(controller.getView().question).toBe("");
+	});
+
+	it("enables clear once there is a draft question or a transcript", async () => {
+		const { deps } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+		expect(controller.getView().canClear).toBe(false);
+
+		controller.setQuestion("draft");
+		expect(controller.getView().canClear).toBe(true);
+
+		await controller.submit();
+		expect(controller.getView().canClear).toBe(true);
+	});
+});
+
+describe("Ask AI Prompt API chat session (MIK-048)", () => {
+	const records = [
+		record({
+			id: "bm-ts",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "TypeScript testing handbook",
+		}),
+	];
+
+	type FakeSession = {
+		systemInstruction: string;
+		prompts: string[];
+		destroyed: boolean;
+	};
+
+	function sessionDeps(options: {
+		records?: readonly BookmarkRecord[];
+		sessionOutput?: string;
+		createError?: Error;
+		promptError?: Error;
+		runnerOutput?: string;
+	}) {
+		const sessions: FakeSession[] = [];
+		const runnerCalls: AskAiRecommendationPrompt[] = [];
+		let createCalls = 0;
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return options.records ?? records;
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			async runRecommendationPrompt(request) {
+				runnerCalls.push(request);
+				return options.runnerOutput ?? "";
+			},
+			async createRecommendationSession(systemInstruction) {
+				createCalls += 1;
+				if (options.createError) throw options.createError;
+				const fake: FakeSession = {
+					systemInstruction,
+					prompts: [],
+					destroyed: false,
+				};
+				sessions.push(fake);
+				const session: AskAiPromptSession = {
+					async prompt(input) {
+						fake.prompts.push(input);
+						if (options.promptError) throw options.promptError;
+						return options.sessionOutput ?? "";
+					},
+					destroy() {
+						fake.destroyed = true;
+					},
+				};
+				return session;
+			},
+			language: "en",
+		};
+		return { deps, sessions, runnerCalls, createCalls: () => createCalls };
+	}
+
+	it("reuses one Prompt API session across turns for recommendation prompts", async () => {
+		const { deps, sessions, runnerCalls, createCalls } = sessionDeps({
+			sessionOutput: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		await ask(controller, "which handbook covers testing?");
+
+		expect(createCalls()).toBe(1);
+		expect(sessions[0].prompts).toHaveLength(2);
+		// The session is pinned to the recommendation prompt's own instruction.
+		expect(sessions[0].systemInstruction).toContain("recommends");
+		// The per-turn runner is never used while the session is alive.
+		expect(runnerCalls).toHaveLength(0);
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+	});
+
+	it("falls back to the per-turn runner when session creation fails, without retrying in the same chat", async () => {
+		const { deps, runnerCalls, createCalls } = sessionDeps({
+			createError: new Error("no session support"),
+			runnerOutput: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		await ask(controller, "typescript handbook");
+
+		expect(createCalls()).toBe(1);
+		expect(runnerCalls).toHaveLength(2);
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+	});
+
+	it("drops a session whose prompt throws and falls back to local cards for that turn", async () => {
+		const { deps, sessions } = sessionDeps({
+			promptError: new Error("session died"),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		expect(sessions[0].destroyed).toBe(true);
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "local",
+		});
+	});
+
+	it("clear session destroys the Prompt API session and resets transcript, input, and canClear", async () => {
+		const { deps, sessions } = sessionDeps({
+			sessionOutput: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		controller.setQuestion("a draft follow-up");
+		controller.clearSession();
+
+		expect(sessions[0].destroyed).toBe(true);
+		expect(controller.getView()).toEqual({
+			question: "",
+			canSubmit: false,
+			answering: false,
+			messages: [],
+			canClear: false,
+		});
+	});
+
+	it("starts a fresh Prompt API session on the first submit after clear", async () => {
+		const { deps, sessions, createCalls } = sessionDeps({
+			sessionOutput: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		controller.clearSession();
+		await ask(controller, "typescript handbook");
+
+		expect(createCalls()).toBe(2);
+		expect(sessions[0].destroyed).toBe(true);
+		expect(sessions[1].destroyed).toBe(false);
+		expect(sessions[1].prompts).toHaveLength(1);
+	});
+
+	it("retries session creation after clear even when it failed in the previous chat", async () => {
+		let failFirst = true;
+		const runnerCalls: AskAiRecommendationPrompt[] = [];
+		let createCalls = 0;
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			async runRecommendationPrompt(request) {
+				runnerCalls.push(request);
+				return aiOutput([{ id: "bm-ts", reason: "Match." }]);
+			},
+			async createRecommendationSession() {
+				createCalls += 1;
+				if (failFirst) {
+					failFirst = false;
+					throw new Error("no session support");
+				}
+				return {
+					async prompt() {
+						return aiOutput([{ id: "bm-ts", reason: "Match." }]);
+					},
+					destroy() {},
+				};
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		expect(createCalls).toBe(1);
+		expect(runnerCalls).toHaveLength(1);
+
+		controller.clearSession();
+		await ask(controller, "typescript handbook");
+		expect(createCalls).toBe(2);
+		// The new chat's session worked, so no extra runner call happened.
+		expect(runnerCalls).toHaveLength(1);
+	});
+
+	it("discards an in-flight answer when the session is cleared mid-turn", async () => {
+		let release: (value: string) => void = () => {};
+		const pending = new Promise<string>((resolve) => {
+			release = resolve;
+		});
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			runRecommendationPrompt() {
+				return pending;
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+		controller.setQuestion("typescript testing");
+		const submitted = controller.submit();
+		expect(controller.getView().answering).toBe(true);
+
+		controller.clearSession();
+		expect(controller.getView().answering).toBe(false);
+		expect(controller.getView().messages).toEqual([]);
+
+		release(aiOutput([{ id: "bm-ts", reason: "Match." }]));
+		await submitted;
+
+		// The stale answer never lands in the cleared transcript.
+		expect(controller.getView().messages).toEqual([]);
+		expect(controller.getView().answering).toBe(false);
+	});
+
+	it("works per-turn without any session support (no factory provided)", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		await ask(controller, "typescript handbook");
+
+		expect(promptCalls).toHaveLength(2);
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+	});
+});
+
+describe("Ask AI hybrid follow-up retrieval (MIK-048)", () => {
+	const records = [
+		record({
+			id: "bm-ts-test",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "typescript testing handbook",
+		}),
+		record({
+			id: "bm-ts-recipes",
+			canonicalUrl: "https://ts.test/recipes",
+			url: "https://ts.test/recipes",
+			title: "typescript recipes",
+		}),
+		record({
+			id: "bm-chrome",
+			canonicalUrl: "https://chrome.test/guide",
+			url: "https://chrome.test/guide",
+			title: "testing chrome extensions guide",
+		}),
+	];
+
+	function payloadIds(call: AskAiRecommendationPrompt): string[] {
+		return call.candidatePayload.map((candidate) => candidate.id);
+	}
+
+	it("narrows a follow-up to the previous candidate set", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts-test", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		expect(payloadIds(promptCalls[0]).sort()).toEqual([
+			"bm-ts-recipes",
+			"bm-ts-test",
+		]);
+
+		// "testing" matches bm-chrome too, but the follow-up stays inside the
+		// previous typescript candidates.
+		await ask(controller, "testing");
+		expect(payloadIds(promptCalls[1])).toEqual(["bm-ts-test"]);
+	});
+
+	it("falls back to all cached bookmarks when the narrowed set has no strong match", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				aiOutput([{ id: "bm-ts-test", reason: "Match." }]),
+				aiOutput([{ id: "bm-chrome", reason: "New topic." }]),
+			],
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		// A new topic misses the narrowed typescript set, so retrieval falls
+		// back to the whole cache.
+		await ask(controller, "chrome extensions");
+
+		expect(payloadIds(promptCalls[1])).toEqual(["bm-chrome"]);
+		const result = lastResult(controller);
+		if (result?.kind !== "recommendations") throw new Error("no cards");
+		expect(result.cards[0].canonicalUrl).toBe("https://chrome.test/guide");
+	});
+
+	it("keeps the previous narrowed context when a turn finds nothing anywhere", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts-test", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		await ask(controller, "cooking pasta");
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
+
+		// The weak turn did not wipe the narrowed context: the next follow-up
+		// still refines the typescript candidates.
+		await ask(controller, "testing");
+		expect(payloadIds(promptCalls[1])).toEqual(["bm-ts-test"]);
+	});
+
+	it("clear session resets the narrowed context back to all cached bookmarks", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			output: aiOutput([{ id: "bm-ts-test", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		controller.clearSession();
+
+		// After the hard reset, "testing" scores over the whole cache again.
+		await ask(controller, "testing");
+		expect(payloadIds(promptCalls[1]).sort()).toEqual([
+			"bm-chrome",
+			"bm-ts-test",
+		]);
+	});
+});
+
+describe("Ask AI chat state is memory-only (MIK-048)", () => {
+	afterEach(() => {
+		delete (globalThis as { chrome?: unknown }).chrome;
+	});
+
+	it("never touches chrome storage and clear makes no dependency calls", async () => {
+		// Any storage access explodes: the chat flow must run entirely in memory.
+		(globalThis as { chrome?: unknown }).chrome = {
+			storage: new Proxy(
+				{},
+				{
+					get() {
+						throw new Error("Ask AI chat state must never touch storage");
+					},
+				},
+			),
+		};
+		const { deps, promptCalls, extractionCalls, loadCalls } = fakeDeps({
+			records: [
+				record({
+					id: "bm-ts",
+					canonicalUrl: "https://ts.test/handbook",
+					url: "https://ts.test/handbook",
+					title: "TypeScript testing handbook",
+				}),
+			],
+			output: aiOutput([{ id: "bm-ts", reason: "Match." }]),
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+		const loadsAfterSubmit = loadCalls();
+		const promptsAfterSubmit = promptCalls.length;
+		const extractionsAfterSubmit = extractionCalls.length;
+
+		controller.clearSession();
+
+		expect(loadCalls()).toBe(loadsAfterSubmit);
+		expect(promptCalls.length).toBe(promptsAfterSubmit);
+		expect(extractionCalls.length).toBe(extractionsAfterSubmit);
+		expect(controller.getView().messages).toEqual([]);
+	});
+});
+
+describe("Ask AI clear-session mid-flight hardening (MIK-048)", () => {
+	// Two records so all-bookmarks vs narrowed retrieval is observable: only
+	// "bm-ts-test" matches "typescript", but both match "testing".
+	const records = [
+		record({
+			id: "bm-ts-test",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "typescript testing handbook",
+		}),
+		record({
+			id: "bm-chrome",
+			canonicalUrl: "https://chrome.test/guide",
+			url: "https://chrome.test/guide",
+			title: "testing chrome extensions guide",
+		}),
+	];
+
+	it("a turn cleared during keyword extraction leaves no narrowed context and no session behind", async () => {
+		let releaseExtraction: (value: string) => void = () => {};
+		const extractionPending = new Promise<string>((resolve) => {
+			releaseExtraction = resolve;
+		});
+		let extractionCallCount = 0;
+		const sessions: { prompts: string[]; destroyed: boolean }[] = [];
+		let createCalls = 0;
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			runKeywordExtractionPrompt() {
+				extractionCallCount += 1;
+				return extractionCallCount === 1
+					? extractionPending
+					: Promise.resolve("");
+			},
+			async runRecommendationPrompt() {
+				return "";
+			},
+			async createRecommendationSession() {
+				createCalls += 1;
+				const fake = { prompts: [] as string[], destroyed: false };
+				sessions.push(fake);
+				return {
+					async prompt(input) {
+						fake.prompts.push(input);
+						return aiOutput([{ id: "bm-ts-test", reason: "Match." }]);
+					},
+					destroy() {
+						fake.destroyed = true;
+					},
+				};
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		// The first turn would narrow to the typescript-only candidate set…
+		controller.setQuestion("typescript");
+		const submitted = controller.submit();
+		// …but the chat is cleared while it sits inside keyword extraction.
+		controller.clearSession();
+		releaseExtraction(extractionOutput(["typescript"]));
+		await submitted;
+
+		// The stale turn opened no session and landed nothing.
+		expect(createCalls).toBe(0);
+		expect(controller.getView().messages).toEqual([]);
+
+		// The next chat retrieves over ALL cached bookmarks (no stale narrowed
+		// context): both "testing" matches ride in the candidate payload of the
+		// freshly created session's prompt.
+		await ask(controller, "testing");
+		expect(createCalls).toBe(1);
+		expect(sessions[0].destroyed).toBe(false);
+		expect(sessions[0].prompts).toHaveLength(1);
+		expect(sessions[0].prompts[0]).toContain("bm-ts-test");
+		expect(sessions[0].prompts[0]).toContain("bm-chrome");
+	});
+
+	it("a session that finishes opening after clear is destroyed, and the next chat owns a fresh one", async () => {
+		let releaseCreate: (session: AskAiPromptSession) => void = () => {};
+		const pendingCreate = new Promise<AskAiPromptSession>((resolve) => {
+			releaseCreate = resolve;
+		});
+		let reachedCreate: () => void = () => {};
+		const createReached = new Promise<void>((resolve) => {
+			reachedCreate = resolve;
+		});
+		const staleSession = { prompts: [] as string[], destroyed: false };
+		const freshSession = { prompts: [] as string[], destroyed: false };
+		let createCalls = 0;
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			async runRecommendationPrompt() {
+				return "";
+			},
+			createRecommendationSession() {
+				createCalls += 1;
+				if (createCalls === 1) {
+					reachedCreate();
+					return pendingCreate;
+				}
+				return Promise.resolve({
+					async prompt(input: string) {
+						freshSession.prompts.push(input);
+						return aiOutput([{ id: "bm-ts-test", reason: "Match." }]);
+					},
+					destroy() {
+						freshSession.destroyed = true;
+					},
+				});
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion("typescript");
+		const submitted = controller.submit();
+		// The turn is now provably blocked inside the pending session creation.
+		await createReached;
+		controller.clearSession();
+		releaseCreate({
+			async prompt(input) {
+				staleSession.prompts.push(input);
+				return "";
+			},
+			destroy() {
+				staleSession.destroyed = true;
+			},
+		});
+		await submitted;
+
+		// The stale session belongs to no conversation: destroyed, never used.
+		expect(staleSession.destroyed).toBe(true);
+		expect(staleSession.prompts).toEqual([]);
+
+		await ask(controller, "testing");
+		expect(createCalls).toBe(2);
+		expect(freshSession.prompts).toHaveLength(1);
+		expect(freshSession.destroyed).toBe(false);
+	});
+
+	it("a stale creation failure does not mark sessions unavailable for the next chat", async () => {
+		let rejectCreate: (error: Error) => void = () => {};
+		const pendingCreate = new Promise<AskAiPromptSession>((_, reject) => {
+			rejectCreate = reject;
+		});
+		let reachedCreate: () => void = () => {};
+		const createReached = new Promise<void>((resolve) => {
+			reachedCreate = resolve;
+		});
+		const freshSession = { prompts: [] as string[], destroyed: false };
+		let createCalls = 0;
+		const runnerCalls: AskAiRecommendationPrompt[] = [];
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			async runRecommendationPrompt(request) {
+				runnerCalls.push(request);
+				return "";
+			},
+			createRecommendationSession() {
+				createCalls += 1;
+				if (createCalls === 1) {
+					reachedCreate();
+					return pendingCreate;
+				}
+				return Promise.resolve({
+					async prompt(input: string) {
+						freshSession.prompts.push(input);
+						return aiOutput([{ id: "bm-ts-test", reason: "Match." }]);
+					},
+					destroy() {
+						freshSession.destroyed = true;
+					},
+				});
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion("typescript");
+		const submitted = controller.submit();
+		// The turn is now provably blocked inside the pending session creation.
+		await createReached;
+		controller.clearSession();
+		rejectCreate(new Error("stale creation failed"));
+		await submitted;
+
+		// The failure belonged to the cleared chat: the next chat still opens
+		// and uses its own session instead of degrading to the runner.
+		await ask(controller, "testing");
+		expect(createCalls).toBe(2);
+		expect(freshSession.prompts).toHaveLength(1);
+		expect(runnerCalls).toHaveLength(0);
+	});
+
+	it("resets answering and reports a safe error when the flow throws unexpectedly", async () => {
+		// A malformed cache snapshot blows up local scoring itself — outside
+		// every inner catch — and must not leave the composer stuck answering.
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return null as unknown as readonly BookmarkRecord[];
+			},
+			async runKeywordExtractionPrompt() {
+				return "";
+			},
+			async runRecommendationPrompt() {
+				return "";
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		expect(controller.getView().answering).toBe(false);
+		expect(controller.getView().canSubmit).toBe(false);
+		expect(lastResult(controller)).toEqual({ kind: "error" });
 	});
 });

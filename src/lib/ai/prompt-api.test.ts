@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	PromptApiUnavailableError,
+	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
 } from "./prompt-api";
@@ -261,5 +262,112 @@ describe("createChromeAskAiRecommendationRunner", () => {
 
 		await expect(run(request)).rejects.toThrow("prompt failed");
 		expect(destroyed).toBe(true);
+	});
+});
+
+/**
+ * The MIK-048 Ask AI chat session factory: unlike the one-shot runner above,
+ * the created session stays open across prompts (one Prompt API session per
+ * Ask AI chat session) and the caller decides when to destroy it. Availability
+ * failures throw PromptApiUnavailableError so the Ask AI controller degrades
+ * to the per-turn runner.
+ */
+describe("createChromeAskAiPromptSessionFactory", () => {
+	const systemInstruction = "recommend saved bookmarks as JSON";
+
+	it("throws PromptApiUnavailableError when no namespace is present", async () => {
+		const createSession = createChromeAskAiPromptSessionFactory(null);
+		await expect(createSession(systemInstruction)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("throws PromptApiUnavailableError when the model is not available yet", async () => {
+		for (const state of ["unavailable", "downloadable", "downloading"]) {
+			const createSession = createChromeAskAiPromptSessionFactory({
+				availability: async () => state,
+				create: async () => ({ prompt: async () => "" }),
+			});
+			await expect(createSession(systemInstruction)).rejects.toBeInstanceOf(
+				PromptApiUnavailableError,
+			);
+		}
+	});
+
+	it("throws PromptApiUnavailableError when the availability probe throws", async () => {
+		const createSession = createChromeAskAiPromptSessionFactory({
+			availability: async () => {
+				throw new Error("boom");
+			},
+			create: async () => ({ prompt: async () => "" }),
+		});
+		await expect(createSession(systemInstruction)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("keeps one underlying session open across prompts and destroys on demand", async () => {
+		let created = 0;
+		let destroyed = false;
+		const prompts: string[] = [];
+		let createOptions: unknown;
+		const createSession = createChromeAskAiPromptSessionFactory({
+			availability: async () => "available",
+			create: async (options) => {
+				created += 1;
+				createOptions = options;
+				return {
+					prompt: async (input: string) => {
+						prompts.push(input);
+						return `answer ${prompts.length}`;
+					},
+					destroy: () => {
+						destroyed = true;
+					},
+				};
+			},
+		});
+
+		const session = await createSession(systemInstruction, "en");
+		expect(await session.prompt("first question")).toBe("answer 1");
+		expect(await session.prompt("follow-up question")).toBe("answer 2");
+
+		expect(created).toBe(1);
+		expect(prompts).toEqual(["first question", "follow-up question"]);
+		expect(createOptions).toMatchObject({
+			initialPrompts: [{ role: "system", content: systemInstruction }],
+			expectedOutputs: [{ type: "text", languages: ["en"] }],
+		});
+		expect(destroyed).toBe(false);
+
+		session.destroy();
+		expect(destroyed).toBe(true);
+	});
+
+	it("defaults the expected output language to Japanese", async () => {
+		let createOptions: unknown;
+		const createSession = createChromeAskAiPromptSessionFactory({
+			availability: async () => "available",
+			create: async (options) => {
+				createOptions = options;
+				return { prompt: async () => "out" };
+			},
+		});
+
+		const session = await createSession(systemInstruction);
+		expect(await session.prompt("question")).toBe("out");
+		expect(createOptions).toMatchObject({
+			expectedOutputs: [{ type: "text", languages: ["ja"] }],
+		});
+	});
+
+	it("tolerates a browser session without a destroy method", async () => {
+		const createSession = createChromeAskAiPromptSessionFactory({
+			availability: async () => "available",
+			create: async () => ({ prompt: async () => "out" }),
+		});
+
+		const session = await createSession(systemInstruction);
+		expect(() => session.destroy()).not.toThrow();
 	});
 });

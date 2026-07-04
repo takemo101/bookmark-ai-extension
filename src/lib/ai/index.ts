@@ -46,12 +46,15 @@ export { MAX_TAGS } from "./types";
 
 export type {
 	AskAiPromptRequest,
+	AskAiPromptSessionFactory,
+	AskAiPromptSessionHandle,
 	AskAiRecommendationRunner,
 	PromptApiAvailability,
 	PromptClient,
 } from "./prompt-api";
 export {
 	PromptApiUnavailableError,
+	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
 } from "./prompt-api";

@@ -46,6 +46,7 @@ import {
 	err as appErr,
 } from "../lib/app/index";
 import {
+	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
 } from "../lib/ai/index";
@@ -94,19 +95,23 @@ export function createRuntimeUseCases(): OptionsUseCases {
 }
 
 /**
- * Build the real {@link AskAiDeps} for the "Ask AI" screen (MIK-046). The
- * bookmark source is a plain `chrome.storage.local` cache read — submitting a
- * question never triggers a Drive pull, and the full cached collection is used
- * regardless of any Library filters. Both prompt runs — keyword extraction
- * (MIK-047, built from the question and language only) and recommendation —
- * go through the same Prompt API runner, each opening a session with its own
- * prompt's system instruction; a throw makes the controller fall back to
- * direct scoring / local fallback cards. Nothing here can persist the chat or
- * the extracted keywords.
+ * Build the real {@link AskAiDeps} for the "Ask AI" screen (MIK-046, MIK-048).
+ * The bookmark source is a plain `chrome.storage.local` cache read —
+ * submitting a question never triggers a Drive pull, and the full cached
+ * collection is used regardless of any Library filters. Keyword extraction
+ * (MIK-047, built from the question and language only) runs per turn through
+ * the one-shot Prompt API runner. Recommendation prompts prefer the volatile
+ * chat session (MIK-048): one browser Prompt API session per Ask AI chat
+ * session, created with the recommendation prompt's own system instruction and
+ * destroyed by the controller on clear; when the session cannot be opened, the
+ * controller degrades to the same one-shot runner per turn. A throw anywhere
+ * makes the controller fall back to direct scoring / local fallback cards.
+ * Nothing here can persist the chat, the session, or the extracted keywords.
  */
 export function createRuntimeAskAiDeps(): AskAiDeps {
 	const cache = createChromeLocalCache();
 	const run = createChromeAskAiRecommendationRunner();
+	const createSession = createChromeAskAiPromptSessionFactory();
 	// The browser UI language decides both prompt and expected output language,
 	// matching the analyzer's language posture (MIK-029).
 	const language = detectUiLanguage();
@@ -119,6 +124,9 @@ export function createRuntimeAskAiDeps(): AskAiDeps {
 		},
 		runRecommendationPrompt(request) {
 			return run(request, language);
+		},
+		createRecommendationSession(systemInstruction) {
+			return createSession(systemInstruction, language);
 		},
 		language,
 	};
