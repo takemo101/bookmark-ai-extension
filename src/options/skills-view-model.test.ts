@@ -53,6 +53,7 @@ class FakeSkillsUseCases implements SkillsUseCases {
 	syncResult: Result<SettingsCacheState, AppError> | null = null;
 	syncPromise: Promise<Result<SettingsCacheState, AppError>> | null = null;
 	createResult: Result<SettingsCacheState, AppError> | null = null;
+	createPromise: Promise<Result<SettingsCacheState, AppError>> | null = null;
 	updateResult: Result<SettingsCacheState, AppError> | null = null;
 	deleteResult: Result<SettingsCacheState, AppError> | null = null;
 	setEnabledResult: Result<SettingsCacheState, AppError> | null = null;
@@ -72,6 +73,7 @@ class FakeSkillsUseCases implements SkillsUseCases {
 	}
 	async createSkill(input: NewCustomSkillInput) {
 		this.createArgs.push(input);
+		if (this.createPromise) return this.createPromise;
 		if (this.createResult) return this.createResult;
 		const now = isoTimestamp("2026-01-02T00:00:00Z");
 		const added = this.cache.settings.add(input, { id: skillId("new-1"), now });
@@ -140,26 +142,50 @@ describe("createSkillsController", () => {
 		expect(view.builtIns.some((b) => b.id === "generic-page")).toBe(true);
 	});
 
-	it("marks refresh busy while settings sync is pending", async () => {
+	it("marks refresh syncing while settings sync is pending", async () => {
 		const useCases = new FakeSkillsUseCases();
 		const pending = deferred<Result<SettingsCacheState, AppError>>();
 		useCases.syncPromise = pending.promise;
 		const controller = createSkillsController(useCases);
-		const busySnapshots: boolean[] = [];
+		const syncingSnapshots: boolean[] = [];
 		controller.subscribe(() => {
-			busySnapshots.push(controller.getView().busy);
+			syncingSnapshots.push(controller.getView().sync.syncing);
 		});
 
 		const refresh = controller.refresh();
 
-		expect(controller.getView().busy).toBe(true);
-		expect(busySnapshots).toContain(true);
+		expect(controller.getView().busy).toBe(false);
+		expect(controller.getView().sync.syncing).toBe(true);
+		expect(syncingSnapshots).toContain(true);
 
 		pending.resolve({ ok: true, value: useCases.cache });
 		await refresh;
 
+		expect(controller.getView().sync.syncing).toBe(false);
+		expect(syncingSnapshots.at(-1)).toBe(false);
+	});
+
+	it("marks custom skill writes as writing while submit is pending", async () => {
+		const useCases = new FakeSkillsUseCases();
+		const pending = deferred<Result<SettingsCacheState, AppError>>();
+		useCases.createPromise = pending.promise;
+		const controller = createSkillsController(useCases);
+		await controller.init();
+
+		controller.startCreate();
+		controller.setFormField("name", "Slow skill");
+		controller.setFormField("instruction", "Focus on slow pages.");
+		const submit = controller.submit();
+
+		expect(controller.getView().busy).toBe(true);
+		expect(controller.getView().sync.writing).toBe(true);
+		expect(controller.getView().sync.syncing).toBe(false);
+
+		pending.resolve({ ok: true, value: useCases.cache });
+		await submit;
+
 		expect(controller.getView().busy).toBe(false);
-		expect(busySnapshots.at(-1)).toBe(false);
+		expect(controller.getView().sync.writing).toBe(false);
 	});
 
 	it("startCreate() opens an empty form; submit() creates a skill", async () => {

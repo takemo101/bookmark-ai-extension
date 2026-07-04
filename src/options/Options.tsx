@@ -17,7 +17,7 @@
  * renderable with fakes in tests.
  */
 import type { ChangeEvent, ReactNode } from "react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
 	type AnalysisProfileDisplay,
@@ -388,6 +388,26 @@ export function syncProgressText(
 	}
 	if (sync.writing) {
 		return m.writingDrive;
+	}
+	return undefined;
+}
+
+function settingsSyncProgressText(
+	sync: Pick<SkillsView["sync"], "syncing" | "writing">,
+	loading: boolean,
+	m: Pick<
+		OptionsMessages,
+		"loadingSkills" | "settingsSyncingDrive" | "settingsWritingDrive"
+	>,
+): string | undefined {
+	if (loading) {
+		return m.loadingSkills;
+	}
+	if (sync.syncing) {
+		return m.settingsSyncingDrive;
+	}
+	if (sync.writing) {
+		return m.settingsWritingDrive;
 	}
 	return undefined;
 }
@@ -786,9 +806,8 @@ function CenterList({
  *
  * The row container is a flex `<div>` (not a `<button>`) so the quick delete
  * button can legally live inside it (MIK-024): the main content stays a real
- * button for keyboard users (its Enter/Space click bubbles to the container's
- * select handler), while quick delete stops propagation so deleting never
- * opens the sheet.
+ * button for mouse and keyboard users, while quick delete stops propagation so
+ * deleting never opens the sheet.
  */
 function LedgerRow({
 	row,
@@ -804,7 +823,7 @@ function LedgerRow({
 	onDelete: () => void;
 }) {
 	return (
-		<div style={row.selected ? rowSelected : rowStyle} onClick={onSelect}>
+		<div style={row.selected ? rowSelected : rowStyle}>
 			{/* Decorative site icon (MIK-032); the row's accessible text is the
 			    title/summary button next to it. marginTop aligns it with the
 			    first title line in this flex-start row. Looked up by the original
@@ -812,7 +831,12 @@ function LedgerRow({
 			<span style={{ marginTop: 1 }}>
 				<Favicon pageUrl={row.url} size={22} />
 			</span>
-			<button type="button" style={rowOpenButton} aria-expanded={row.selected}>
+			<button
+				type="button"
+				style={rowOpenButton}
+				aria-expanded={row.selected}
+				onClick={onSelect}
+			>
 				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
 					{row.title}
 				</div>
@@ -909,6 +933,31 @@ function useIsNarrowViewport(): boolean {
 	);
 }
 
+function BookmarkUrlLink({ url }: { url: string }) {
+	return (
+		<a
+			href={url}
+			target="_blank"
+			rel="noreferrer"
+			style={{
+				fontSize: 12,
+				color: palette.accent,
+				wordBreak: "break-all",
+			}}
+		>
+			{url}
+		</a>
+	);
+}
+
+function OpenBookmarkLink({ url, label }: { url: string; label: string }) {
+	return (
+		<a href={url} target="_blank" rel="noreferrer" style={primaryButton}>
+			{label}
+		</a>
+	);
+}
+
 /**
  * The row-click detail side sheet (MIK-022): the single reading surface for a
  * bookmark's full detail and its long-form `analysisMarkdown`. Closes via the
@@ -940,6 +989,7 @@ function DetailSheet({
 	onEditCustomProfile?: (id: string) => void;
 }) {
 	const isNarrow = useIsNarrowViewport();
+	const backdropRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
@@ -951,17 +1001,24 @@ function DetailSheet({
 		return () => document.removeEventListener("keydown", onKeyDown);
 	}, [controller]);
 
+	useEffect(() => {
+		const backdrop = backdropRef.current;
+		if (!backdrop) {
+			return;
+		}
+		function onBackdropClick(event: MouseEvent): void {
+			// Only a true backdrop click closes; clicks inside the sheet bubble up
+			// with a different target and are ignored.
+			if (event.target === backdrop) {
+				controller.clearSelection();
+			}
+		}
+		backdrop.addEventListener("click", onBackdropClick);
+		return () => backdrop.removeEventListener("click", onBackdropClick);
+	}, [controller]);
+
 	return (
-		<div
-			style={sheetBackdrop}
-			onClick={(event) => {
-				// Only a true backdrop click closes; clicks inside the sheet bubble up
-				// with a different target and are ignored.
-				if (event.target === event.currentTarget) {
-					controller.clearSelection();
-				}
-			}}
-		>
+		<div ref={backdropRef} style={sheetBackdrop}>
 			<section
 				role="dialog"
 				aria-modal="true"
@@ -983,9 +1040,6 @@ function DetailSheet({
 							style={subtleButton}
 							onClick={() => controller.clearSelection()}
 							aria-label={m.closeDetailsAria}
-							// Best-effort focus management: land keyboard focus inside the
-							// dialog when it opens.
-							autoFocus
 						>
 							✕
 						</button>
@@ -1005,18 +1059,7 @@ function DetailSheet({
 							{detail.title}
 						</h2>
 					</div>
-					<a
-						href={detail.url}
-						target="_blank"
-						rel="noreferrer"
-						style={{
-							fontSize: 12,
-							color: palette.accent,
-							wordBreak: "break-all",
-						}}
-					>
-						{detail.url}
-					</a>
+					<BookmarkUrlLink url={detail.url} />
 				</header>
 
 				<div style={sheetBody}>
@@ -1106,14 +1149,7 @@ function DetailSheet({
 
 				<footer style={sheetFooter}>
 					<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-						<a
-							href={detail.url}
-							target="_blank"
-							rel="noreferrer"
-							style={primaryButton}
-						>
-							{m.open}
-						</a>
+						<OpenBookmarkLink url={detail.url} label={m.open} />
 						<button
 							type="button"
 							style={
@@ -1193,7 +1229,7 @@ function SkillsScreen({
 			</section>
 			<FloatingSettingsSyncButton
 				sync={view.sync}
-				busy={view.busy}
+				loading={view.loading}
 				m={m}
 				onRefresh={() => void skillsController.refresh()}
 			/>
@@ -1211,6 +1247,7 @@ function SkillsScreen({
  * screen subtitle.
  */
 function SkillsRail({ view, m }: { view: SkillsView; m: OptionsMessages }) {
+	const progress = settingsSyncProgressText(view.sync, view.loading, m);
 	return (
 		<aside style={rail}>
 			<section style={panel}>
@@ -1219,6 +1256,13 @@ function SkillsRail({ view, m }: { view: SkillsView; m: OptionsMessages }) {
 					<SyncStatusDot status={view.sync.status} />
 					<span style={{ fontSize: 13 }}>{view.sync.status}</span>
 				</div>
+				{progress ? (
+					<p
+						style={{ fontSize: 12, color: palette.inkSoft, margin: "6px 0 0" }}
+					>
+						{progress}
+					</p>
+				) : null}
 				{view.sync.pendingLocalChanges ? (
 					<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
 						{m.pendingLocal}
@@ -1324,30 +1368,40 @@ function SkillsMain({
  */
 function FloatingSettingsSyncButton({
 	sync,
-	busy,
+	loading,
 	m,
 	onRefresh,
 }: {
 	sync: SkillsView["sync"];
-	busy: boolean;
+	loading: boolean;
 	m: OptionsMessages;
 	onRefresh: () => void;
 }) {
+	const inFlight = loading || sync.syncing || sync.writing;
+	const detail = loading
+		? m.syncDetail.loading
+		: sync.syncing
+			? m.syncDetail.syncing
+			: sync.writing
+				? m.syncDetail.writing
+				: sync.status;
 	return (
 		<button
 			type="button"
 			style={
-				busy ? { ...floatingSyncButton, ...disabledButton } : floatingSyncButton
+				inFlight
+					? { ...floatingSyncButton, ...disabledButton }
+					: floatingSyncButton
 			}
-			disabled={busy}
-			aria-busy={busy || undefined}
+			disabled={inFlight}
+			aria-busy={inFlight || undefined}
 			onClick={onRefresh}
 			aria-label={m.settingsSyncAria}
 		>
 			<SyncStatusDot status={sync.status} />
 			<span>{m.syncSettingsButton}</span>
 			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
-				{sync.status}
+				{detail}
 			</span>
 		</button>
 	);
@@ -1369,6 +1423,8 @@ function SkillFormModal({
 	skillsController: SkillsController;
 	m: OptionsMessages;
 }) {
+	const backdropRef = useRef<HTMLDivElement>(null);
+
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
 			if (event.key === "Escape") {
@@ -1379,17 +1435,24 @@ function SkillFormModal({
 		return () => document.removeEventListener("keydown", onKeyDown);
 	}, [skillsController]);
 
+	useEffect(() => {
+		const backdrop = backdropRef.current;
+		if (!backdrop) {
+			return;
+		}
+		function onBackdropClick(event: MouseEvent): void {
+			// Only a true backdrop click closes; clicks inside the card bubble up
+			// with a different target and are ignored.
+			if (event.target === backdrop) {
+				skillsController.cancelEdit();
+			}
+		}
+		backdrop.addEventListener("click", onBackdropClick);
+		return () => backdrop.removeEventListener("click", onBackdropClick);
+	}, [skillsController]);
+
 	return (
-		<div
-			style={modalBackdrop}
-			onClick={(event) => {
-				// Only a true backdrop click closes; clicks inside the card bubble up
-				// with a different target and are ignored.
-				if (event.target === event.currentTarget) {
-					skillsController.cancelEdit();
-				}
-			}}
-		>
+		<div ref={backdropRef} style={modalBackdrop}>
 			<section
 				role="dialog"
 				aria-modal="true"
@@ -1405,9 +1468,6 @@ function SkillFormModal({
 						style={subtleButton}
 						onClick={() => skillsController.cancelEdit()}
 						aria-label={m.closeSkillFormAria}
-						// Best-effort focus management: land keyboard focus inside the
-						// dialog when it opens.
-						autoFocus
 					>
 						✕
 					</button>

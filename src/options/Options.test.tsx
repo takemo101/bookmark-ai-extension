@@ -123,7 +123,12 @@ function skillsViewOf(overrides: Partial<SkillsView> = {}): SkillsView {
 	return {
 		loading: false,
 		busy: false,
-		sync: { status: "synced", pendingLocalChanges: false },
+		sync: {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+		},
 		builtIns: [
 			{
 				id: "github-repository",
@@ -967,7 +972,14 @@ describe("Analysis skills settings screen (MIK-025)", () => {
 
 	it("shows the settings sync readout with pending info and a floating refresh", () => {
 		const html = renderSkills(
-			skillsViewOf({ sync: { status: "synced", pendingLocalChanges: true } }),
+			skillsViewOf({
+				sync: {
+					status: "synced",
+					pendingLocalChanges: true,
+					syncing: false,
+					writing: false,
+				},
+			}),
 		);
 
 		expect(html).toContain("Settings sync");
@@ -1044,24 +1056,62 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 	});
 
 	it("disables the floating settings sync action while an action is busy", () => {
-		const html = renderSkills(skillsViewOf({ busy: true }));
+		const html = renderSkills(
+			skillsViewOf({
+				busy: true,
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: false,
+					writing: true,
+				},
+			}),
+		);
 
 		expect(html).toContain('aria-label="Sync analysis skill settings"');
 		expect(html).toContain("disabled");
 		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("writing…");
+		expect(html).toContain("Writing settings changes to Google Drive…");
+	});
+
+	it("shows syncing detail and rail progress while settings sync is running", () => {
+		const html = renderSkills(
+			skillsViewOf({
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: true,
+					writing: false,
+				},
+			}),
+		);
+
+		expect(html).toContain('aria-label="Sync analysis skill settings"');
+		expect(html).toContain("disabled");
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("syncing…");
+		expect(html).toContain("Syncing settings with Google Drive…");
 	});
 
 	it("keeps the sync status visible in the rail while loading", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				loading: true,
-				sync: { status: "idle", pendingLocalChanges: false },
+				sync: {
+					status: "idle",
+					pendingLocalChanges: false,
+					syncing: false,
+					writing: false,
+				},
 			}),
 		);
 
 		expect(html).toContain("Settings sync");
 		expect(html).toContain(">idle<");
 		expect(html).toContain("Loading analysis skills…");
+		expect(html).toContain("loading…");
+		expect(html).toContain("disabled");
 	});
 });
 

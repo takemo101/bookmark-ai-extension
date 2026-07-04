@@ -68,6 +68,8 @@ export type SkillsView = {
 	readonly sync: {
 		readonly status: string;
 		readonly pendingLocalChanges: boolean;
+		readonly syncing: boolean;
+		readonly writing: boolean;
 	};
 	readonly builtIns: readonly BuiltInSkillView[];
 	readonly custom: readonly CustomSkillRowView[];
@@ -147,6 +149,8 @@ export function createSkillsController(
 	let state: SettingsCacheState | undefined;
 	let loading = true;
 	let busy = false;
+	let syncing = false;
+	let writing = false;
 	let editingId: string | undefined;
 	let formOpen = false;
 	let form: SkillFormValues = EMPTY_FORM;
@@ -186,6 +190,8 @@ export function createSkillsController(
 			sync: {
 				status: state?.sync.status ?? "idle",
 				pendingLocalChanges: state?.sync.pending === true,
+				syncing,
+				writing,
 			},
 			builtIns: BUILT_IN_VIEWS,
 			custom: state?.settings.customSkills().map(toRow) ?? [],
@@ -201,12 +207,14 @@ export function createSkillsController(
 			return;
 		}
 		busy = true;
+		writing = true;
 		actionError = undefined;
 		notify();
 		try {
 			await op();
 		} finally {
 			busy = false;
+			writing = false;
 			notify();
 		}
 	}
@@ -230,14 +238,23 @@ export function createSkillsController(
 		},
 
 		async refresh() {
-			await runAction(async () => {
+			if (syncing || busy) {
+				return;
+			}
+			syncing = true;
+			actionError = undefined;
+			notify();
+			try {
 				const result = await useCases.syncSettingsFromDrive();
 				if (result.ok) {
 					setState(result.value);
 					return;
 				}
 				setState(await useCases.loadCachedSettings());
-			});
+			} finally {
+				syncing = false;
+				notify();
+			}
 		},
 
 		startCreate() {
