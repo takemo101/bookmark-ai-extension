@@ -396,3 +396,77 @@ describe("findAskAiCandidates candidate shape", () => {
 		expect(candidate.score).toBeGreaterThan(0);
 	});
 });
+
+describe("findAskAiCandidates expanded query terms (MIK-047)", () => {
+	it("finds records via expanded terms that the raw question misses", () => {
+		// The Japanese question tokenizes into long clause tokens that no field
+		// contains, so direct scoring finds nothing.
+		const records = [
+			record({
+				id: "bm-test-design",
+				canonicalUrl: "https://example.com/test-design",
+				url: "https://example.com/test-design",
+				title: "テスト設計の基礎",
+			}),
+		];
+		const question = "前に読んだ、テスト設計で参考になりそうなやつ";
+
+		const direct = findAskAiCandidates(records, question);
+		expect(candidatesOf(direct)).toHaveLength(0);
+
+		const expanded = findAskAiCandidates(records, question, {
+			expandedTerms: ["テスト設計", "テスト"],
+		});
+		expect(expanded.kind).toBe("candidates");
+		expect(candidatesOf(expanded)[0].id).toBe("bm-test-design");
+	});
+
+	it("matches expanded terms case-insensitively and keeps scoring fields intact", () => {
+		const records = [record({ title: "typescript notes" })];
+
+		const result = findAskAiCandidates(records, "somethingunrelated", {
+			expandedTerms: ["TypeScript"],
+		});
+
+		expect(result.kind).toBe("candidates");
+		expect(candidatesOf(result)[0].matchedFields).toEqual(["title"]);
+	});
+
+	it("keeps the original question tokens in play alongside expanded terms", () => {
+		const records = [
+			record({ id: "bm-direct", title: "chrome extension guide" }),
+			record({
+				id: "bm-expanded",
+				canonicalUrl: "https://example.com/b",
+				url: "https://example.com/b",
+				title: "manifest v3 notes",
+			}),
+		];
+
+		const result = findAskAiCandidates(records, "chrome", {
+			expandedTerms: ["manifest"],
+		});
+
+		expect(
+			candidatesOf(result)
+				.map((c) => c.id)
+				.sort(),
+		).toEqual(["bm-direct", "bm-expanded"]);
+	});
+
+	it("behaves exactly like direct scoring when expandedTerms is empty", () => {
+		const records = [record({ title: "typescript notes" })];
+
+		expect(
+			findAskAiCandidates(records, "typescript", { expandedTerms: [] }),
+		).toEqual(findAskAiCandidates(records, "typescript"));
+	});
+
+	it("does not rescue a too-short question", () => {
+		expect(
+			findAskAiCandidates([record()], "a", {
+				expandedTerms: ["example"],
+			}).kind,
+		).toBe("too-short-question");
+	});
+});

@@ -64,6 +64,12 @@ export type AskAiCandidate = {
 export type AskAiCandidateSearchOptions = {
 	readonly limit?: number;
 	readonly minQuestionLength?: number;
+	/**
+	 * Extra ephemeral query terms (e.g. AI-extracted keywords, MIK-047) scored
+	 * alongside the question's own tokens through the same tokenizer. They never
+	 * relax the minimum-question-length policy and are not persisted anywhere.
+	 */
+	readonly expandedTerms?: readonly string[];
 };
 
 export type AskAiCandidateSearchResult =
@@ -202,7 +208,9 @@ export function findAskAiCandidates(
 		return { kind: "empty-library" };
 	}
 
-	const tokens = tokenizeQuestion(trimmed);
+	const tokens = tokenizeQuestion(
+		[trimmed, ...(options.expandedTerms ?? [])].join(" "),
+	);
 	const scored: ScoredRecord[] = [];
 	for (const record of records) {
 		const domain = recordDomain(record) ?? "";

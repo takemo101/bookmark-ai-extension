@@ -23,6 +23,11 @@
  *   - {@link buildAskAiRecommendationPrompt} / {@link parseAskAiRecommendation}
  *                                     — pure Ask AI recommendation prompt
  *                                        builder and output parser (MIK-044).
+ *   - {@link buildAskAiKeywordExtractionPrompt} /
+ *     {@link parseAskAiKeywordExtraction}
+ *                                     — pure Ask AI keyword-extraction prompt
+ *                                        builder (question + language only) and
+ *                                        capped/deduped output parser (MIK-047).
  */
 export type { Result, Ok, Err } from "./result";
 export { ok, err } from "./result";
@@ -82,6 +87,21 @@ export {
 	buildAskAiRecommendationPrompt,
 	parseAskAiRecommendation,
 } from "./ask-ai-recommendation";
+
+export type {
+	AskAiKeywordExtractionOutput,
+	AskAiKeywordExtractionParseError,
+	AskAiKeywordExtractionParseErrorKind,
+	AskAiKeywordExtractionPrompt,
+	AskAiKeywordExtractionPromptInput,
+} from "./ask-ai-keywords";
+export {
+	MAX_ASK_AI_INTENT_CHARS,
+	MAX_ASK_AI_KEYWORD_CHARS,
+	MAX_ASK_AI_KEYWORDS,
+	buildAskAiKeywordExtractionPrompt,
+	parseAskAiKeywordExtraction,
+} from "./ask-ai-keywords";
 
 export type {
 	AnalysisProfile,
