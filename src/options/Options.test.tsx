@@ -1094,6 +1094,23 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).toContain("Syncing settings with Google Drive…");
 	});
 
+	it("shows the settings last synced timestamp in the rail", () => {
+		const html = renderSkills(
+			skillsViewOf({
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: false,
+					writing: false,
+					lastSyncedAt: "2026-01-06T12:34:56.000Z",
+				},
+			}),
+		);
+
+		expect(html).toContain("Last synced");
+		expect(html).toContain("2026");
+	});
+
 	it("keeps the sync status visible in the rail while loading", () => {
 		const html = renderSkills(
 			skillsViewOf({

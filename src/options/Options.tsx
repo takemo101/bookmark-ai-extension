@@ -1268,6 +1268,13 @@ function SkillsRail({ view, m }: { view: SkillsView; m: OptionsMessages }) {
 						{m.pendingLocal}
 					</p>
 				) : null}
+				{view.sync.lastSyncedAt ? (
+					<p
+						style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}
+					>
+						{m.lastSynced(formatTime(view.sync.lastSyncedAt))}
+					</p>
+				) : null}
 			</section>
 			<section style={panel}>
 				<p style={railLabel}>{m.skillsAbout}</p>
