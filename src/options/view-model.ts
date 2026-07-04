@@ -52,6 +52,12 @@ export type FacetsView = {
 /** A single dense bookmark row in the center ledger. */
 export type RowView = {
 	readonly canonicalUrl: string;
+	/**
+	 * Original visited URL, used for favicon lookup (MIK-034): Chrome's
+	 * `_favicon` endpoint resolves against visited URLs, so the normalized
+	 * canonical form (no `www.`, stripped params) can miss where this hits.
+	 */
+	readonly url: string;
 	readonly title: string;
 	/** Short AI summary, falling back to the URL when there is no description. */
 	readonly summary: string;
@@ -403,6 +409,7 @@ export function createOptionsController(
 function toRow(record: BookmarkRecord, selected: boolean): RowView {
 	return {
 		canonicalUrl: record.canonicalUrl,
+		url: record.url,
 		title: record.title,
 		summary: record.description ?? record.url,
 		genre: record.genre,
