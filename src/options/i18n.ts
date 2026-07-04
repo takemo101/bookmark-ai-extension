@@ -81,10 +81,12 @@ export type OptionsMessages = {
 	readonly askAiInputAria: string;
 	readonly askAiPlaceholder: string;
 	readonly askAiSubmit: string;
+	/** Label of the clear-session action that hard-resets the chat (MIK-048). */
+	readonly askAiClear: string;
+	/** Accessible label of the chat transcript log (MIK-048). */
+	readonly askAiTranscriptAria: string;
 	/** Non-streaming in-flight placeholder line while an answer is running. */
 	readonly askAiAnswering: string;
-	/** The submitted question echoed above the latest answer (MIK-046). */
-	readonly askAiYouAsked: (question: string) => string;
 	/** Safe status copy for the MIK-046 non-answer results. */
 	readonly askAiTooShort: string;
 	readonly askAiEmptyLibrary: string;
@@ -207,10 +209,12 @@ const EN: OptionsMessages = {
 		"What should I read about Chrome extensions?",
 	],
 	askAiInputAria: "Ask AI question",
-	askAiPlaceholder: "Ask about your saved bookmarks…",
+	askAiPlaceholder:
+		"Ask about your saved bookmarks… (Enter to send, Shift+Enter for a new line)",
 	askAiSubmit: "Ask",
+	askAiClear: "Clear chat",
+	askAiTranscriptAria: "Ask AI conversation",
 	askAiAnswering: "Looking through your saved bookmarks…",
-	askAiYouAsked: (question) => `You asked: ${question}`,
 	askAiTooShort: "Please ask a slightly longer question.",
 	askAiEmptyLibrary:
 		"You have no saved bookmarks yet — save a page from the popup first.",
@@ -354,10 +358,12 @@ const JA: OptionsMessages = {
 		"Chrome拡張について読むべきものは？",
 	],
 	askAiInputAria: "AIへの質問",
-	askAiPlaceholder: "保存済みブックマークについて質問…",
+	askAiPlaceholder:
+		"保存済みブックマークについて質問…（Enterで送信 / Shift+Enterで改行）",
 	askAiSubmit: "質問する",
+	askAiClear: "チャットをクリア",
+	askAiTranscriptAria: "AIとの会話",
 	askAiAnswering: "保存済みブックマークを確認中…",
-	askAiYouAsked: (question) => `質問: ${question}`,
 	askAiTooShort: "もう少し長い質問を入力してください。",
 	askAiEmptyLibrary:
 		"保存済みブックマークがまだありません。まずポップアップからページを保存してください。",

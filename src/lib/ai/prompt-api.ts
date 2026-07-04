@@ -208,19 +208,7 @@ export function createChromeAskAiRecommendationRunner(
 		if (!namespace) {
 			throw new PromptApiUnavailableError();
 		}
-		let availability: PromptApiAvailability;
-		try {
-			availability = normalizeAvailability(
-				await namespace.availability({
-					expectedOutputs: expectedTextOutputs(language),
-				}),
-			);
-		} catch {
-			throw new PromptApiUnavailableError();
-		}
-		if (availability !== "available") {
-			throw new PromptApiUnavailableError();
-		}
+		await assertAvailable(namespace, language);
 		const session = await namespace.create({
 			initialPrompts: [{ role: "system", content: request.systemInstruction }],
 			expectedOutputs: expectedTextOutputs(language),
@@ -230,5 +218,77 @@ export function createChromeAskAiRecommendationRunner(
 		} finally {
 			session.destroy?.();
 		}
+	};
+}
+
+/** Throws {@link PromptApiUnavailableError} unless the model can run NOW. */
+async function assertAvailable(
+	namespace: PromptModelNamespace,
+	language: SupportedLanguage,
+): Promise<void> {
+	let availability: PromptApiAvailability;
+	try {
+		availability = normalizeAvailability(
+			await namespace.availability({
+				expectedOutputs: expectedTextOutputs(language),
+			}),
+		);
+	} catch {
+		throw new PromptApiUnavailableError();
+	}
+	if (availability !== "available") {
+		throw new PromptApiUnavailableError();
+	}
+}
+
+/**
+ * A live browser Prompt API session held open across prompts, owned by one Ask
+ * AI chat session (MIK-048). Structurally satisfies the Ask AI controller's
+ * `AskAiPromptSession` port. `destroy` is safe to call once the chat is
+ * cleared; it tolerates browser sessions without a destroy method.
+ */
+export type AskAiPromptSessionHandle = {
+	prompt(input: string): Promise<string>;
+	destroy(): void;
+};
+
+/**
+ * Opens one volatile Ask AI chat session against the browser Prompt API
+ * (MIK-048). Throws {@link PromptApiUnavailableError} when the Prompt API
+ * cannot run right now, so the Ask AI controller degrades to the per-turn
+ * runner. Nothing about the session is persisted anywhere.
+ */
+export type AskAiPromptSessionFactory = (
+	systemInstruction: string,
+	language?: SupportedLanguage,
+) => Promise<AskAiPromptSessionHandle>;
+
+/**
+ * Build an {@link AskAiPromptSessionFactory} backed by the browser Prompt API.
+ * Unlike {@link createChromeAskAiRecommendationRunner} — which opens and
+ * destroys a session per prompt — the created session stays open so follow-up
+ * recommendation prompts share the model's conversational context; the caller
+ * (the Ask AI controller) destroys it on clear-session.
+ */
+export function createChromeAskAiPromptSessionFactory(
+	namespace: PromptModelNamespace | null = resolveNamespace(),
+): AskAiPromptSessionFactory {
+	return async (systemInstruction, language = "ja") => {
+		if (!namespace) {
+			throw new PromptApiUnavailableError();
+		}
+		await assertAvailable(namespace, language);
+		const session = await namespace.create({
+			initialPrompts: [{ role: "system", content: systemInstruction }],
+			expectedOutputs: expectedTextOutputs(language),
+		});
+		return {
+			prompt(input) {
+				return session.prompt(input);
+			},
+			destroy() {
+				session.destroy?.();
+			},
+		};
 	};
 }

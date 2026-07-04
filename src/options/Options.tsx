@@ -24,11 +24,12 @@ import {
 	resolveAnalysisProfileDisplay,
 } from "../lib/ai/index";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
-import type {
-	AskAiCardView,
-	AskAiController,
-	AskAiResultView,
-	AskAiView,
+import {
+	type AskAiCardView,
+	type AskAiController,
+	type AskAiResultView,
+	type AskAiView,
+	isAskAiComposerSubmitKey,
 } from "./ask-ai-view-model";
 import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
@@ -1452,15 +1453,15 @@ function FloatingSettingsSyncButton({
 }
 
 /**
- * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-042 design): the chat-like
- * saved-bookmark recommendation surface, rendered with the same screen shell
- * and rail/main workspace as the Library and Analysis skills. This slice is
- * the shell only — the rail shows the bookmark cache freshness (reusing the
- * Library's {@link SyncPanel} against the same `OptionsView.sync`) plus the
- * scope/privacy notes, and the main area holds the empty chat state with
- * clickable example prompts and the question form. Submit stays inert: no
- * Prompt API call, no recommendation cards, no persisted chat — the
- * conversation state lives only inside the injected {@link AskAiController}.
+ * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session): the
+ * chat-style saved-bookmark recommendation surface, rendered with the same
+ * screen shell and rail/main workspace as the Library and Analysis skills.
+ * The rail shows the bookmark cache freshness (reusing the Library's
+ * {@link SyncPanel} against the same `OptionsView.sync`) plus the
+ * scope/privacy notes; the main area holds the chat transcript and composer.
+ * The conversation state — transcript, Prompt API session, narrowed candidate
+ * context — lives only inside the injected {@link AskAiController} and is
+ * never persisted.
  */
 function AskAiScreen({
 	controller,
@@ -1531,13 +1532,16 @@ function AskAiRail({
 }
 
 /**
- * Ask AI main area (MIK-045, MIK-046): the empty chat state with localized
- * clickable example prompts, the latest question/answer exchange, and the
- * question form. Only the latest exchange renders — chat state lives in the
- * controller's memory and vanishes with the page. A clicked example fills the
- * input through the controller. The submit button is disabled for
- * empty/too-short questions (the controller applies the shared minimum-length
- * policy) and while an answer is in flight, with `aria-busy` on the form.
+ * Ask AI main area (MIK-045, MIK-046, MIK-048): the sitesurf-inspired chat
+ * surface. Before the first user message it shows the welcome state with
+ * localized clickable example prompts; afterwards it renders the full
+ * transcript — user turns as right-aligned bubbles, assistant turns through
+ * {@link AskAiResult} — followed by the composer. Chat state lives in the
+ * controller's memory and vanishes with the page. Enter sends, Shift+Enter
+ * inserts a newline, IME composition never sends; the composer is disabled
+ * while an answer is in flight, with `aria-busy` on the form. The clear-chat
+ * button hard-resets the conversation (transcript, input, Prompt API session,
+ * narrowed context) through {@link AskAiController.clearSession}.
  */
 function AskAiMain({
 	view,
@@ -1551,41 +1555,62 @@ function AskAiMain({
 	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
 	const submitDisabled = !view.canSubmit || view.answering;
+	const clearDisabled = !view.canClear;
 	return (
 		<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-			<div style={panel}>
-				<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
-					{m.askAiEmptyIntro}
-				</p>
-				<div
-					style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
-				>
-					{m.askAiExamples.map((example) => (
-						<button
-							key={example}
-							type="button"
-							style={chip}
-							onClick={() => controller.useExample(example)}
-						>
-							{example}
-						</button>
-					))}
+			{view.messages.length === 0 ? (
+				<div style={panel}>
+					<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
+						{m.askAiEmptyIntro}
+					</p>
+					<div
+						style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
+					>
+						{m.askAiExamples.map((example) => (
+							<button
+								key={example}
+								type="button"
+								style={chip}
+								onClick={() => controller.useExample(example)}
+							>
+								{example}
+							</button>
+						))}
+					</div>
 				</div>
-			</div>
-			{!view.answering && view.result ? (
-				<>
-					{view.askedQuestion ? (
-						<p style={{ fontSize: 12, color: palette.inkFaint, margin: 0 }}>
-							{m.askAiYouAsked(view.askedQuestion)}
-						</p>
-					) : null}
-					<AskAiResult
-						result={view.result}
-						m={m}
-						onOpenBookmark={onOpenBookmark}
-					/>
-				</>
-			) : null}
+			) : (
+				<div
+					role="log"
+					aria-label={m.askAiTranscriptAria}
+					style={{ display: "flex", flexDirection: "column", gap: 12 }}
+				>
+					{view.messages.map((message) =>
+						message.role === "user" ? (
+							<p
+								key={message.id}
+								style={{
+									...panel,
+									alignSelf: "flex-end",
+									maxWidth: "85%",
+									fontSize: 13,
+									color: palette.ink,
+									margin: 0,
+									whiteSpace: "pre-wrap",
+								}}
+							>
+								{message.text}
+							</p>
+						) : (
+							<AskAiResult
+								key={message.id}
+								result={message.result}
+								m={m}
+								onOpenBookmark={onOpenBookmark}
+							/>
+						),
+					)}
+				</div>
+			)}
 			{view.answering ? (
 				<p
 					role="status"
@@ -1607,9 +1632,24 @@ function AskAiMain({
 					value={view.question}
 					placeholder={m.askAiPlaceholder}
 					aria-label={m.askAiInputAria}
+					disabled={view.answering}
 					onChange={(e) => controller.setQuestion(e.target.value)}
+					onKeyDown={(event) => {
+						if (
+							isAskAiComposerSubmitKey({
+								key: event.key,
+								shiftKey: event.shiftKey,
+								isComposing: event.nativeEvent.isComposing,
+							})
+						) {
+							event.preventDefault();
+							if (view.canSubmit) {
+								void controller.submit();
+							}
+						}
+					}}
 				/>
-				<div>
+				<div style={{ display: "flex", gap: 8 }}>
 					<button
 						type="submit"
 						style={
@@ -1620,6 +1660,18 @@ function AskAiMain({
 						disabled={submitDisabled}
 					>
 						{m.askAiSubmit}
+					</button>
+					<button
+						type="button"
+						style={
+							clearDisabled
+								? { ...subtleButton, ...disabledButton }
+								: subtleButton
+						}
+						disabled={clearDisabled}
+						onClick={() => controller.clearSession()}
+					>
+						{m.askAiClear}
 					</button>
 				</div>
 			</form>
