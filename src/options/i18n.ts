@@ -45,6 +45,8 @@ export type OptionsMessages = {
 	readonly aiStatus: string;
 	readonly showAll: (count: number, unit: FacetUnit) => string;
 	readonly showFewer: (unit: FacetUnit) => string;
+	/** Option count shown while a facet group is collapsed (MIK-035). */
+	readonly facetCount: (count: number) => string;
 	readonly loadingLibrary: string;
 	readonly emptyLibrary: string;
 	readonly noMatches: string;
@@ -132,6 +134,7 @@ const EN: OptionsMessages = {
 	aiStatus: "AI status",
 	showAll: (count, unit) => `Show all ${count} ${unit}`,
 	showFewer: (unit) => `Show fewer ${unit}`,
+	facetCount: (count) => `${count} options`,
 	loadingLibrary: "Loading your library…",
 	emptyLibrary:
 		"No bookmarks yet. Save the current tab from the popup to start your ledger.",
@@ -241,6 +244,7 @@ const JA: OptionsMessages = {
 	aiStatus: "AIステータス",
 	showAll: (count) => `すべて表示（${count}件）`,
 	showFewer: () => "表示を減らす",
+	facetCount: (count) => `${count}件`,
 	loadingLibrary: "ライブラリを読み込み中…",
 	emptyLibrary:
 		"まだブックマークがありません。ポップアップから現在のタブを保存して台帳を始めましょう。",

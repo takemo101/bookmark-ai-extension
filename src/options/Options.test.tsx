@@ -18,9 +18,11 @@ import type {
  * backdrop click, quick delete stopPropagation, nav clicks) lives in handlers
  * the controller tests cover indirectly; here we pin the rendered structure —
  * the sheet carries dialog semantics without a Re-analyze action, rows carry
- * a quick delete button, the tag facet collapses behind a cap, Drive sync
- * floats instead of sitting in the rail, and the Analysis skills settings
- * screen renders separately from the ledger with a modal skill form. Screen
+ * a quick delete button, growable facets cap their expanded chip lists, facet
+ * groups collapse behind aria-expanded headers with active-filter summaries
+ * (MIK-035), Drive sync floats instead of sitting in the rail, and the
+ * Analysis skills settings screen renders separately from the ledger with a
+ * modal skill form. Screen
  * switching is exercised through the `initialScreen` prop because static
  * rendering cannot dispatch clicks. The scroll-lock and tag-cap logic are
  * unit-tested via their exported helpers because tests run in node, not
@@ -366,13 +368,16 @@ describe("Options row quick delete (MIK-024)", () => {
 	});
 });
 
-describe("Options tag facet cap (MIK-024)", () => {
+describe("Options facet cap (MIK-024)", () => {
+	// The capped-list render behavior of an expanded growable facet is pinned
+	// through the Domain group (open by default, MIK-035) in the MIK-028 block;
+	// the shared cap logic itself stays unit-tested here.
 	const manyTags = Array.from(
 		{ length: 20 },
 		(_, i) => `tag-${String(i + 1).padStart(2, "0")}`,
 	);
 
-	it("collapses a long tag list behind a Show all toggle", () => {
+	it("shows every domain with no toggle when the list fits the cap", () => {
 		const html = render(
 			viewOf({
 				rows: [rowOf()],
@@ -381,64 +386,91 @@ describe("Options tag facet cap (MIK-024)", () => {
 				empty: false,
 				facets: {
 					genres: [],
-					tags: manyTags,
+					tags: [],
 					statuses: ["ready", "pending", "unavailable", "failed"],
-					domains: [],
+					domains: ["a.test", "b.test", "c.test", "d.test", "e.test"],
 				},
 			}),
 		);
 
-		expect(html).toContain("#tag-01");
-		expect(html).toContain("#tag-12");
-		expect(html).not.toContain("#tag-13");
-		expect(html).toContain("Show all 20 tags");
-	});
-
-	it("shows every tag with no toggle when the list fits the cap", () => {
-		const html = render(
-			viewOf({
-				rows: [rowOf()],
-				totalCount: 1,
-				filteredCount: 1,
-				empty: false,
-				facets: {
-					genres: [],
-					tags: manyTags.slice(0, 5),
-					statuses: ["ready", "pending", "unavailable", "failed"],
-					domains: [],
-				},
-			}),
-		);
-
-		expect(html).toContain("#tag-05");
+		expect(html).toContain(">e.test<");
 		expect(html).not.toContain("Show all");
-	});
-
-	it("keeps the active tag filter visible even when collapsed beyond the cap", () => {
-		const html = render(
-			viewOf({
-				rows: [rowOf()],
-				totalCount: 1,
-				filteredCount: 1,
-				empty: false,
-				filters: { query: "", tag: "tag-20" },
-				facets: {
-					genres: [],
-					tags: manyTags,
-					statuses: ["ready", "pending", "unavailable", "failed"],
-					domains: [],
-				},
-			}),
-		);
-
-		expect(html).toContain("#tag-20");
-		expect(html).not.toContain("#tag-13");
 	});
 
 	it("returns the full list when expanded (visibleFacetValues)", () => {
 		expect(visibleFacetValues(manyTags, undefined, true)).toEqual(manyTags);
 		expect(visibleFacetValues(manyTags, undefined, false)).toHaveLength(12);
 		expect(visibleFacetValues(manyTags, "tag-20", false)).toContain("tag-20");
+	});
+});
+
+describe("Options collapsible facet groups (MIK-035)", () => {
+	const manyTags = Array.from(
+		{ length: 20 },
+		(_, i) => `tag-${String(i + 1).padStart(2, "0")}`,
+	);
+	const facets = {
+		genres: ["技術"],
+		tags: manyTags,
+		statuses: ["ready", "pending", "unavailable", "failed"] as const,
+		domains: ["example.test", "github.com"],
+	};
+
+	// No rows: the row open button also renders aria-expanded, so an empty
+	// list keeps the aria-expanded counts pinned to the four facet headers.
+	const baseView = (overrides: Partial<OptionsView> = {}) =>
+		viewOf({
+			rows: [],
+			totalCount: 1,
+			filteredCount: 0,
+			empty: false,
+			noMatches: true,
+			facets,
+			...overrides,
+		});
+
+	it("defaults Domain/Genre open and Tags/AI status collapsed with counts", () => {
+		const html = render(baseView());
+
+		// Domain and Genre bodies render their chips.
+		expect(html).toContain(">example.test<");
+		expect(html).toContain(">技術<");
+		// Tags and AI status stay collapsed: no chips, only header counts.
+		expect(html).not.toContain("#tag-01");
+		expect(html).not.toContain("Show all 20 tags");
+		expect(html).toContain("20 options");
+		expect(html).toContain("4 options");
+		// Exactly the four group headers carry the expanded state.
+		expect(html.match(/aria-expanded="true"/g)).toHaveLength(2);
+		expect(html.match(/aria-expanded="false"/g)).toHaveLength(2);
+	});
+
+	it("keeps the active tag visible as a header summary while collapsed", () => {
+		const html = render(baseView({ filters: { query: "", tag: "tag-20" } }));
+
+		// The summary chip is the only #tag-20 occurrence — the body stays closed.
+		expect(html.match(/#tag-20/g)).toHaveLength(1);
+		expect(html).not.toContain("#tag-01");
+		expect(html).not.toContain("Show all 20 tags");
+		// Clear filters stays reachable next to the search box.
+		expect(html).toContain("Clear filters");
+	});
+
+	it("keeps the active AI status visible as a header summary while collapsed", () => {
+		const html = render(
+			baseView({ filters: { query: "", aiStatus: "failed" } }),
+		);
+
+		// No rows and a collapsed body: the only ">failed<" is the summary chip.
+		expect(html.match(/>failed</g)).toHaveLength(1);
+		expect(html).toContain("Clear filters");
+	});
+
+	it("localizes the collapsed option count for the ja language", () => {
+		const html = render(baseView(), "ja");
+
+		expect(html).toContain("20件");
+		expect(html).not.toContain("20 options");
 	});
 });
 

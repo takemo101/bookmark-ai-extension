@@ -50,6 +50,10 @@ import {
 	chipActive,
 	dangerButton,
 	disabledButton,
+	facetActiveSummary,
+	facetCollapsedCount,
+	facetHeaderButton,
+	facetHeaderLabel,
 	floatingSyncButton,
 	guidanceBox,
 	ledger,
@@ -505,10 +509,14 @@ export function visibleFacetValues<T extends string>(
 }
 
 /**
- * One labeled chip group inside the Filters panel (MIK-028): a facet
- * subsection with single-select toggle chips and — for growable facets — the
- * capped list behind a `Show all N` toggle. Grouping every facet through this
- * one shape is what keeps the rail structured instead of scattered.
+ * One collapsible chip group inside the Filters panel (MIK-028, MIK-035): the
+ * group header is a toggle button (`aria-expanded`) so long facets stop
+ * stretching the rail, and — for growable facets — the expanded body keeps the
+ * capped list behind a `Show all N` toggle. While collapsed the header shows
+ * the active filter value as a summary chip (so a selection never becomes
+ * invisible) or a faint option count when nothing is active. Grouping every
+ * facet through this one shape is what keeps the rail structured instead of
+ * scattered.
  */
 function FacetGroup<T extends string>({
 	label,
@@ -519,6 +527,7 @@ function FacetGroup<T extends string>({
 	format = (value) => value,
 	unit = "tags",
 	cappable = false,
+	defaultOpen = false,
 }: {
 	label: string;
 	values: readonly T[];
@@ -529,8 +538,11 @@ function FacetGroup<T extends string>({
 	/** Which plural noun the Show all/fewer copy of a cappable facet uses. */
 	unit?: FacetUnit;
 	cappable?: boolean;
+	/** Whether the group renders expanded on first mount (MIK-035). */
+	defaultOpen?: boolean;
 }) {
-	// Expansion is view-only UI state; it never touches the controller.
+	// Open/expanded are view-only UI state; they never touch the controller.
+	const [open, setOpen] = useState(defaultOpen);
 	const [expanded, setExpanded] = useState(false);
 	if (values.length === 0) {
 		return null;
@@ -542,33 +554,61 @@ function FacetGroup<T extends string>({
 
 	return (
 		<div>
-			<p style={railLabel}>{label}</p>
-			<div
-				style={
-					expanded
-						? { display: "flex", flexWrap: "wrap", gap: 6, ...tagListExpanded }
-						: { display: "flex", flexWrap: "wrap", gap: 6 }
-				}
+			<button
+				type="button"
+				style={facetHeaderButton}
+				aria-expanded={open}
+				onClick={() => setOpen((current) => !current)}
 			>
-				{visible.map((value) => (
-					<button
-						key={value}
-						type="button"
-						style={active === value ? chipActive : chip}
-						onClick={() => onToggle(active === value ? undefined : value)}
+				<span aria-hidden style={{ fontSize: 9, color: palette.inkFaint }}>
+					{open ? "▾" : "▸"}
+				</span>
+				<span style={facetHeaderLabel}>{label}</span>
+				{!open ? (
+					active !== undefined ? (
+						<span style={facetActiveSummary}>{format(active)}</span>
+					) : (
+						<span style={facetCollapsedCount}>
+							{m.facetCount(values.length)}
+						</span>
+					)
+				) : null}
+			</button>
+			{open ? (
+				<>
+					<div
+						style={
+							expanded
+								? {
+										display: "flex",
+										flexWrap: "wrap",
+										gap: 6,
+										...tagListExpanded,
+									}
+								: { display: "flex", flexWrap: "wrap", gap: 6 }
+						}
 					>
-						{format(value)}
-					</button>
-				))}
-			</div>
-			{overflow ? (
-				<button
-					type="button"
-					style={{ ...subtleButton, marginTop: 8 }}
-					onClick={() => setExpanded((current) => !current)}
-				>
-					{expanded ? m.showFewer(unit) : m.showAll(values.length, unit)}
-				</button>
+						{visible.map((value) => (
+							<button
+								key={value}
+								type="button"
+								style={active === value ? chipActive : chip}
+								onClick={() => onToggle(active === value ? undefined : value)}
+							>
+								{format(value)}
+							</button>
+						))}
+					</div>
+					{overflow ? (
+						<button
+							type="button"
+							style={{ ...subtleButton, marginTop: 8 }}
+							onClick={() => setExpanded((current) => !current)}
+						>
+							{expanded ? m.showFewer(unit) : m.showAll(values.length, unit)}
+						</button>
+					) : null}
+				</>
 			) : null}
 		</div>
 	);
@@ -576,9 +616,11 @@ function FacetGroup<T extends string>({
 
 /**
  * The single Filters panel (MIK-028): Domain, Genre, Tags, and AI status as
- * uniform subsections in one card, replacing the scattered per-facet blocks.
- * Domain and Tags can grow without bound, so they collapse behind the shared
- * facet cap; Genre and AI status stay small and render fully.
+ * uniform collapsible subsections in one card. Domain and Tags can grow
+ * without bound, so their expanded bodies collapse behind the shared facet
+ * cap. Domain and Genre start open as the common entry points; Tags and AI
+ * status start collapsed to keep the rail short (MIK-035) — an active filter
+ * stays visible through the collapsed header summary.
  */
 function FilterFacets({
 	facets,
@@ -605,6 +647,7 @@ function FilterFacets({
 				onToggle={(domain) => controller.setDomain(domain)}
 				unit="domains"
 				cappable
+				defaultOpen
 			/>
 			<FacetGroup
 				label={m.genre}
@@ -612,6 +655,7 @@ function FilterFacets({
 				active={filters.genre}
 				m={m}
 				onToggle={(genre) => controller.setGenre(genre)}
+				defaultOpen
 			/>
 			<FacetGroup
 				label={m.tags}

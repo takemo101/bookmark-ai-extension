@@ -169,6 +169,10 @@ export const rail: CSSProperties = {
 	display: "flex",
 	flexDirection: "column",
 	gap: 14,
+	// The sticky rail scrolls inside the viewport instead of growing the page
+	// when domains/tags multiply (MIK-035); 40 = top offset + bottom breathing.
+	maxHeight: "calc(100vh - 40px)",
+	overflowY: "auto",
 };
 
 export const panel: CSSProperties = {
@@ -281,6 +285,54 @@ export const rowDeleteButton: CSSProperties = {
 export const tagListExpanded: CSSProperties = {
 	maxHeight: 240,
 	overflowY: "auto",
+};
+
+/**
+ * Collapsible facet group header (MIK-035): a full-width toggle button whose
+ * accessible name is the group label plus the collapsed active-filter summary.
+ */
+export const facetHeaderButton: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	gap: 6,
+	width: "100%",
+	margin: "0 0 8px",
+	padding: 0,
+	background: "transparent",
+	border: "none",
+	cursor: "pointer",
+	fontFamily: fontStack,
+	textAlign: "left",
+};
+
+/** The group label inside the header button; margin moves to the button. */
+export const facetHeaderLabel: CSSProperties = {
+	...railLabel,
+	margin: 0,
+};
+
+/**
+ * Compact summary chip for a collapsed group's active filter value (MIK-035):
+ * the selection stays visible without expanding the group.
+ */
+export const facetActiveSummary: CSSProperties = {
+	marginLeft: "auto",
+	fontSize: 11,
+	color: palette.accentInk,
+	background: palette.accent,
+	borderRadius: 999,
+	padding: "1px 8px",
+	maxWidth: 130,
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
+};
+
+/** Faint option count shown while a group is collapsed with no active filter. */
+export const facetCollapsedCount: CSSProperties = {
+	marginLeft: "auto",
+	fontSize: 11,
+	color: palette.inkFaint,
 };
 
 /**
