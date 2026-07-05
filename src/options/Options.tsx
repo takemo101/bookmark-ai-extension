@@ -2198,7 +2198,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formInstruction}
 				<textarea
-					style={{ ...s.searchInput, minHeight: 72, resize: "vertical" }}
+					style={{ ...s.searchInput, minHeight: 144, resize: "vertical" }}
 					value={view.form.instruction}
 					onChange={set("instruction")}
 					required

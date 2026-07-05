@@ -1420,6 +1420,7 @@ describe("Skill form dialog (MIK-025; drawer since MIK-053)", () => {
 		expect(html).toContain('aria-label="Close skill form"');
 		expect(html).toContain(">Cancel<");
 		expect(html).toContain(">Create skill<");
+		expect(html).toMatch(/<textarea[^>]*min-height:144px/);
 		// Authoring guidance sits next to the form, including safety warnings.
 		expect(html).toContain("Writing a good instruction");
 		expect(html).toContain("Never write instructions that");
@@ -1437,10 +1438,29 @@ describe("Skill form dialog (MIK-025; drawer since MIK-053)", () => {
 		expect(html).toContain(
 			"It cannot change the JSON keys, the output language,",
 		);
-		expect(html).toContain("## Video overview and ## Comment picks");
+		expect(html).toContain("## Video overview, ## Comment picks");
+		expect(html).toContain(
+			"analysisMarkdown: use exactly the requested headings",
+		);
+		expect(html).toContain("description: keep it short");
+		expect(html).toContain("tags: prefer searchable keywords");
 		expect(html).toContain(
 			"ask to change the output language or the AI model;",
 		);
+	});
+
+	it("localizes field-specific instruction guidance for Japanese users", () => {
+		const html = renderWithSkills(
+			viewOf(),
+			skillsViewOf({ formOpen: true }),
+			"analysis-skills",
+			"ja",
+		);
+
+		expect(html).toContain("良い指示の書き方");
+		expect(html).toContain("analysisMarkdown: 必ず指定した見出しだけを使う");
+		expect(html).toContain("description: 1文で短く要約する");
+		expect(html).toContain("tags: 検索しやすいキーワードを優先する");
 	});
 
 	it("opens an edit modal populated with the skill being edited", () => {
