@@ -1187,7 +1187,7 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		return renderWithSkills(viewOf(), skillsView, "analysis-skills");
 	}
 
-	it("renders the same rail/main workspace body grid as the Library", () => {
+	it("keeps the workspace grid on the Library but not on Analysis skills (MIK-052)", () => {
 		const libraryView = viewOf({
 			rows: [rowOf()],
 			totalCount: 1,
@@ -1201,19 +1201,25 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 			"analysis-skills",
 		);
 
-		for (const html of [library, skills]) {
-			expect(html).toContain("grid-template-columns:240px");
-		}
+		// The Library rail holds active search/filter controls, so it keeps the
+		// two-column grid; the skills screen lost its explanation-only rail.
+		expect(library).toContain("grid-template-columns:240px");
+		expect(library).toContain("<aside");
+		expect(skills).not.toContain("grid-template-columns:240px");
+		expect(skills).not.toContain("<aside");
 	});
 
-	it("keeps the rail to settings-file guidance only (MIK-051)", () => {
+	it("centers the skills content in a no-rail column with guidance in header help (MIK-052)", () => {
 		const html = renderSkills(skillsViewOf());
 
-		// The settings sync readout lives only in the header hub now; the rail
-		// keeps the settings-file guidance ahead of the main cards.
+		// The main content is centered in a readable single column.
+		expect(html).toContain("max-width:880px");
+		// The settings sync readout lives only in the header hub.
 		expect(html.match(/Settings sync/g)).toHaveLength(1);
-		expect(html.indexOf("Settings sync")).toBeLessThan(html.indexOf("<aside"));
+		// The settings-file guidance moved into the title-adjacent help, which
+		// renders ahead of the main skill cards.
 		const order = [
+			'aria-label="Analysis skills help"',
 			"bookmark-ai/settings.json",
 			"Custom (Drive-synced)",
 			"Built-in (read-only)",
@@ -1223,11 +1229,11 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).not.toContain("Refresh settings");
 	});
 
-	it("keeps the subtitle user-facing and the settings file path in the rail", () => {
+	it("keeps the subtitle user-facing and the settings file path in the header help", () => {
 		const html = renderSkills(skillsViewOf());
 
 		expect(html).toContain("Tune how the AI analyzes the pages you save");
-		// The technical filename lives only in the rail guidance now.
+		// The technical filename lives only in the header help guidance now.
 		expect(html.match(/bookmark-ai\/settings\.json/g)).toHaveLength(1);
 	});
 
@@ -1435,8 +1441,9 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).not.toContain("Built-in (read-only)");
 	});
 
-	it("keeps the shared workspace grid on the Library and Analysis skills screens", () => {
-		// MIK-050 removes the grid only on Ask AI; the other screens keep it.
+	it("keeps the shared workspace grid on the Library screen only (MIK-052)", () => {
+		// MIK-050 removed the grid on Ask AI; MIK-052 removes the skills
+		// explanation-only rail too — only the Library keeps active rail controls.
 		const library = renderWithAskAi(
 			viewOf({
 				rows: [rowOf()],
@@ -1452,18 +1459,35 @@ describe("Ask AI screen shell (MIK-045)", () => {
 			"analysis-skills",
 		);
 
-		for (const html of [library, skills]) {
-			expect(html).toContain("grid-template-columns:240px");
-		}
+		expect(library).toContain("grid-template-columns:240px");
+		expect(skills).not.toContain("grid-template-columns:240px");
 	});
 
-	it("keeps the Ask AI chat shell aligned with the shared 1200px screen width", () => {
+	it("centers the Ask AI chat in a comfortable no-rail chat column (MIK-052)", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
-		// The app header and Ask AI screen body share the Library/Skills width cap;
-		// removing the rail still gives the chat more room than the old right pane.
+		// The app header and screen shell keep the shared 1200px width cap; the
+		// chat itself is centered in a narrower comfortable column inside it.
 		expect(html.match(/max-width:1200px/g)).toHaveLength(2);
 		expect(html).not.toContain("max-width:1600px");
+		expect(html).toContain("max-width:960px");
+		// The centered chat wrapper hosts the scrolling chat viewport.
+		expect(html.indexOf("max-width:960px")).toBeLessThan(
+			html.indexOf("overflow-y:auto"),
+		);
+	});
+
+	it("locks the Ask AI outer page so the chat viewport is the only scroller", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		// The Ask AI page itself should not scroll; the transcript viewport owns
+		// vertical overflow so the composer remains pinned.
+		expect(html).toContain(
+			"height:100vh;overflow:hidden;display:flex;flex-direction:column",
+		);
+		expect(html).toContain("flex:1;min-height:0");
+		expect(html).toContain("height:100%;min-height:0");
+		expect(html).not.toContain("height:calc(100vh - 180px)");
 	});
 
 	it("keeps sync status and timestamp out of the Ask AI chat context (MIK-051)", () => {
@@ -1925,9 +1949,10 @@ describe("Ask AI chat layout polish (MIK-049)", () => {
 			"ask-ai",
 		);
 
-		// The chat shell claims the viewport height so the composer stays pinned
-		// while only the transcript viewport scrolls.
-		expect(html).toContain("height:calc(100vh - 180px)");
+		// The Ask AI page bounds the available height; the chat shell fills that
+		// space so the composer stays pinned while only the transcript scrolls.
+		expect(html).toContain("height:100%;min-height:0");
+		expect(html).not.toContain("height:calc(100vh - 180px)");
 		expect(html).toContain("flex-shrink:0");
 		// The transcript log lives inside the scroll viewport, above the composer.
 		expect(html.indexOf('role="log"')).toBeGreaterThan(-1);
@@ -2010,6 +2035,75 @@ describe("Ask AI chat layout polish (MIK-049)", () => {
 		const formStart = html.indexOf("<form");
 		expect(formStart).toBeGreaterThan(-1);
 		expect(html.indexOf(">Clear chat<")).toBeGreaterThan(formStart);
+	});
+});
+
+describe("Screen header help (MIK-052)", () => {
+	const populatedView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+	});
+
+	it("renders a title-adjacent help disclosure on the Analysis skills screen", () => {
+		const html = renderWithSkills(viewOf(), skillsViewOf(), "analysis-skills");
+
+		// A native <details>/<summary> disclosure — click/focus accessible, never
+		// hover-only — whose summary is the small `?` toggle beside the title.
+		expect(html).toMatch(/<summary[^>]*aria-label="Analysis skills help"/);
+		const title = html.indexOf(">Analysis skills</h2>");
+		const help = html.indexOf('aria-label="Analysis skills help"');
+		const subtitle = html.indexOf(
+			"Tune how the AI analyzes the pages you save",
+		);
+		expect(title).toBeGreaterThanOrEqual(0);
+		expect(help).toBeGreaterThan(title);
+		expect(help).toBeLessThan(subtitle);
+		// The help content carries the existing settings-file guidance.
+		expect(html).toContain(
+			"Custom skills tune the AI analysis for matching pages",
+		);
+		expect(html).toContain("bookmark-ai/settings.json");
+		// Two disclosures on this screen: the header sync hub and the title help.
+		expect(html.match(/<details/g)).toHaveLength(2);
+	});
+
+	it("renders a title-adjacent help disclosure with scope/privacy guidance on Ask AI", () => {
+		const html = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai");
+
+		expect(html).toMatch(/<summary[^>]*aria-label="Ask AI help"/);
+		// The help explains the local-cache scope, the no-open-web boundary, and
+		// non-persistence; the compact chat context keeps the same critical copy
+		// inside the viewport (MIK-050), so each note appears exactly twice.
+		expect(html.match(/it does not search the open web/g)).toHaveLength(2);
+		expect(html.match(/this chat is never saved/g)).toHaveLength(2);
+		// The header help precedes the scrolling chat viewport.
+		expect(html.indexOf('aria-label="Ask AI help"')).toBeLessThan(
+			html.indexOf("overflow-y:auto"),
+		);
+	});
+
+	it("keeps the Library header without a help control and with its rail", () => {
+		const html = renderWithSkills(populatedView, skillsViewOf());
+
+		expect(html).not.toContain('aria-label="Analysis skills help"');
+		expect(html).not.toContain('aria-label="Ask AI help"');
+		expect(html).toContain("grid-template-columns:240px");
+		expect(html).toContain('aria-label="Search bookmarks"');
+	});
+
+	it("localizes the help toggles for the ja language", () => {
+		const skills = renderWithSkills(
+			viewOf(),
+			skillsViewOf(),
+			"analysis-skills",
+			"ja",
+		);
+		expect(skills).toContain('aria-label="分析スキルのヘルプ"');
+
+		const askAi = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai", "ja");
+		expect(askAi).toContain('aria-label="AIに聞くのヘルプ"');
 	});
 });
 

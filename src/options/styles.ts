@@ -51,11 +51,24 @@ export const page: CSSProperties = {
 };
 
 /**
- * The shared two-zone workspace body (MIK-038): left rail · main content. Both
- * the Library ledger (rail: search/sync/filters, main: bookmark rows, MIK-022)
- * and the Analysis skills screen (rail: settings sync/guidance, main: skill
- * cards) render inside this grid so the two screens share one body rhythm. The
- * page frame (max width, margins) comes from the shared {@link screenShell}.
+ * Ask AI page frame: unlike Library/Skills, the chat screen should not let the
+ * outer document scroll. The transcript viewport owns vertical overflow so the
+ * composer stays pinned inside the chat surface.
+ */
+export const askAiPage: CSSProperties = {
+	...page,
+	height: "100vh",
+	overflow: "hidden",
+	display: "flex",
+	flexDirection: "column",
+};
+
+/**
+ * The two-zone workspace body (MIK-038): left rail · main content. Since
+ * MIK-052 only the Library ledger renders inside this grid — rails are for
+ * active controls (search/filters), and screens without them center their
+ * content in {@link noRailContent} / {@link chatColumn} instead. The page
+ * frame (max width, margins) comes from the shared {@link screenShell}.
  */
 export const workspaceBody: CSSProperties = {
 	display: "grid",
@@ -159,10 +172,109 @@ export const screenShell: CSSProperties = {
 	gap: 14,
 };
 
+/**
+ * Ask AI screen frame inside {@link askAiPage}: fill the remaining viewport
+ * under the app header and pass a bounded height down to the chat column.
+ */
+export const askAiScreenShell: CSSProperties = {
+	...screenShell,
+	width: "100%",
+	boxSizing: "border-box",
+	flex: 1,
+	minHeight: 0,
+	overflow: "hidden",
+};
+
 /** Screen title inside the shared screen header (MIK-036). */
 export const screenTitle: CSSProperties = {
 	fontSize: 18,
 	margin: 0,
+};
+
+/**
+ * Title row of the shared screen header (MIK-052): the screen title plus the
+ * optional title-adjacent help disclosure.
+ */
+export const screenTitleRow: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	gap: 8,
+};
+
+/**
+ * Title-adjacent help disclosure (MIK-052): a native `<details>` like the
+ * sync hub — no dependency, no persisted open state. The anchor is relative
+ * so the panel can overlay the screen content below the title.
+ */
+export const screenHelp: CSSProperties = {
+	position: "relative",
+};
+
+/** The small `?` summary toggle beside the screen title (MIK-052). */
+export const screenHelpSummary: CSSProperties = {
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: 20,
+	height: 20,
+	fontFamily: fontStack,
+	fontSize: 12,
+	color: palette.inkSoft,
+	background: palette.paperRaised,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 999,
+	cursor: "pointer",
+	listStyle: "none",
+};
+
+/**
+ * The opened help panel below the title (MIK-052): explanatory screen
+ * guidance that used to live in explanation-only rails. Mirrors the sync hub
+ * panel chrome; sits under the detail sheet/modal backdrops (zIndex 20/30).
+ */
+export const screenHelpPanel: CSSProperties = {
+	position: "absolute",
+	left: 0,
+	top: "calc(100% + 8px)",
+	zIndex: 15,
+	width: 320,
+	boxSizing: "border-box",
+	padding: "12px 14px",
+	background: palette.paperRaised,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 8,
+	boxShadow: "0 10px 28px rgba(58, 52, 43, 0.22)",
+	fontSize: 12,
+	color: palette.inkSoft,
+	textAlign: "left",
+};
+
+/**
+ * Centered single-column body for no-rail screens (MIK-052): screens whose
+ * rail held only explanations render their main content in this readable
+ * column instead of the {@link workspaceBody} grid.
+ */
+export const noRailContent: CSSProperties = {
+	width: "100%",
+	maxWidth: 880,
+	margin: "0 auto",
+	boxSizing: "border-box",
+};
+
+/**
+ * Centered comfortable chat column for the no-rail Ask AI screen (MIK-052):
+ * a bit wider than {@link noRailContent} so recommendation cards breathe, but
+ * narrower than the 1200px shell for chat readability.
+ */
+export const chatColumn: CSSProperties = {
+	width: "100%",
+	maxWidth: 960,
+	margin: "0 auto",
+	boxSizing: "border-box",
+	flex: 1,
+	minHeight: 0,
+	display: "flex",
+	flexDirection: "column",
 };
 
 /** One-line screen subtitle under the screen title (MIK-036). */
@@ -536,16 +648,16 @@ export const disabledButton: CSSProperties = {
  * Ask AI chat surface (MIK-049, sitesurf-inspired layout): the main area of
  * the Ask AI screen becomes a fixed-height flex column — scrollable transcript
  * viewport on top, composer pinned at the bottom — so the composer never
- * scrolls away with the conversation. The height is viewport-derived because
- * the options page itself scrolls: 180 ≈ app header + screen header + shell
- * paddings above the workspace body.
+ * scrolls away with the conversation. The parent Ask AI page/screen/column
+ * provide the bounded viewport height; this shell fills that space instead of
+ * guessing with a viewport-minus-header magic number.
  */
 export const askAiChatShell: CSSProperties = {
+	height: "100%",
+	minHeight: 0,
 	display: "flex",
 	flexDirection: "column",
 	gap: 12,
-	height: "calc(100vh - 180px)",
-	minHeight: 320,
 };
 
 /** Hosts the scroll viewport plus the floating jump-to-latest overlay. */

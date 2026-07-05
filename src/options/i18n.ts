@@ -71,8 +71,10 @@ export type OptionsMessages = {
 	readonly askAiScreenAria: string;
 	/** User-facing one-line subtitle under the Ask AI screen title (MIK-045). */
 	readonly askAiSubtitle: string;
-	/** Rail panel label for the Ask AI scope/privacy notes. */
+	/** Label for the Ask AI scope/privacy notes (chat context and header help). */
 	readonly askAiAbout: string;
+	/** Accessible name of the Ask AI title-adjacent help toggle (MIK-052). */
+	readonly askAiHelpAria: string;
 	/** Local-cache/all-saved-bookmarks scope note — not the open web. */
 	readonly askAiScopeNote: string;
 	/** Short-bookmark-info usage and chat-is-never-saved note. */
@@ -109,9 +111,11 @@ export type OptionsMessages = {
 	readonly skillsScreenAria: string;
 	/** User-facing one-line subtitle under the Analysis skills screen title. */
 	readonly skillsSubtitle: string;
-	/** Rail guidance panel label holding the settings-file context (MIK-038). */
+	/** Header-help guidance label holding the settings-file context (MIK-052). */
 	readonly skillsAbout: string;
 	readonly skillsIntro: { readonly before: string; readonly after: string };
+	/** Accessible name of the Analysis skills title-adjacent help toggle (MIK-052). */
+	readonly skillsHelpAria: string;
 	readonly settingsSync: string;
 	readonly settingsSyncingDrive: string;
 	readonly settingsWritingDrive: string;
@@ -207,6 +211,7 @@ const EN: OptionsMessages = {
 	askAiSubtitle:
 		"Ask in your own words and get recommendations from your saved bookmarks",
 	askAiAbout: "About Ask AI",
+	askAiHelpAria: "Ask AI help",
 	askAiScopeNote:
 		"Ask AI searches all your saved bookmarks in the local cache — it does not search the open web. Use Sync Drive in the app header to refresh the cache.",
 	askAiPrivacyNote:
@@ -248,6 +253,7 @@ const EN: OptionsMessages = {
 			"Custom skills tune the AI analysis for matching pages. They are stored in ",
 		after: " in your Google Drive.",
 	},
+	skillsHelpAria: "Analysis skills help",
 	settingsSync: "Settings sync",
 	settingsSyncingDrive: "Syncing settings with Google Drive…",
 	settingsWritingDrive: "Writing settings changes to Google Drive…",
@@ -360,6 +366,7 @@ const JA: OptionsMessages = {
 	askAiSubtitle:
 		"自然な言葉で質問して、保存済みブックマークからおすすめを受け取ります",
 	askAiAbout: "AIに聞くについて",
+	askAiHelpAria: "AIに聞くのヘルプ",
 	askAiScopeNote:
 		"AIに聞くは、ローカルキャッシュ内のすべての保存済みブックマークを検索します。ウェブ全体は検索しません。キャッシュを最新にするにはヘッダーの「Driveと同期」を実行してください。",
 	askAiPrivacyNote:
@@ -401,6 +408,7 @@ const JA: OptionsMessages = {
 			"カスタムスキルは、一致するページのAI分析を調整します。Google Driveの ",
 		after: " に保存されます。",
 	},
+	skillsHelpAria: "分析スキルのヘルプ",
 	settingsSync: "設定の同期",
 	settingsSyncingDrive: "設定をGoogle Driveと同期中…",
 	settingsWritingDrive: "設定の変更をGoogle Driveに書き込み中…",
