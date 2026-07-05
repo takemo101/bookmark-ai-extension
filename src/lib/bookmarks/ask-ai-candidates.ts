@@ -50,6 +50,12 @@ export const DEFAULT_ASK_AI_MIN_QUESTION_LENGTH = 2;
 export type AskAiCandidate = {
 	readonly id: string;
 	readonly canonicalUrl: string;
+	/**
+	 * The original visited URL (MIK-053): display-only, used by the options UI
+	 * to resolve the row/card favicon exactly like Library rows (MIK-034). The
+	 * recommendation prompt payload allowlist never includes it.
+	 */
+	readonly url: string;
 	readonly title: string;
 	readonly domain: string;
 	readonly description?: string;
@@ -170,6 +176,7 @@ function toCandidate(scored: ScoredRecord): AskAiCandidate {
 	return {
 		id: record.id,
 		canonicalUrl: record.canonicalUrl,
+		url: record.url,
 		title: record.title,
 		domain: scored.domain,
 		description: record.description,

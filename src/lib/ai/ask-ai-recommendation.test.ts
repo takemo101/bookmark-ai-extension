@@ -18,6 +18,7 @@ function makeCandidate(
 	return {
 		id: "id-1",
 		canonicalUrl: "https://secret-host.example.com/private/path?q=1",
+		url: "https://www.secret-host.example.com/private/path?q=1&utm=x",
 		title: "TypeScript Handbook",
 		domain: "example.com",
 		description: "A guide to TypeScript.",
