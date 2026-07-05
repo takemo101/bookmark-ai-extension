@@ -4,14 +4,18 @@
  * A pure projection of {@link OptionsController.getView} with two top-level
  * screens behind a small nav (MIK-025): the Library — the two-zone ledger
  * (left rail with search and genre/tag/status filters; center bookmark rows
- * with per-row quick delete) plus a detail side sheet overlay (MIK-022,
+ * with per-row quick delete) plus a detail drawer overlay (MIK-022,
  * MIK-024) — and the Analysis skills settings screen, whose content centers
- * in a no-rail column with its guidance behind the title-adjacent header
- * help (MIK-052) and opens the custom skill create/edit
- * form as a modal with authoring guidance. Bookmark Drive sync and analysis
- * settings sync status/actions live in one shared app-header sync hub
- * (MIK-051) instead of per-screen rail panels and floating buttons. It
- * dispatches user intent back through the
+ * in a no-rail column and opens the custom skill create/edit form in the
+ * same right-drawer foundation as the bookmark detail (MIK-053). All three
+ * screens render through the shared Options-local components under
+ * `components/` (MIK-053): {@link ScreenFrame} owns the per-screen layout
+ * variant and header/content column alignment, every screen carries
+ * title-adjacent `?` help through its fixed popover, and Library rows and
+ * Ask AI recommendation cards share the {@link BookmarkSummaryItem} body.
+ * Bookmark Drive sync and analysis settings sync status/actions live in one
+ * shared app-header sync hub (MIK-051) instead of per-screen rail panels and
+ * floating buttons. It dispatches user intent back through the
  * controllers and imports only the controllers, view types, style tokens, and
  * the pure profile-display resolver (MIK-031); no Drive client, Prompt API
  * client, JSONL parser, or merge internals appear here (AGENTS.md
@@ -19,7 +23,7 @@
  * `controller`/`skillsController` props, so the component is trivially
  * renderable with fakes in tests.
  */
-import type { ChangeEvent, ReactNode } from "react";
+import type { ChangeEvent } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
@@ -34,6 +38,16 @@ import {
 	type AskAiView,
 	isAskAiComposerSubmitKey,
 } from "./ask-ai-view-model";
+import {
+	BookmarkSummaryItem,
+	StatusPill,
+} from "./components/BookmarkSummaryItem";
+import { Drawer } from "./components/Drawer";
+import {
+	ScreenFrame,
+	type ScreenFrameVariant,
+	screenFramePageStyle,
+} from "./components/ScreenFrame";
 import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
@@ -53,17 +67,13 @@ import type {
 	RowView,
 	SyncView,
 } from "./view-model";
-import type { AiStatus } from "./view-types";
 import {
-	aiStatusTone,
 	appHeader,
 	appHeaderActions,
 	askAiAssistantTurn,
 	askAiChatContext,
 	askAiChatShell,
 	askAiComposer,
-	askAiPage,
-	askAiScreenShell,
 	askAiLatestButton,
 	askAiTurnLabel,
 	askAiUserBubble,
@@ -72,58 +82,33 @@ import {
 	askAiViewportShell,
 	askAiWelcome,
 	brandTitle,
-	chatColumn,
 	chip,
 	chipActive,
 	dangerButton,
 	disabledButton,
+	drawerTips,
+	drawerTipsSummary,
 	facetActiveSummary,
 	facetCollapsedCount,
 	facetHeaderButton,
 	facetHeaderLabel,
-	guidanceBox,
-	modalBackdrop,
-	modalBody,
-	modalCard,
-	modalHeader,
 	navTab,
 	navTabActive,
-	noRailContent,
-	page,
 	palette,
 	panel,
 	primaryButton,
 	profileEditButton,
 	rail,
 	railLabel,
-	row as rowStyle,
 	rowDeleteButton,
-	rowOpenButton,
-	rowSelected,
-	screenHelp,
-	screenHelpPanel,
-	screenHelpSummary,
-	screenShell,
-	screenSubtitle,
-	screenTitle,
-	screenTitleRow,
 	searchInput,
-	sheet,
-	sheetBackdrop,
-	sheetBody,
-	sheetFooter,
-	sheetFullscreen,
-	sheetHeader,
 	statusColor,
 	subtleButton,
-	summaryClamp,
 	syncHub,
 	syncHubPanel,
 	syncHubSummary,
 	syncTone,
 	tagListExpanded,
-	truncate,
-	workspaceBody,
 } from "./styles";
 
 /**
@@ -221,9 +206,17 @@ export function Options({
 			? "library"
 			: screen;
 	const showLibrary = activeScreen === "library";
+	// The ScreenFrame variant of the active screen (MIK-053); the `chat`
+	// variant also locks the outer page scroll through the page style.
+	const frameVariant: ScreenFrameVariant =
+		activeScreen === "ask-ai"
+			? "chat"
+			: activeScreen === "analysis-skills"
+				? "noRail"
+				: "library";
 
 	return (
-		<main style={activeScreen === "ask-ai" ? askAiPage : page}>
+		<main style={screenFramePageStyle(frameVariant)}>
 			{/* Shared app header (MIK-036): the product brand lives here on every
 			    screen; the sync hub (MIK-051) travels with it, and the nav renders
 			    only when another screen exists. */}
@@ -269,13 +262,16 @@ export function Options({
 				</div>
 			</header>
 			{showLibrary ? (
-				<div style={screenShell}>
-					<ScreenHeader title={m.library} subtitle={m.researchLedger} />
-					<div style={workspaceBody}>
-						<LeftRail view={view} m={m} controller={controller} />
-						<CenterList view={view} m={m} controller={controller} />
-					</div>
-				</div>
+				<ScreenFrame
+					variant="library"
+					title={m.library}
+					subtitle={m.researchLedger}
+					helpLabel={m.libraryHelpAria}
+					help={<LibraryHelp m={m} />}
+					rail={<LeftRail view={view} m={m} controller={controller} />}
+				>
+					<CenterList view={view} m={m} controller={controller} />
+				</ScreenFrame>
 			) : activeScreen === "analysis-skills" && skillsController ? (
 				<SkillsScreen skillsController={skillsController} m={m} />
 			) : askAiController ? (
@@ -285,12 +281,12 @@ export function Options({
 					onOpenBookmark={(canonicalUrl) => controller.select(canonicalUrl)}
 				/>
 			) : null}
-			{/* The detail sheet overlays whichever screen selected it: Library rows
+			{/* The detail drawer overlays whichever screen selected it: Library rows
 			    and Ask AI recommendation cards both route through
 			    `controller.select` (MIK-046), and switching screens clears the
 			    selection, so it can never linger behind another screen. */}
 			{view.selected ? (
-				<DetailSheet
+				<BookmarkDetailDrawer
 					detail={view.selected}
 					profile={
 						view.selected.analysisProfileId
@@ -313,45 +309,18 @@ export function Options({
 }
 
 /**
- * Shared screen header (MIK-036): every top-level screen opens with the same
- * title/subtitle rhythm inside the {@link screenShell} frame, so Library and
- * Analysis skills read as two screens of one app. The subtitle accepts nodes
- * because help content may embed the Drive settings filename as `<code>`.
- *
- * A screen may attach title-adjacent help (MIK-052): a small `?` disclosure
- * beside the title carrying the explanatory guidance that used to occupy
- * explanation-only rails. A native `<details>` like the sync hub — click and
- * keyboard accessible (never hover-only), with no persisted open state — and
- * the content stays in the static markup, so tests can pin it.
+ * Library header-help guidance (MIK-053): what search/filters cover, how the
+ * detail drawer opens, and where sync actions live — disclosed by the
+ * title-adjacent `?` so the rail stays reserved for active controls.
  */
-function ScreenHeader({
-	title,
-	subtitle,
-	helpLabel,
-	helpContent,
-}: {
-	title: string;
-	subtitle: ReactNode;
-	/** Accessible name of the `?` help toggle; required with helpContent. */
-	helpLabel?: string;
-	/** Explanatory guidance disclosed by the title-adjacent help. */
-	helpContent?: ReactNode;
-}) {
+function LibraryHelp({ m }: { m: OptionsMessages }) {
 	return (
-		<header>
-			<div style={screenTitleRow}>
-				<h2 style={screenTitle}>{title}</h2>
-				{helpContent && helpLabel ? (
-					<details style={screenHelp}>
-						<summary style={screenHelpSummary} aria-label={helpLabel}>
-							?
-						</summary>
-						<div style={screenHelpPanel}>{helpContent}</div>
-					</details>
-				) : null}
-			</div>
-			<p style={screenSubtitle}>{subtitle}</p>
-		</header>
+		<>
+			<p style={railLabel}>{m.libraryAbout}</p>
+			<p style={{ margin: 0 }}>{m.libraryHelpSearch}</p>
+			<p style={{ margin: "6px 0 0" }}>{m.libraryHelpDetail}</p>
+			<p style={{ margin: "6px 0 0" }}>{m.libraryHelpSync}</p>
+		</>
 	);
 }
 
@@ -1015,14 +984,12 @@ function CenterList({
 
 /**
  * A richer (but still scannable) ledger row: clicking it opens the detail
- * sheet, and the selected highlight only reflects the currently open sheet
- * (MIK-022). The summary gets two clamped lines now that the right pane is
- * gone; genre/tags/profile stay as compact metadata under it.
- *
- * The row container is a flex `<div>` (not a `<button>`) so the quick delete
- * button can legally live inside it (MIK-024): the main content stays a real
- * button for mouse and keyboard users, while quick delete stops propagation so
- * deleting never opens the sheet.
+ * drawer, and the selected highlight only reflects the currently open drawer
+ * (MIK-022). Rendered through the shared {@link BookmarkSummaryItem}
+ * (MIK-053) — the same summary body as the Ask AI recommendation cards —
+ * with the Library-specific trailing column: updated time plus the quick
+ * delete, which stops propagation so deleting never opens the drawer
+ * (MIK-024).
  */
 function LedgerRow({
 	row,
@@ -1038,113 +1005,43 @@ function LedgerRow({
 	onDelete: () => void;
 }) {
 	return (
-		<div style={row.selected ? rowSelected : rowStyle}>
-			{/* Decorative site icon (MIK-032); the row's accessible text is the
-			    title/summary button next to it. marginTop aligns it with the
-			    first title line in this flex-start row. Looked up by the original
-			    visited URL, not the canonical form (MIK-034). */}
-			<span style={{ marginTop: 1 }}>
-				<Favicon pageUrl={row.url} size={22} />
-			</span>
-			<button
-				type="button"
-				style={rowOpenButton}
-				aria-expanded={row.selected}
-				onClick={onSelect}
-			>
-				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
-					{row.title}
-				</div>
-				<div
-					style={{
-						fontSize: 12,
-						color: palette.inkSoft,
-						marginTop: 2,
-						...summaryClamp,
-					}}
-				>
-					{row.summary}
-				</div>
-				{row.genre || row.tags.length > 0 || row.analysisProfileId ? (
-					<div
-						style={{
-							display: "flex",
-							flexWrap: "wrap",
-							gap: 6,
-							marginTop: 5,
-							alignItems: "center",
+		<BookmarkSummaryItem
+			url={row.url}
+			title={row.title}
+			description={row.summary}
+			genre={row.genre}
+			tags={row.tags}
+			metaSuffix={
+				row.analysisProfileId ? `· ${row.analysisProfileId}` : undefined
+			}
+			aiStatus={row.aiStatus}
+			selected={row.selected}
+			expanded={row.selected}
+			onOpen={onSelect}
+			trailing={
+				<>
+					<span style={{ fontSize: 10, color: palette.inkFaint }}>
+						{formatTime(row.updatedAt)}
+					</span>
+					<button
+						type="button"
+						style={
+							busy ? { ...rowDeleteButton, ...disabledButton } : rowDeleteButton
+						}
+						disabled={busy}
+						aria-label={m.deleteRowAria(row.title)}
+						title={m.deleteRowTitle}
+						onClick={(event) => {
+							// Quick delete must never open the detail drawer behind it.
+							event.stopPropagation();
+							onDelete();
 						}}
 					>
-						{row.genre ? (
-							<span style={{ fontSize: 11, color: palette.accent }}>
-								{row.genre}
-							</span>
-						) : null}
-						{row.tags.slice(0, 4).map((t) => (
-							<span key={t} style={{ fontSize: 11, color: palette.inkFaint }}>
-								#{t}
-							</span>
-						))}
-						{row.analysisProfileId ? (
-							<span style={{ fontSize: 11, color: palette.inkFaint }}>
-								· {row.analysisProfileId}
-							</span>
-						) : null}
-					</div>
-				) : null}
-			</button>
-			<div
-				style={{
-					display: "flex",
-					flexDirection: "column",
-					alignItems: "flex-end",
-					gap: 4,
-				}}
-			>
-				<StatusPill status={row.aiStatus} />
-				<span style={{ fontSize: 10, color: palette.inkFaint }}>
-					{formatTime(row.updatedAt)}
-				</span>
-				<button
-					type="button"
-					style={
-						busy ? { ...rowDeleteButton, ...disabledButton } : rowDeleteButton
-					}
-					disabled={busy}
-					aria-label={m.deleteRowAria(row.title)}
-					title={m.deleteRowTitle}
-					onClick={(event) => {
-						// Quick delete must never open the detail sheet behind it.
-						event.stopPropagation();
-						onDelete();
-					}}
-				>
-					✕
-				</button>
-			</div>
-		</div>
-	);
-}
-
-/** Media query below which the detail sheet goes fullscreen. */
-const NARROW_VIEWPORT_QUERY = "(max-width: 720px)";
-
-function subscribeToNarrowViewport(onChange: () => void): () => void {
-	const media = window.matchMedia(NARROW_VIEWPORT_QUERY);
-	media.addEventListener("change", onChange);
-	return () => media.removeEventListener("change", onChange);
-}
-
-/**
- * Whether the viewport is too narrow for a partial-width side sheet. Options-
- * local by design; the server snapshot (`false`) only matters for static
- * rendering in tests.
- */
-function useIsNarrowViewport(): boolean {
-	return useSyncExternalStore(
-		subscribeToNarrowViewport,
-		() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches,
-		() => false,
+						✕
+					</button>
+				</>
+			}
+		/>
 	);
 }
 
@@ -1174,21 +1071,22 @@ function OpenBookmarkLink({ url, label }: { url: string; label: string }) {
 }
 
 /**
- * The row-click detail side sheet (MIK-022): the single reading surface for a
- * bookmark's full detail and its long-form `analysisMarkdown`. Closes via the
- * Close buttons, Escape, and backdrop click — closing only clears the
- * selection, never the filters. Actions are Open, Delete, and Close only; the
- * sheet is a reading/deletion surface and no longer offers Re-analyze
+ * The row-click bookmark detail drawer (MIK-022; shared {@link Drawer}
+ * foundation since MIK-053): the single reading surface for a bookmark's
+ * full detail and its long-form `analysisMarkdown`. Closes via the Close
+ * buttons, Escape, and a true backdrop click — closing only clears the
+ * selection, never the filters. Actions are Open, Delete, and Close only;
+ * the drawer is a reading/deletion surface and no longer offers Re-analyze
  * (MIK-024 — a later explicit flow owns re-analysis). While an action is busy
  * Delete is disabled but Open and Close stay available, and Delete closes the
- * sheet once the record disappears (the controller drops the selection).
+ * drawer once the record disappears (the controller drops the selection).
  *
  * The profile label shows the resolved display name (MIK-031): a custom
- * profile renders as a button that opens its edit modal via
+ * profile renders as a button that opens its edit drawer via
  * `onEditCustomProfile`; built-in and unknown profiles render as read-only
  * text (unknown falls back to the raw id).
  */
-function DetailSheet({
+function BookmarkDetailDrawer({
 	detail,
 	profile,
 	busy,
@@ -1203,44 +1101,12 @@ function DetailSheet({
 	controller: OptionsController;
 	onEditCustomProfile?: (id: string) => void;
 }) {
-	const isNarrow = useIsNarrowViewport();
-	const backdropRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape") {
-				controller.clearSelection();
-			}
-		}
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [controller]);
-
-	useEffect(() => {
-		const backdrop = backdropRef.current;
-		if (!backdrop) {
-			return;
-		}
-		function onBackdropClick(event: MouseEvent): void {
-			// Only a true backdrop click closes; clicks inside the sheet bubble up
-			// with a different target and are ignored.
-			if (event.target === backdrop) {
-				controller.clearSelection();
-			}
-		}
-		backdrop.addEventListener("click", onBackdropClick);
-		return () => backdrop.removeEventListener("click", onBackdropClick);
-	}, [controller]);
-
 	return (
-		<div ref={backdropRef} style={sheetBackdrop}>
-			<section
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="bookmark-detail-title"
-				style={isNarrow ? sheetFullscreen : sheet}
-			>
-				<header style={sheetHeader}>
+		<Drawer
+			labelledBy="bookmark-detail-title"
+			onClose={() => controller.clearSelection()}
+			header={
+				<>
 					<div
 						style={{
 							display: "flex",
@@ -1267,7 +1133,7 @@ function DetailSheet({
 							margin: "6px 0 4px",
 						}}
 					>
-						{/* Keyed by URL: the sheet swaps records in place, so a failed
+						{/* Keyed by URL: the drawer swaps records in place, so a failed
 						    favicon for one site must not stick to the next (MIK-032). */}
 						<Favicon key={detail.canonicalUrl} pageUrl={detail.url} size={28} />
 						<h2 id="bookmark-detail-title" style={{ fontSize: 17, margin: 0 }}>
@@ -1275,94 +1141,10 @@ function DetailSheet({
 						</h2>
 					</div>
 					<BookmarkUrlLink url={detail.url} />
-				</header>
-
-				<div style={sheetBody}>
-					{detail.description ? (
-						<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
-							{detail.description}
-						</p>
-					) : (
-						<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-							{detail.aiStatus === "pending"
-								? m.detailPending
-								: m.detailNoDescription}
-						</p>
-					)}
-
-					{detail.genre ? (
-						<DetailField label={m.genre} value={detail.genre} />
-					) : null}
-
-					{profile ? (
-						profile.kind === "custom" && onEditCustomProfile ? (
-							<div style={{ marginTop: 10 }}>
-								<p style={railLabel}>{m.profileLabel}</p>
-								<button
-									type="button"
-									style={profileEditButton}
-									aria-label={m.editProfileAria(profile.name)}
-									onClick={() => onEditCustomProfile(profile.id)}
-								>
-									{profile.name}
-								</button>
-							</div>
-						) : (
-							<DetailField label={m.profileLabel} value={profile.name} />
-						)
-					) : null}
-
-					{detail.tags.length > 0 ? (
-						<div style={{ marginTop: 10 }}>
-							<p style={railLabel}>{m.tags}</p>
-							<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-								{detail.tags.map((t) => (
-									<span
-										key={t}
-										style={{ fontSize: 12, color: palette.inkSoft }}
-									>
-										#{t}
-									</span>
-								))}
-							</div>
-						</div>
-					) : null}
-
-					{detail.analysisMarkdown ? (
-						<div style={{ marginTop: 12 }}>
-							<p style={railLabel}>{m.analysisLabel}</p>
-							<AnalysisMarkdown markdown={detail.analysisMarkdown} />
-						</div>
-					) : null}
-
-					{detail.aiError ? (
-						<p
-							style={{
-								fontSize: 12,
-								color: palette.danger,
-								margin: "10px 0 0",
-							}}
-						>
-							{detail.aiError}
-						</p>
-					) : null}
-
-					<dl
-						style={{
-							margin: "14px 0 0",
-							fontSize: 11,
-							color: palette.inkFaint,
-						}}
-					>
-						<TimeRow label={m.createdLabel} value={detail.createdAt} />
-						<TimeRow label={m.updatedLabel} value={detail.updatedAt} />
-						{detail.lastAnalyzedAt ? (
-							<TimeRow label={m.analyzedLabel} value={detail.lastAnalyzedAt} />
-						) : null}
-					</dl>
-				</div>
-
-				<footer style={sheetFooter}>
+				</>
+			}
+			footer={
+				<>
 					<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
 						<OpenBookmarkLink url={detail.url} label={m.open} />
 						<button
@@ -1396,9 +1178,89 @@ function DetailSheet({
 							{m.busyNotice}
 						</p>
 					) : null}
-				</footer>
-			</section>
-		</div>
+				</>
+			}
+		>
+			{detail.description ? (
+				<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
+					{detail.description}
+				</p>
+			) : (
+				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
+					{detail.aiStatus === "pending"
+						? m.detailPending
+						: m.detailNoDescription}
+				</p>
+			)}
+
+			{detail.genre ? (
+				<DetailField label={m.genre} value={detail.genre} />
+			) : null}
+
+			{profile ? (
+				profile.kind === "custom" && onEditCustomProfile ? (
+					<div style={{ marginTop: 10 }}>
+						<p style={railLabel}>{m.profileLabel}</p>
+						<button
+							type="button"
+							style={profileEditButton}
+							aria-label={m.editProfileAria(profile.name)}
+							onClick={() => onEditCustomProfile(profile.id)}
+						>
+							{profile.name}
+						</button>
+					</div>
+				) : (
+					<DetailField label={m.profileLabel} value={profile.name} />
+				)
+			) : null}
+
+			{detail.tags.length > 0 ? (
+				<div style={{ marginTop: 10 }}>
+					<p style={railLabel}>{m.tags}</p>
+					<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+						{detail.tags.map((t) => (
+							<span key={t} style={{ fontSize: 12, color: palette.inkSoft }}>
+								#{t}
+							</span>
+						))}
+					</div>
+				</div>
+			) : null}
+
+			{detail.analysisMarkdown ? (
+				<div style={{ marginTop: 12 }}>
+					<p style={railLabel}>{m.analysisLabel}</p>
+					<AnalysisMarkdown markdown={detail.analysisMarkdown} />
+				</div>
+			) : null}
+
+			{detail.aiError ? (
+				<p
+					style={{
+						fontSize: 12,
+						color: palette.danger,
+						margin: "10px 0 0",
+					}}
+				>
+					{detail.aiError}
+				</p>
+			) : null}
+
+			<dl
+				style={{
+					margin: "14px 0 0",
+					fontSize: 11,
+					color: palette.inkFaint,
+				}}
+			>
+				<TimeRow label={m.createdLabel} value={detail.createdAt} />
+				<TimeRow label={m.updatedLabel} value={detail.updatedAt} />
+				{detail.lastAnalyzedAt ? (
+					<TimeRow label={m.analyzedLabel} value={detail.lastAnalyzedAt} />
+				) : null}
+			</dl>
+		</Drawer>
 	);
 }
 
@@ -1409,11 +1271,11 @@ function DetailSheet({
  * instead of a panel below the ledger. Since MIK-052 it has no left rail —
  * the settings-file guidance moved into the title-adjacent header help and
  * the main content (Drive-synced custom skills with full CRUD, then the
- * fixed built-in profiles read-only) is centered in a no-rail column.
- * Settings sync status and refresh live in the shared app-header sync hub
- * (MIK-051). The create/edit form opens as a modal. Never computes
- * matching/priority itself — that stays inside `ai/profile.ts`'s
- * `selectAnalysisProfile`.
+ * fixed built-in profiles read-only) is centered in the shared no-rail
+ * frame column (MIK-053). Settings sync status and refresh live in the
+ * shared app-header sync hub (MIK-051). The create/edit form opens in the
+ * shared right drawer (MIK-053). Never computes matching/priority itself —
+ * that stays inside `ai/profile.ts`'s `selectAnalysisProfile`.
  */
 function SkillsScreen({
 	skillsController,
@@ -1435,19 +1297,22 @@ function SkillsScreen({
 
 	return (
 		<>
-			<section style={screenShell} aria-label={m.skillsScreenAria}>
-				<ScreenHeader
-					title={m.analysisSkills}
-					subtitle={m.skillsSubtitle}
-					helpLabel={m.skillsHelpAria}
-					helpContent={<SkillsHelp m={m} />}
-				/>
-				<div style={noRailContent}>
-					<SkillsMain view={view} m={m} skillsController={skillsController} />
-				</div>
-			</section>
+			<ScreenFrame
+				variant="noRail"
+				title={m.analysisSkills}
+				subtitle={m.skillsSubtitle}
+				helpLabel={m.skillsHelpAria}
+				help={<SkillsHelp m={m} />}
+				ariaLabel={m.skillsScreenAria}
+			>
+				<SkillsMain view={view} m={m} skillsController={skillsController} />
+			</ScreenFrame>
 			{view.formOpen ? (
-				<SkillFormModal view={view} skillsController={skillsController} m={m} />
+				<SkillFormDrawer
+					view={view}
+					skillsController={skillsController}
+					m={m}
+				/>
 			) : null}
 		</>
 	);
@@ -1553,11 +1418,13 @@ function SkillsMain({
 /**
  * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session; MIK-050
  * chat-only layout): the chat-style saved-bookmark recommendation surface.
- * This screen has no left rail and no shared workspace grid — the chat is the
- * primary content, centered in a comfortable no-rail chat column (MIK-052).
- * The scope/privacy guidance is exposed through the title-adjacent header
- * help, while the compact {@link AskAiChatContext} keeps the same critical
- * copy at the top of the chat viewport. The
+ * This screen has no left rail and no shared workspace grid — the chat is
+ * the primary content, and the shared `chat` frame variant (MIK-053) puts
+ * the screen title/subtitle/help in the same centered chat column as the
+ * chat body, with the outer page locked so the transcript viewport stays
+ * the only scroller. The scope/privacy guidance is exposed through the
+ * title-adjacent header help, while the compact {@link AskAiChatContext}
+ * keeps the same critical copy at the top of the chat viewport. The
  * conversation state — transcript, Prompt API session, narrowed candidate
  * context — lives only inside the injected {@link AskAiController} and is
  * never persisted.
@@ -1579,22 +1446,21 @@ function AskAiScreen({
 	);
 
 	return (
-		<section style={askAiScreenShell} aria-label={m.askAiScreenAria}>
-			<ScreenHeader
-				title={m.askAi}
-				subtitle={m.askAiSubtitle}
-				helpLabel={m.askAiHelpAria}
-				helpContent={<AskAiHelp m={m} />}
+		<ScreenFrame
+			variant="chat"
+			title={m.askAi}
+			subtitle={m.askAiSubtitle}
+			helpLabel={m.askAiHelpAria}
+			help={<AskAiHelp m={m} />}
+			ariaLabel={m.askAiScreenAria}
+		>
+			<AskAiMain
+				view={view}
+				m={m}
+				controller={controller}
+				onOpenBookmark={onOpenBookmark}
 			/>
-			<div style={chatColumn}>
-				<AskAiMain
-					view={view}
-					m={m}
-					controller={controller}
-					onOpenBookmark={onOpenBookmark}
-				/>
-			</div>
-		</section>
+		</ScreenFrame>
 	);
 }
 
@@ -2014,9 +1880,13 @@ function AskAiResult({
 
 /**
  * One recommendation card (MIK-046): a single button — keyboard-reachable like
- * the ledger rows — that opens the existing bookmark detail sheet through
- * `controller.select`. Shows app-owned bookmark data plus the model or local
- * fallback reason; never a full URL.
+ * the ledger rows — that opens the existing bookmark detail drawer through
+ * `controller.select`. Rendered through the shared {@link BookmarkSummaryItem}
+ * (MIK-053) — the same summary body (favicon included) as the Library rows —
+ * with the card-specific recommendation reason line and no delete action.
+ * Shows app-owned bookmark data plus the model or local fallback reason;
+ * never a full URL as text (the favicon lookup stays a local render-time
+ * Chrome endpoint, MIK-034).
  */
 function AskAiCard({
 	card,
@@ -2028,68 +1898,31 @@ function AskAiCard({
 	onOpen: (canonicalUrl: string) => void;
 }) {
 	return (
-		<div style={rowStyle}>
-			<button
-				type="button"
-				style={rowOpenButton}
-				aria-label={m.askAiCardAria(card.title)}
-				onClick={() => onOpen(card.canonicalUrl)}
-			>
-				<div style={{ fontSize: 14, fontWeight: 600, ...truncate }}>
-					{card.title}
-				</div>
-				<div
-					style={{
-						display: "flex",
-						flexWrap: "wrap",
-						gap: 6,
-						marginTop: 2,
-						alignItems: "center",
-					}}
-				>
-					<span style={{ fontSize: 11, color: palette.inkFaint }}>
-						{card.domain}
-					</span>
-					{card.genre ? (
-						<span style={{ fontSize: 11, color: palette.accent }}>
-							{card.genre}
-						</span>
-					) : null}
-					{card.tags.slice(0, 4).map((t) => (
-						<span key={t} style={{ fontSize: 11, color: palette.inkFaint }}>
-							#{t}
-						</span>
-					))}
-				</div>
-				{card.description ? (
-					<div
-						style={{
-							fontSize: 12,
-							color: palette.inkSoft,
-							marginTop: 2,
-							...summaryClamp,
-						}}
-					>
-						{card.description}
-					</div>
-				) : null}
-				<div style={{ fontSize: 12, color: palette.accent, marginTop: 4 }}>
-					{card.reason}
-				</div>
-			</button>
-			<StatusPill status={card.aiStatus} />
-		</div>
+		<BookmarkSummaryItem
+			url={card.url}
+			title={card.title}
+			description={card.description}
+			domain={card.domain}
+			genre={card.genre}
+			tags={card.tags}
+			reason={card.reason}
+			aiStatus={card.aiStatus}
+			openAriaLabel={m.askAiCardAria(card.title)}
+			onOpen={() => onOpen(card.canonicalUrl)}
+		/>
 	);
 }
 
 /**
- * Modal wrapper for the custom skill create/edit form (MIK-025). Open/close
- * state stays in the controller ({@link SkillsController.startCreate} /
- * `startEdit` open it, `cancelEdit` and a successful `submit` close it); this
- * component only renders the dialog chrome, Escape/backdrop close, and the
- * instruction authoring guidance next to the form.
+ * Right-drawer wrapper for the custom skill create/edit form (MIK-025;
+ * shared {@link Drawer} foundation since MIK-053, replacing the centered
+ * modal). Open/close state stays in the controller
+ * ({@link SkillsController.startCreate} / `startEdit` open it, `cancelEdit`
+ * and a successful `submit` close it); this component only renders the
+ * drawer chrome and the collapsible instruction authoring tips under the
+ * form.
  */
-function SkillFormModal({
+function SkillFormDrawer({
 	view,
 	skillsController,
 	m,
@@ -2098,43 +1931,19 @@ function SkillFormModal({
 	skillsController: SkillsController;
 	m: OptionsMessages;
 }) {
-	const backdropRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "Escape") {
-				skillsController.cancelEdit();
-			}
-		}
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [skillsController]);
-
-	useEffect(() => {
-		const backdrop = backdropRef.current;
-		if (!backdrop) {
-			return;
-		}
-		function onBackdropClick(event: MouseEvent): void {
-			// Only a true backdrop click closes; clicks inside the card bubble up
-			// with a different target and are ignored.
-			if (event.target === backdrop) {
-				skillsController.cancelEdit();
-			}
-		}
-		backdrop.addEventListener("click", onBackdropClick);
-		return () => backdrop.removeEventListener("click", onBackdropClick);
-	}, [skillsController]);
-
 	return (
-		<div ref={backdropRef} style={modalBackdrop}>
-			<section
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="skill-form-title"
-				style={modalCard}
-			>
-				<header style={modalHeader}>
+		<Drawer
+			labelledBy="skill-form-title"
+			onClose={() => skillsController.cancelEdit()}
+			header={
+				<div
+					style={{
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "space-between",
+						gap: 8,
+					}}
+				>
 					<h3 id="skill-form-title" style={{ fontSize: 15, margin: 0 }}>
 						{view.editingId ? m.editSkill : m.newSkill}
 					</h3>
@@ -2146,31 +1955,33 @@ function SkillFormModal({
 					>
 						✕
 					</button>
-				</header>
-				<div style={modalBody}>
-					{view.actionError ? (
-						<Banner tone="danger" text={view.actionError} />
-					) : null}
-					<SkillForm view={view} skillsController={skillsController} m={m} />
-					<InstructionGuidance m={m} />
 				</div>
-			</section>
-		</div>
+			}
+		>
+			<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+				{view.actionError ? (
+					<Banner tone="danger" text={view.actionError} />
+				) : null}
+				<SkillForm view={view} skillsController={skillsController} m={m} />
+				<InstructionGuidance m={m} />
+			</div>
+		</Drawer>
 	);
 }
 
 /**
  * Authoring guidance for the skill `instruction` field (MIK-025): what it
  * changes, per-source examples, safety warnings, and a plain-language
- * explanation of domain/pattern/priority matching. Static content — mirrors
- * the constraints in docs/ai-analysis-v2.md and docs/privacy-policy.md.
+ * explanation of domain/pattern/priority matching. Collapsible tips inside
+ * the skill drawer (MIK-053): the guidance title is the always-visible
+ * summary; the body discloses on demand so it never dominates the form.
+ * Static content — mirrors the constraints in docs/ai-analysis-v2.md and
+ * docs/privacy-policy.md.
  */
 function InstructionGuidance({ m }: { m: OptionsMessages }) {
 	return (
-		<aside style={guidanceBox} aria-label={m.guidance.aria}>
-			<p style={{ margin: 0, fontWeight: 600, color: palette.ink }}>
-				{m.guidance.title}
-			</p>
+		<details style={drawerTips} aria-label={m.guidance.aria}>
+			<summary style={drawerTipsSummary}>{m.guidance.title}</summary>
 			<p style={{ margin: "6px 0 0" }}>{m.guidance.intro}</p>
 			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
 				{m.guidance.examplesHeading}
@@ -2196,7 +2007,7 @@ function InstructionGuidance({ m }: { m: OptionsMessages }) {
 					<li key={item}>{item}</li>
 				))}
 			</ul>
-		</aside>
+		</details>
 	);
 }
 
@@ -2436,25 +2247,6 @@ function Banner({ tone, text }: { tone: "danger" | "warn"; text: string }) {
 		>
 			{text}
 		</div>
-	);
-}
-
-function StatusPill({ status }: { status: AiStatus }) {
-	return (
-		<span
-			style={{
-				fontSize: 10,
-				textTransform: "uppercase",
-				letterSpacing: 0.5,
-				color: statusColor(aiStatusTone(status)),
-				border: `1px solid ${palette.border}`,
-				borderRadius: 6,
-				padding: "1px 6px",
-				whiteSpace: "nowrap",
-			}}
-		>
-			{status}
-		</span>
 	);
 }
 

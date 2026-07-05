@@ -501,9 +501,10 @@ describe("Options collapsible facet groups (MIK-035)", () => {
 		expect(html).not.toContain("Show all 20 tags");
 		expect(html).toContain("20 options");
 		expect(html).toContain("4 options");
-		// Exactly the four group headers carry the expanded state.
+		// The four group headers carry the expanded state, plus the closed
+		// Library help trigger (MIK-053) on the false side.
 		expect(html.match(/aria-expanded="true"/g)).toHaveLength(2);
-		expect(html.match(/aria-expanded="false"/g)).toHaveLength(2);
+		expect(html.match(/aria-expanded="false"/g)).toHaveLength(3);
 	});
 
 	it("keeps the active tag visible as a header summary while collapsed", () => {
@@ -1320,7 +1321,7 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 	});
 });
 
-describe("Skill form modal (MIK-025)", () => {
+describe("Skill form dialog (MIK-025; drawer since MIK-053)", () => {
 	function renderSkills(skillsView: SkillsView): string {
 		return renderWithSkills(viewOf(), skillsView, "analysis-skills");
 	}
@@ -1331,7 +1332,7 @@ describe("Skill form modal (MIK-025)", () => {
 		expect(html).not.toContain('role="dialog"');
 	});
 
-	it("opens a create modal with an empty form, close/cancel, and guidance", () => {
+	it("opens a create dialog with an empty form, close/cancel, and guidance", () => {
 		const html = renderSkills(skillsViewOf({ formOpen: true }));
 
 		expect(html).toContain('role="dialog"');
@@ -1645,6 +1646,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 	const cards = [
 		{
 			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
 			title: "TypeScript testing handbook",
 			domain: "ts.test",
 			genre: "技術",
@@ -1655,6 +1657,7 @@ describe("Ask AI recommendations (MIK-046)", () => {
 		},
 		{
 			canonicalUrl: "https://vitest.test/guide",
+			url: "https://vitest.test/guide",
 			title: "Vitest guide",
 			domain: "vitest.test",
 			tags: [],
@@ -1824,6 +1827,7 @@ describe("Ask AI chat session UI (MIK-048)", () => {
 		cards: [
 			{
 				canonicalUrl: "https://ts.test/handbook",
+				url: "https://ts.test/handbook",
 				title: "TypeScript testing handbook",
 				domain: "ts.test",
 				tags: ["typescript"],
@@ -1933,6 +1937,7 @@ describe("Ask AI chat layout polish (MIK-049)", () => {
 		cards: [
 			{
 				canonicalUrl: "https://ts.test/handbook",
+				url: "https://ts.test/handbook",
 				title: "TypeScript testing handbook",
 				domain: "ts.test",
 				tags: ["typescript"],
@@ -2038,7 +2043,7 @@ describe("Ask AI chat layout polish (MIK-049)", () => {
 	});
 });
 
-describe("Screen header help (MIK-052)", () => {
+describe("Screen header help (MIK-052, MIK-053)", () => {
 	const populatedView = viewOf({
 		rows: [rowOf()],
 		totalCount: 1,
@@ -2046,12 +2051,12 @@ describe("Screen header help (MIK-052)", () => {
 		empty: false,
 	});
 
-	it("renders a title-adjacent help disclosure on the Analysis skills screen", () => {
+	it("renders a title-adjacent help trigger on the Analysis skills screen", () => {
 		const html = renderWithSkills(viewOf(), skillsViewOf(), "analysis-skills");
 
-		// A native <details>/<summary> disclosure — click/focus accessible, never
-		// hover-only — whose summary is the small `?` toggle beside the title.
-		expect(html).toMatch(/<summary[^>]*aria-label="Analysis skills help"/);
+		// A button-based popover trigger (MIK-053) — click/focus accessible,
+		// never hover-only — the small `?` toggle beside the title.
+		expect(html).toMatch(/<button[^>]*aria-label="Analysis skills help"/);
 		const title = html.indexOf(">Analysis skills</h2>");
 		const help = html.indexOf('aria-label="Analysis skills help"');
 		const subtitle = html.indexOf(
@@ -2065,14 +2070,15 @@ describe("Screen header help (MIK-052)", () => {
 			"Custom skills tune the AI analysis for matching pages",
 		);
 		expect(html).toContain("bookmark-ai/settings.json");
-		// Two disclosures on this screen: the header sync hub and the title help.
-		expect(html.match(/<details/g)).toHaveLength(2);
+		// One native disclosure left on this screen: the header sync hub. The
+		// title help is a button-driven fixed popover now (MIK-053).
+		expect(html.match(/<details/g)).toHaveLength(1);
 	});
 
-	it("renders a title-adjacent help disclosure with scope/privacy guidance on Ask AI", () => {
+	it("renders a title-adjacent help trigger with scope/privacy guidance on Ask AI", () => {
 		const html = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai");
 
-		expect(html).toMatch(/<summary[^>]*aria-label="Ask AI help"/);
+		expect(html).toMatch(/<button[^>]*aria-label="Ask AI help"/);
 		// The help explains the local-cache scope, the no-open-web boundary, and
 		// non-persistence; the compact chat context keeps the same critical copy
 		// inside the viewport (MIK-050), so each note appears exactly twice.
@@ -2084,9 +2090,10 @@ describe("Screen header help (MIK-052)", () => {
 		);
 	});
 
-	it("keeps the Library header without a help control and with its rail", () => {
+	it("gives the Library a title-adjacent help trigger while keeping its rail (MIK-053)", () => {
 		const html = renderWithSkills(populatedView, skillsViewOf());
 
+		expect(html).toMatch(/<button[^>]*aria-label="Library help"/);
 		expect(html).not.toContain('aria-label="Analysis skills help"');
 		expect(html).not.toContain('aria-label="Ask AI help"');
 		expect(html).toContain("grid-template-columns:240px");
@@ -2094,6 +2101,14 @@ describe("Screen header help (MIK-052)", () => {
 	});
 
 	it("localizes the help toggles for the ja language", () => {
+		const library = renderWithSkills(
+			populatedView,
+			skillsViewOf(),
+			"library",
+			"ja",
+		);
+		expect(library).toContain('aria-label="ライブラリのヘルプ"');
+
 		const skills = renderWithSkills(
 			viewOf(),
 			skillsViewOf(),
@@ -2141,5 +2156,243 @@ describe("Ask AI scroll-follow helpers (MIK-049)", () => {
 		expect(askAiLatestButtonVisible(41, true)).toBe(true);
 		expect(askAiLatestButtonVisible(40, true)).toBe(false);
 		expect(askAiLatestButtonVisible(0, true)).toBe(false);
+	});
+});
+
+describe("Options shared UI foundation (MIK-053)", () => {
+	const populatedView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+	});
+
+	const cards = [
+		{
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://www.ts.test/handbook?utm_source=x",
+			title: "TypeScript testing handbook",
+			domain: "ts.test",
+			genre: "技術",
+			tags: ["typescript"],
+			description: "A short saved description.",
+			aiStatus: "ready" as const,
+			reason: "Covers exactly this topic.",
+		},
+		{
+			canonicalUrl: "https://vitest.test/guide",
+			url: "https://vitest.test/guide",
+			title: "Vitest guide",
+			domain: "vitest.test",
+			tags: [],
+			aiStatus: "pending" as const,
+			reason: "Matched title",
+		},
+	];
+
+	function renderAskAiCards(): string {
+		return renderWithAskAi(
+			viewOf(),
+			askAiViewOf({
+				messages: chatOf("typescript testing", {
+					kind: "recommendations",
+					source: "ai",
+					message: "Here are your matches.",
+					cards,
+				}),
+			}),
+			"ask-ai",
+		);
+	}
+
+	describe("ScreenFrame variants", () => {
+		it("keeps the Library frame on the rail/main workspace grid", () => {
+			const html = renderWithSkills(populatedView, skillsViewOf());
+
+			expect(html).toContain("grid-template-columns:240px");
+			expect(html).toContain("<aside");
+		});
+
+		it("wraps the Analysis skills header inside the centered no-rail column", () => {
+			const html = renderWithSkills(
+				viewOf(),
+				skillsViewOf(),
+				"analysis-skills",
+			);
+
+			// The 880px content column opens before the screen title so the header
+			// and the body share one centered column instead of drifting apart.
+			const column = html.indexOf("max-width:880px");
+			const title = html.indexOf(">Analysis skills</h2>");
+			expect(column).toBeGreaterThanOrEqual(0);
+			expect(title).toBeGreaterThanOrEqual(0);
+			expect(column).toBeLessThan(title);
+		});
+
+		it("aligns the Ask AI header with the chat column", () => {
+			const html = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai");
+
+			// The 960px chat column opens before the screen title: header, help,
+			// subtitle, and chat body all live in the same centered column.
+			const column = html.indexOf("max-width:960px");
+			const title = html.indexOf(">Ask AI</h2>");
+			expect(column).toBeGreaterThanOrEqual(0);
+			expect(title).toBeGreaterThanOrEqual(0);
+			expect(column).toBeLessThan(title);
+			expect(title).toBeLessThan(html.indexOf("overflow-y:auto"));
+		});
+
+		it("keeps the Ask AI outer page locked with the viewport as the only scroller", () => {
+			const html = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai");
+
+			expect(html).toContain(
+				"height:100vh;overflow:hidden;display:flex;flex-direction:column",
+			);
+			expect(html.match(/overflow-y:auto/g)).toHaveLength(1);
+			expect(html).not.toContain("height:calc(100vh - 180px)");
+			// The composer form stays pinned after the scrolling viewport.
+			expect(html.indexOf("overflow-y:auto")).toBeLessThan(
+				html.indexOf("<form"),
+			);
+		});
+	});
+
+	describe("ScreenHelp fixed popover", () => {
+		it("renders the Library help content: search/filters, detail drawer, sync hub", () => {
+			const html = renderWithSkills(populatedView, skillsViewOf());
+
+			expect(html).toMatch(/<button[^>]*aria-label="Library help"/);
+			expect(html).toContain("Search and filters narrow your saved bookmarks");
+			expect(html).toContain(
+				"Click a row to open its full details in the right-side drawer",
+			);
+			expect(html).toContain(
+				"manual sync actions live in the sync hub in the app header",
+			);
+		});
+
+		it("renders every screen's help as a button-driven fixed popover, closed by default", () => {
+			const screens = [
+				renderWithSkills(populatedView, skillsViewOf()),
+				renderWithSkills(viewOf(), skillsViewOf(), "analysis-skills"),
+				renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai"),
+			];
+
+			for (const html of screens) {
+				// The trigger is a real button carrying popover semantics.
+				expect(html).toMatch(
+					/<button[^>]*aria-label="[^"]*help[^"]*"[^>]*aria-expanded="false"[^>]*aria-controls=/i,
+				);
+				// The panel is position:fixed (so an overflow:hidden ancestor like
+				// the Ask AI page can never clip it) and hidden while closed.
+				expect(html).toMatch(/hidden="" style="position:fixed/);
+				// No <summary>-based help trigger remains.
+				expect(html).not.toMatch(/<summary[^>]*aria-label="[^"]*help/i);
+			}
+		});
+	});
+
+	describe("shared Drawer foundation", () => {
+		it("opens the skill create/edit form as a right drawer, not a centered modal", () => {
+			const html = renderWithSkills(
+				viewOf(),
+				skillsViewOf({ formOpen: true }),
+				"analysis-skills",
+			);
+
+			expect(html).toContain('role="dialog"');
+			expect(html).toContain('aria-modal="true"');
+			expect(html).toContain('aria-labelledby="skill-form-title"');
+			// Right-aligned drawer backdrop and panel instead of the centered
+			// modal card (the old card was `width:min(680px, 100%)`).
+			expect(html).toContain("justify-content:flex-end");
+			expect(html).toContain("width:min(60vw, 860px)");
+			expect(html).not.toContain("width:min(680px, 100%)");
+			expect(html).toContain('aria-label="Close skill form"');
+		});
+
+		it("keeps the bookmark detail drawer on the same right-drawer foundation", () => {
+			const html = renderWithSkills(
+				viewOf({
+					rows: [rowOf({ selected: true })],
+					totalCount: 1,
+					filteredCount: 1,
+					empty: false,
+					selected: detailOf(),
+				}),
+				skillsViewOf(),
+			);
+
+			expect(html).toContain('role="dialog"');
+			expect(html).toContain('aria-labelledby="bookmark-detail-title"');
+			expect(html).toContain("justify-content:flex-end");
+		});
+
+		it("collapses the skill authoring guidance behind tips inside the drawer", () => {
+			const html = renderWithSkills(
+				viewOf(),
+				skillsViewOf({ formOpen: true }),
+				"analysis-skills",
+			);
+
+			// Two native disclosures while the drawer is open: the header sync hub
+			// and the collapsible authoring tips inside the drawer body.
+			expect(html.match(/<details/g)).toHaveLength(2);
+			expect(html).toMatch(/<summary[^>]*>[^<]*Writing a good instruction/);
+			// The guidance content stays available inside the tips.
+			expect(html).toContain("Never write instructions that");
+			expect(html).toContain("How matching works");
+		});
+	});
+
+	describe("shared BookmarkSummaryItem", () => {
+		afterEach(() => {
+			delete (globalThis as { chrome?: unknown }).chrome;
+		});
+
+		function stubChromeRuntime(): void {
+			(globalThis as { chrome?: unknown }).chrome = {
+				runtime: {
+					getURL: (path: string) => `chrome-extension://test-ext${path}`,
+				},
+			};
+		}
+
+		it("marks Library rows and Ask AI cards with the shared summary primitive", () => {
+			const library = renderWithSkills(populatedView, skillsViewOf());
+			expect(library.match(/data-bookmark-summary/g)).toHaveLength(1);
+
+			const askAi = renderAskAiCards();
+			expect(askAi.match(/data-bookmark-summary/g)).toHaveLength(2);
+		});
+
+		it("renders Ask AI card favicons from the original bookmark URL", () => {
+			stubChromeRuntime();
+
+			const html = renderAskAiCards();
+
+			// The original visited URL, never the canonical form (MIK-034).
+			expect(html).toContain(
+				"chrome-extension://test-ext/_favicon/?pageUrl=https%3A%2F%2Fwww.ts.test%2Fhandbook%3Futm_source%3Dx&amp;size=22",
+			);
+			expect(html).not.toContain("pageUrl=https%3A%2F%2Fts.test%2Fhandbook");
+		});
+
+		it("falls back to the hostname initial on Ask AI cards off-extension", () => {
+			const html = renderAskAiCards();
+
+			// vitest.test → "V" fallback tile, like Library rows off-extension.
+			expect(html).toContain(">V<");
+			expect(html).not.toContain("_favicon");
+		});
+
+		it("keeps the recommendation reason on cards and quick delete on rows only", () => {
+			const askAi = renderAskAiCards();
+			expect(askAi).toContain("Covers exactly this topic.");
+			expect(askAi).not.toContain('aria-label="Delete ');
+
+			const library = renderWithSkills(populatedView, skillsViewOf());
+			expect(library).toContain('aria-label="Delete Selected bookmark"');
+		});
 	});
 });

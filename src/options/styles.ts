@@ -202,21 +202,22 @@ export const screenTitleRow: CSSProperties = {
 };
 
 /**
- * Title-adjacent help disclosure (MIK-052): a native `<details>` like the
- * sync hub — no dependency, no persisted open state. The anchor is relative
- * so the panel can overlay the screen content below the title.
+ * ScreenHelp anchor (MIK-052, popover since MIK-053): wraps the `?` trigger
+ * so outside-click detection has one root; the panel itself is fixed and
+ * never clipped by an `overflow: hidden` ancestor like the Ask AI page.
  */
 export const screenHelp: CSSProperties = {
-	position: "relative",
+	display: "inline-flex",
 };
 
-/** The small `?` summary toggle beside the screen title (MIK-052). */
-export const screenHelpSummary: CSSProperties = {
+/** The small `?` trigger button beside the screen title (ScreenHelp). */
+export const screenHelpTrigger: CSSProperties = {
 	display: "inline-flex",
 	alignItems: "center",
 	justifyContent: "center",
 	width: 20,
 	height: 20,
+	padding: 0,
 	fontFamily: fontStack,
 	fontSize: 12,
 	color: palette.inkSoft,
@@ -224,18 +225,17 @@ export const screenHelpSummary: CSSProperties = {
 	border: `1px solid ${palette.borderStrong}`,
 	borderRadius: 999,
 	cursor: "pointer",
-	listStyle: "none",
 };
 
 /**
- * The opened help panel below the title (MIK-052): explanatory screen
- * guidance that used to live in explanation-only rails. Mirrors the sync hub
- * panel chrome; sits under the detail sheet/modal backdrops (zIndex 20/30).
+ * The ScreenHelp popover panel (MIK-053): explanatory screen guidance that
+ * used to live in explanation-only rails. `position: fixed` (top/left are
+ * measured from the trigger at open time) so the Ask AI page's
+ * `overflow: hidden` can never clip it; sits under the drawer backdrop
+ * (zIndex 20) which covers it while a drawer is open.
  */
 export const screenHelpPanel: CSSProperties = {
-	position: "absolute",
-	left: 0,
-	top: "calc(100% + 8px)",
+	position: "fixed",
 	zIndex: 15,
 	width: 320,
 	boxSizing: "border-box",
@@ -262,15 +262,41 @@ export const noRailContent: CSSProperties = {
 };
 
 /**
- * Centered comfortable chat column for the no-rail Ask AI screen (MIK-052):
- * a bit wider than {@link noRailContent} so recommendation cards breathe, but
- * narrower than the 1200px shell for chat readability.
+ * The ScreenFrame `noRail` column (MIK-053): the screen header and the main
+ * content stack inside one centered {@link noRailContent} column so the
+ * title/subtitle/help can never drift from the content below them.
+ */
+export const noRailColumn: CSSProperties = {
+	...noRailContent,
+	display: "flex",
+	flexDirection: "column",
+	gap: 14,
+};
+
+/**
+ * Centered comfortable chat column for the ScreenFrame `chat` variant
+ * (MIK-052; header included since MIK-053): a bit wider than
+ * {@link noRailContent} so recommendation cards breathe, but narrower than
+ * the 1200px shell for chat readability. Hosts the screen header and the
+ * chat body so the title/subtitle/help align with the chat itself.
  */
 export const chatColumn: CSSProperties = {
 	width: "100%",
 	maxWidth: 960,
 	margin: "0 auto",
 	boxSizing: "border-box",
+	flex: 1,
+	minHeight: 0,
+	display: "flex",
+	flexDirection: "column",
+	gap: 14,
+};
+
+/**
+ * The chat body area under the in-column header (MIK-053): fills the
+ * remaining bounded height so the chat shell inside can pin its composer.
+ */
+export const chatBody: CSSProperties = {
 	flex: 1,
 	minHeight: 0,
 	display: "flex",
@@ -304,60 +330,24 @@ export const navTabActive: CSSProperties = {
 };
 
 /**
- * Centered modal dialog for the custom skill create/edit form (MIK-025). Sits
- * above the header sync hub panel and the detail sheet backdrop.
+ * Collapsible authoring tips inside the skill form drawer (MIK-053): a
+ * native `<details>` whose summary is the guidance title, so the guidance
+ * stays discoverable without dominating the form.
  */
-export const modalBackdrop: CSSProperties = {
-	position: "fixed",
-	inset: 0,
-	background: "rgba(58, 52, 43, 0.35)",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	padding: 24,
-	zIndex: 30,
-};
-
-export const modalCard: CSSProperties = {
-	boxSizing: "border-box",
-	width: "min(680px, 100%)",
-	maxHeight: "85vh",
-	display: "flex",
-	flexDirection: "column",
-	background: palette.paper,
-	border: `1px solid ${palette.borderStrong}`,
-	borderRadius: 10,
-	boxShadow: "0 18px 48px rgba(58, 52, 43, 0.28)",
-};
-
-export const modalHeader: CSSProperties = {
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	gap: 8,
-	padding: "12px 20px",
-	background: palette.paperRaised,
-	borderBottom: `1px solid ${palette.border}`,
-	borderRadius: "10px 10px 0 0",
-};
-
-export const modalBody: CSSProperties = {
-	flex: 1,
-	overflowY: "auto",
-	padding: "14px 20px 20px",
-	display: "flex",
-	flexDirection: "column",
-	gap: 12,
-};
-
-/** Instruction authoring guidance box inside the skill form modal (MIK-025). */
-export const guidanceBox: CSSProperties = {
+export const drawerTips: CSSProperties = {
 	background: palette.paperInset,
 	border: `1px solid ${palette.border}`,
 	borderRadius: 8,
 	padding: "10px 12px",
 	fontSize: 12,
 	color: palette.inkSoft,
+};
+
+/** The clickable tips summary line (MIK-053). */
+export const drawerTipsSummary: CSSProperties = {
+	fontWeight: 600,
+	color: palette.ink,
+	cursor: "pointer",
 };
 
 export const rail: CSSProperties = {
@@ -563,10 +553,11 @@ export const summaryClamp: CSSProperties = {
 };
 
 /**
- * Detail side sheet (MIK-022). The backdrop hosts the sheet flush against the
- * viewport's right edge; on narrow screens the sheet goes fullscreen.
+ * Shared right drawer (MIK-022 detail sheet, generalized by MIK-053 for the
+ * skill create/edit form too). The backdrop hosts the panel flush against the
+ * viewport's right edge; on narrow screens the panel goes fullscreen.
  */
-export const sheetBackdrop: CSSProperties = {
+export const drawerBackdrop: CSSProperties = {
 	position: "fixed",
 	inset: 0,
 	background: "rgba(58, 52, 43, 0.35)",
@@ -575,7 +566,7 @@ export const sheetBackdrop: CSSProperties = {
 	zIndex: 20,
 };
 
-export const sheet: CSSProperties = {
+export const drawerPanel: CSSProperties = {
 	boxSizing: "border-box",
 	width: "min(60vw, 860px)",
 	height: "100%",
@@ -586,25 +577,25 @@ export const sheet: CSSProperties = {
 	boxShadow: "-12px 0 32px rgba(58, 52, 43, 0.18)",
 };
 
-export const sheetFullscreen: CSSProperties = {
-	...sheet,
+export const drawerPanelFullscreen: CSSProperties = {
+	...drawerPanel,
 	width: "100%",
 	borderLeft: "none",
 };
 
-export const sheetHeader: CSSProperties = {
+export const drawerHeader: CSSProperties = {
 	padding: "14px 20px 12px",
 	background: palette.paperRaised,
 	borderBottom: `1px solid ${palette.border}`,
 };
 
-export const sheetBody: CSSProperties = {
+export const drawerBody: CSSProperties = {
 	flex: 1,
 	overflowY: "auto",
 	padding: "14px 20px 24px",
 };
 
-export const sheetFooter: CSSProperties = {
+export const drawerFooter: CSSProperties = {
 	padding: "12px 20px",
 	background: palette.paperRaised,
 	borderTop: `1px solid ${palette.border}`,

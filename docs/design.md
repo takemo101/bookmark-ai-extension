@@ -249,7 +249,7 @@ If AI is unavailable or fails:
 - Still save the bookmark with URL/title and metadata.
 - Set `aiStatus` to `unavailable` or `failed`.
 - Keep the record recoverable for later re-analysis: saving the page again
-  from the popup re-runs analysis. The Options detail sheet no longer offers a
+  from the popup re-runs analysis. The Options detail drawer no longer offers a
   Re-analyze action (MIK-024).
 
 ## Page Extraction
@@ -483,7 +483,7 @@ Options page responsibilities:
 - Filter by domain, genre, tags, and AI status. Domains are derived on demand
   from canonical URL hostnames (lowercased, `www.` dropped) — never stored on
   records (MIK-028).
-- Delete bookmarks — via a per-row quick delete and from the detail sheet.
+- Delete bookmarks — via a per-row quick delete and from the detail drawer.
 - Show Drive sync status and errors, with the manual sync action in the
   shared app-header sync hub (MIK-051).
 - Show visible progress for slow Drive operations, distinguishing cached
@@ -491,7 +491,7 @@ Options page responsibilities:
   (MIK-026).
 - Manage Analysis skills from a separate top-level settings screen (MIK-025).
 
-The Options UI does not offer re-analysis (MIK-024): the detail sheet is a
+The Options UI does not offer re-analysis (MIK-024): the detail drawer is a
 reading/opening/deletion surface. A `pending`, `unavailable`, or `failed`
 record stays recoverable — saving the page again from the popup re-runs
 analysis, and a later explicit re-analysis flow may return (MIK-027). Any
@@ -508,16 +508,55 @@ This matches the manual posture documented in
 [`smoke-checklist.md`](smoke-checklist.md) (section 5 and its re-analysis note);
 re-analyze from the page's own tab, or save it again.
 
-Both screens render inside a shared Options shell (MIK-036): a persistent
+All screens render inside a shared Options shell (MIK-036): a persistent
 app header carries the product title (`Bookmark AI`), the shared sync hub
 (MIK-051), and the top-level screen navigation on every screen, and each
 screen opens with the same screen-header rhythm — a screen title plus a
 one-line user-facing subtitle (`Library` / `Research Ledger` and
-`Analysis skills` / a plain-language tuning line). A screen may attach a
-title-adjacent help control (MIK-052): a small `?` disclosure beside the
-title (a native `<details>`, click/focus accessible, no persisted open
-state) carrying explanatory screen guidance, so explanations never occupy
-permanent side-panel space.
+`Analysis skills` / a plain-language tuning line). Every top-level screen
+carries a title-adjacent help control (MIK-052, MIK-053): a small `?`
+button beside the title (click/focus accessible, `aria-expanded` +
+`aria-controls`, no persisted open state) opening a `position: fixed`
+popover measured from the trigger — fixed positioning so an
+`overflow: hidden` screen like the Ask AI chat page can never clip it. The
+popover closes on Escape, outside click, and a second trigger click. Help
+carries explanatory screen guidance (Library: search/filter scope, the
+detail drawer, and the sync hub; Analysis skills: the
+`bookmark-ai/settings.json` context; Ask AI: local-cache scope and privacy
+notes), so explanations never occupy permanent side-panel space.
+
+### Options shared UI foundation (MIK-053)
+
+The Options screens are built on a small Options-local component foundation
+under `src/options/components/` — not a global design system; it only keeps
+the existing screens from drifting apart:
+
+- `ScreenFrame.tsx` — per-screen layout variants sharing one header rhythm:
+  - `library`: normal document scroll; the header spans the 1200px shell and
+    the body is the two-zone workspace grid (240px rail + main content).
+    Library only — rails exist only for active controls.
+  - `noRail`: normal document scroll; the header and body stack inside the
+    same centered 880px column, so the title can never sit wider than the
+    content. Used by Analysis skills.
+  - `chat`: the outer page is locked (`height: 100vh`, `overflow: hidden`);
+    the header and the chat body share the centered 960px chat column and
+    the transcript viewport stays the only scroller with the composer
+    pinned. Used by Ask AI.
+- `ScreenHelp.tsx` — the title-adjacent `?` trigger plus fixed popover
+  described above.
+- `Drawer.tsx` — the shared right drawer/backdrop foundation described
+  under "Drawer behavior" below.
+- `BookmarkSummaryItem.tsx` — the shared bookmark summary body used by both
+  Library ledger rows and Ask AI recommendation cards: favicon (resolved
+  from the original visited URL, MIK-034), title, clamped
+  description/summary, metadata line (optional domain, genre, up to four
+  tags, optional profile suffix), AI status pill, and per-context slots —
+  the Library row adds updated time plus quick delete and selected
+  highlighting; the Ask AI card adds the recommendation reason line and no
+  delete. Ask AI recommendation cards therefore show the same
+  favicon/fallback site icon as Library rows; the card view carries the
+  original bookmark `url` for display-only favicon lookup, and the
+  recommendation prompt payload allowlist still never includes any URL.
 
 The app-header sync hub (MIK-051) is the single place for sync status and
 manual sync actions on every screen: a compact glance pill whose tone/text
@@ -537,32 +576,43 @@ active rail controls render no rail: their main content centers in a
 readable no-rail column, and their explanatory guidance lives in the
 title-adjacent header help instead.
 
-The options page has a top-level navigation with two screens (MIK-025):
+The options page has top-level navigation for three screens:
 
-- **Library** (default): the two-zone ledger and detail side sheet described
+- **Library** (default): the two-zone ledger and detail drawer described
   below.
 - **Analysis skills**: the settings screen for analysis skills, no longer a
-  panel below the bookmark list. It renders without a left rail (MIK-052):
-  the settings-file context (custom skills are stored only in
-  `bookmark-ai/settings.json` on Drive) is disclosed by the title-adjacent
-  header help, and the centered no-rail column shows custom skills with
-  create/edit/delete/enable-disable (and the `Add custom
+  panel below the bookmark list. It renders on the `noRail` frame variant
+  (MIK-052, MIK-053): the settings-file context (custom skills are stored
+  only in `bookmark-ai/settings.json` on Drive) is disclosed by the
+  title-adjacent header help, and the centered no-rail column shows custom
+  skills with create/edit/delete/enable-disable (and the `Add custom
   skill` action) followed by built-in profiles read-only. Settings sync
   status and the `Sync settings` refresh live in the shared app-header sync
   hub (MIK-051) — the hub dispatches the existing refresh path and disables
-  the action while a skills action is busy. The create/edit form
-  opens as a centered modal dialog that closes via its Close/Cancel buttons,
-  the Escape key, or a backdrop click, and locks the page scroll while open. Instruction-authoring
-  guidance sits next to the form: what the instruction changes, per-source
-  examples (GitHub repository / technical article / official docs), safety
-  warnings (no secrets, no raw page persistence, no external APIs/providers,
-  no output schema or privacy-contract changes), and a plain-language
+  the action while a skills action is busy. The create/edit form opens in
+  the shared right drawer (MIK-053; the same `Drawer` foundation as the
+  bookmark detail) that closes via its Close/Cancel buttons, the Escape
+  key, or a true backdrop click, goes fullscreen on narrow viewports, and
+  locks the page scroll while open. Instruction-authoring guidance sits
+  under the form as collapsible tips (a native `<details>` whose summary is
+  the guidance title): what the instruction changes, per-source examples
+  (GitHub repository / technical article / official docs), safety warnings
+  (no secrets, no raw page persistence, no external APIs/providers, no
+  output schema or privacy-contract changes), and a plain-language
   explanation of domain/URL-pattern/priority matching.
+- **Ask AI / AIに聞く**: the chat-style screen for asking about saved
+  bookmarks. It renders on the `chat` frame variant (MIK-053): the screen
+  header and chat surface share the centered 960px chat column, the outer
+  page is locked, and the transcript viewport is the only vertical scroller
+  while the composer stays pinned. Ask AI searches the local bookmark cache
+  only, does not search the open web, and keeps chat/session state in memory
+  only. Recommendation cards reuse the shared bookmark summary item and show
+  the same favicon/fallback icon treatment as Library rows.
 
-Switching screens closes the detail sheet; it never resets search/filter
+Switching screens closes the detail drawer; it never resets search/filter
 state or the skill form draft.
 
-Use a two-zone ledger layout with a row-click detail sheet:
+Use a two-zone ledger layout with a row-click detail drawer:
 
 - Left rail: two cards — Search (with the shown/total count and Clear
   filters) and one grouped Filters panel
@@ -576,7 +626,7 @@ Use a two-zone ledger layout with a row-click detail sheet:
   genre/tags/profile metadata, status, updated time, and a small quick delete
   button. Quick delete goes through the existing delete use case, is disabled
   while an action is busy, and stops event propagation so it never opens the
-  detail sheet.
+  detail drawer.
 - Sync action: the app-header sync hub's `Sync Drive` button (MIK-051)
   triggers the existing refresh path; the hub carries the sync
   status/pending/error readout. There is no rail sync panel and no floating
@@ -584,25 +634,28 @@ Use a two-zone ledger layout with a row-click detail sheet:
   the button is disabled and the hub shows the in-flight progress line, and
   the controller drops duplicate refresh calls, so a slow sync can never be
   stacked into a second one (MIK-026).
-- Detail side sheet: clicking a row opens a right-side modal sheet (fullscreen
-  on narrow viewports) showing the full bookmark detail — description, genre,
+- Detail drawer: clicking a row opens a right-side modal drawer (fullscreen
+  on narrow viewports; the shared `Drawer` foundation, MIK-053) showing the
+  full bookmark detail — description, genre,
   tags, profile, URL, timestamps, the full `analysisMarkdown` note — and the
   Open/Delete/Close actions (no Re-analyze). There is no always-visible right
   detail pane.
 
-Detail sheet behavior:
+Detail drawer behavior (shared `Drawer` foundation, MIK-053 — the skill
+create/edit drawer closes the same way):
 
-- While the sheet is open the underlying page scroll is locked (body overflow
-  hidden, restored on close); the sheet body scrolls independently.
-- The sheet closes via its Close buttons, the Escape key, or a backdrop click;
-  closing only clears the selection and never resets search/filter state.
-- The row highlight reflects the currently open sheet.
+- While the drawer is open the underlying page scroll is locked (body overflow
+  hidden, restored on close); the drawer body scrolls independently.
+- The drawer closes via its Close buttons, the Escape key, or a true backdrop
+  click; closing only clears the selection and never resets search/filter
+  state.
+- The row highlight reflects the currently open drawer.
 - `analysisMarkdown` is rendered through `react-markdown` + `remark-gfm` with
   raw HTML kept inert (no `rehype-raw`, no `dangerouslySetInnerHTML`); rendered
   links open in a new tab with `rel="noreferrer"`.
-- While an action is busy the sheet keeps Open and Close enabled, disables
+- While an action is busy the drawer keeps Open and Close enabled, disables
   Delete, and shows a keep-this-page-open note. Delete is immediate and closes
-  the sheet once the bookmark is gone.
+  the drawer once the bookmark is gone.
 
 Drive sync progress feedback (MIK-026):
 

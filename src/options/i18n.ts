@@ -18,6 +18,16 @@ export type OptionsMessages = {
 	readonly researchLedger: string;
 	readonly navAria: string;
 	readonly library: string;
+	/** Accessible name of the Library title-adjacent help trigger (MIK-053). */
+	readonly libraryHelpAria: string;
+	/** Label opening the Library help guidance (MIK-053). */
+	readonly libraryAbout: string;
+	/** What the Library search/filter rail covers (MIK-053). */
+	readonly libraryHelpSearch: string;
+	/** How the row detail drawer and quick delete behave (MIK-053). */
+	readonly libraryHelpDetail: string;
+	/** Where sync status/actions live — the app-header hub (MIK-053). */
+	readonly libraryHelpSync: string;
 	readonly analysisSkills: string;
 	readonly search: string;
 	readonly searchPlaceholder: string;
@@ -159,6 +169,14 @@ const EN: OptionsMessages = {
 	researchLedger: "Research Ledger",
 	navAria: "Options screens",
 	library: "Library",
+	libraryHelpAria: "Library help",
+	libraryAbout: "About the Library",
+	libraryHelpSearch:
+		"Search and filters narrow your saved bookmarks by title, URL, summary, tags, domain, genre, and AI status.",
+	libraryHelpDetail:
+		"Click a row to open its full details in the right-side drawer; the row's ✕ deletes a bookmark without opening it.",
+	libraryHelpSync:
+		"Sync status and manual sync actions live in the sync hub in the app header.",
 	analysisSkills: "Analysis skills",
 	search: "Search",
 	searchPlaceholder: "Title, URL, summary, tags…",
@@ -314,6 +332,14 @@ const JA: OptionsMessages = {
 	researchLedger: "リサーチ台帳",
 	navAria: "設定画面の切り替え",
 	library: "ライブラリ",
+	libraryHelpAria: "ライブラリのヘルプ",
+	libraryAbout: "ライブラリについて",
+	libraryHelpSearch:
+		"検索とフィルタで、タイトル・URL・要約・タグ・ドメイン・ジャンル・AIステータスから保存済みブックマークを絞り込めます。",
+	libraryHelpDetail:
+		"行をクリックすると右側のドロワーで詳細が開きます。行の✕は詳細を開かずにブックマークを削除します。",
+	libraryHelpSync:
+		"同期の状態と手動同期は、アプリヘッダーの同期ハブにあります。",
 	analysisSkills: "分析スキル",
 	search: "検索",
 	searchPlaceholder: "タイトル・URL・要約・タグ…",

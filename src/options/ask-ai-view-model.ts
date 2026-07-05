@@ -77,6 +77,11 @@ export const MAX_ASK_AI_RESULT_CARDS = 5;
 /** One recommendation card: app-owned bookmark data plus a display reason. */
 export type AskAiCardView = {
 	readonly canonicalUrl: string;
+	/**
+	 * The original visited URL for the card favicon (MIK-053) — resolved by
+	 * Chrome at render time exactly like Library rows (MIK-034), never stored.
+	 */
+	readonly url: string;
 	readonly title: string;
 	readonly domain: string;
 	readonly genre?: string;
@@ -213,6 +218,7 @@ export function isAskAiComposerSubmitKey(
 function toCard(candidate: AskAiCandidate, reason: string): AskAiCardView {
 	return {
 		canonicalUrl: candidate.canonicalUrl,
+		url: candidate.url,
 		title: candidate.title,
 		domain: candidate.domain,
 		genre: candidate.genre,
