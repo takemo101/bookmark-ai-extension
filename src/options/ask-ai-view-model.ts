@@ -20,13 +20,16 @@
  *     mid-chat is destroyed and dropped so the turn falls back to local cards.
  *   - Follow-up retrieval is HYBRID: a follow-up first tries to narrow within
  *     the previous turn's candidate set; when that narrowed match is weak or
- *     empty (including new topics and reset-like questions) retrieval falls
- *     back to ALL cached bookmarks. A turn that finds nothing anywhere keeps
- *     the previous narrowed context.
+ *     empty, a refinement-like question (`絞って`, "narrow those down", …,
+ *     MIK-055) stays inside the previous recommendation/context candidates —
+ *     preferring the cards actually shown last — and never broadens, while a
+ *     new-topic question falls back to ALL cached bookmarks. A turn that
+ *     finds nothing anywhere keeps the previous narrowed context.
  *   - {@link AskAiController.clearSession} is the explicit hard reset: it
  *     discards the transcript, the draft input, the narrowed candidate
- *     context, and destroys the Prompt API session; any in-flight answer is
- *     silently dropped and the next submit starts a fresh session.
+ *     context, the previous recommendation context, and destroys the Prompt
+ *     API session; any in-flight answer is silently dropped and the next
+ *     submit starts a fresh session.
  *
  * The per-turn recommendation flow itself is unchanged from MIK-046/047:
  *
@@ -215,6 +218,34 @@ export function isAskAiComposerSubmitKey(
 	return event.key === "Enter" && !event.shiftKey && event.isComposing !== true;
 }
 
+/**
+ * Refinement hints (MIK-055): substrings marking a follow-up that refers back
+ * to the previous suggestions ("narrow those down", `絞って`) rather than
+ * opening a new topic. Japanese hints match as plain substrings; English hints
+ * only at word boundaries so e.g. "whose" never reads as "those". Deliberately
+ * a local heuristic — no extra AI call, nothing persisted.
+ */
+const JAPANESE_REFINEMENT_HINTS: readonly string[] = [
+	"絞",
+	"その中",
+	"この中",
+	"上記",
+	"さっき",
+	"もう少し",
+	"具体",
+];
+const ENGLISH_REFINEMENT_HINTS =
+	/\b(?:narrow|refine|from those|among them|these|those|previous|more specific)\b/;
+
+/** Whether a question reads as a refinement of the previous answer (MIK-055). */
+function isRefinementFollowUp(question: string): boolean {
+	const lowered = question.toLowerCase();
+	return (
+		JAPANESE_REFINEMENT_HINTS.some((hint) => lowered.includes(hint)) ||
+		ENGLISH_REFINEMENT_HINTS.test(lowered)
+	);
+}
+
 function toCard(candidate: AskAiCandidate, reason: string): AskAiCardView {
 	return {
 		canonicalUrl: candidate.canonicalUrl,
@@ -282,6 +313,11 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 	let session: AskAiPromptSession | null = null;
 	let sessionUnavailable = false;
 	let narrowedIds: ReadonlySet<string> | null = null;
+	// MIK-055: the previous recommendation context — the candidates behind the
+	// cards actually shown last (or the whole turn's candidate set when no card
+	// maps back). A refinement-like follow-up refines these instead of
+	// broadening to all bookmarks. Memory-only and generation-fenced.
+	let previousContextCandidates: readonly AskAiCandidate[] = [];
 	let generation = 0;
 
 	const listeners = new Set<() => void>();
@@ -498,12 +534,16 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 
 		// Hybrid follow-up retrieval (MIK-048): a follow-up first narrows within
 		// the previous turn's candidate set; a weak or empty narrowed match
-		// (including new topics and reset-like questions) falls back to all
-		// cached bookmarks below.
+		// stays inside the previous recommendation context when the question is
+		// refinement-like (MIK-055) and falls back to all cached bookmarks below
+		// for new topics.
 		let search: {
 			readonly kind: "candidates";
 			readonly candidates: readonly AskAiCandidate[];
 		} | null = null;
+		// The previous candidates re-scored against this question — kept as the
+		// refinement context of last resort when no shown card resolves.
+		let narrowedWeak: readonly AskAiCandidate[] = [];
 		if (narrowedIds !== null) {
 			const previousRecords = records.filter((record) =>
 				narrowedIds?.has(record.id),
@@ -512,8 +552,31 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				const narrowed = findAskAiCandidates(previousRecords, asked, options);
 				if (narrowed.kind === "candidates") {
 					search = narrowed;
+				} else if (narrowed.kind === "weak-candidates") {
+					narrowedWeak = narrowed.candidates;
 				}
 			}
+		}
+		if (
+			search === null &&
+			(previousContextCandidates.length > 0 || narrowedIds !== null) &&
+			isRefinementFollowUp(asked)
+		) {
+			// A refinement of the previous answer must not broaden to all
+			// bookmarks (MIK-055): refine the cards shown last — dropping any
+			// bookmark that has since left the cache — else the previous
+			// candidates re-scored above.
+			const recordIds = new Set<string>(records.map((record) => record.id));
+			const shownStillCached = previousContextCandidates.filter((candidate) =>
+				recordIds.has(candidate.id),
+			);
+			const refinement =
+				shownStillCached.length > 0 ? shownStillCached : narrowedWeak;
+			if (refinement.length === 0) {
+				// Nothing left to refine: clarify, keeping the previous context.
+				return { kind: "weak-candidates" };
+			}
+			search = { kind: "candidates", candidates: refinement };
 		}
 		if (search === null) {
 			const broad =
@@ -533,7 +596,23 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 		if (startedGeneration === generation) {
 			narrowedIds = new Set(search.candidates.map((candidate) => candidate.id));
 		}
-		return recommend(asked, search.candidates, startedGeneration);
+		const result = await recommend(asked, search.candidates, startedGeneration);
+		if (startedGeneration === generation && result.kind === "recommendations") {
+			// The cards shown become the next refinement's context (MIK-055),
+			// mapped back to their source candidates; when none resolves the
+			// turn's whole candidate set stands in.
+			const byCanonicalUrl = new Map(
+				search.candidates.map((candidate) => [
+					candidate.canonicalUrl,
+					candidate,
+				]),
+			);
+			const shown = result.cards
+				.map((card) => byCanonicalUrl.get(card.canonicalUrl))
+				.filter((candidate): candidate is AskAiCandidate => Boolean(candidate));
+			previousContextCandidates = shown.length > 0 ? shown : search.candidates;
+		}
+		return result;
 	}
 
 	return {
@@ -591,6 +670,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			question = "";
 			answering = false;
 			narrowedIds = null;
+			previousContextCandidates = [];
 			sessionUnavailable = false;
 			destroySession();
 			notify();
