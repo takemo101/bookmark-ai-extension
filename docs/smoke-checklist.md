@@ -68,7 +68,8 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
 
 - [ ] With the Prompt API available, saving a page walks the receipt trail:
       **saving → extracting → analyzing → syncing** (genuine per-stage progress).
-- [ ] The receipt shows a Japanese `description`, a `genre`, and `tags`, and the
+- [ ] The receipt shows a `description`, a `genre`, and `tags` in the browser
+      UI language (Japanese or English, auto-selected; MIK-033), and the
       record's `aiStatus` is `ready`.
 
 ### 4. Prompt API unavailable behavior
@@ -79,28 +80,31 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
       **unavailable** (the `analyzing` step is shown as skipped), and the record
       is still synced to Drive.
 
-### 5. Options: list / search / delete / re-analyze
+### 5. Options: list / search / delete — and popup re-analyze
 
-- [ ] Open the options page; saved bookmarks render from cache, then a `Sync now`
-      pulls the authoritative list from Drive.
+- [ ] Open the options page; saved bookmarks render from cache, then **Sync
+      Drive** in the app-header sync hub pulls the authoritative list from
+      Drive.
 - [ ] **Search** by title/URL/tag narrows the list; clearing restores it.
 - [ ] Genre/tag/status **filters** narrow the list and combine with search.
 - [ ] **Delete** removes the row from the list and an action banner remains
       visible even if the active filter then matches no rows.
-- [ ] **Re-analyze** on a non-`ready` record, **while that page is the active tab
-      in the current window**, re-extracts and updates the record. From an
-      unrelated active tab it returns a safe "open the page in the active tab"
-      error rather than reaching for a tab the extension was not granted.
+- [ ] **Re-analyze** on a non-`ready` record from the **popup's recent list**
+      (the Options UI offers no re-analyze action, MIK-024), **while that page
+      is the active tab in the current window**, re-extracts and updates the
+      record. From an unrelated active tab it returns a safe "open the page in
+      the active tab" error rather than reaching for a tab the extension was
+      not granted.
 
 ### 6. Unsynced local mutations survive Drive failure (MIK-014)
 
 - [ ] With Drive made unavailable (e.g. offline, or revoke the token), **Delete**
-      a bookmark in options. The row disappears and the sync panel shows
+      a bookmark in options. The row disappears and the app-header sync hub shows
       **Local changes pending — will retry on next sync** (the popup shows a
       `Local: changes pending` badge).
-- [ ] Click **Sync now** while still offline: the deletion is **not** resurrected
+- [ ] Click **Sync Drive** while still offline: the deletion is **not** resurrected
       and the pending indicator remains.
-- [ ] Restore Drive connectivity and **Sync now** again: the pending indicator
+- [ ] Restore Drive connectivity and **Sync Drive** again: the pending indicator
       clears, the deletion is now written to `bookmarks.jsonl` as a tombstone, and
       it stays deleted on a subsequent sync. The same holds for a save/re-analyze
       performed while Drive was unavailable (the record is pushed, not lost).
@@ -133,14 +137,14 @@ rows as **N/A** when run on a channel without the Prompt API.
   a different tab. This is intentional to keep permissions narrow (no `tabs`
   permission). Re-analyze from the page itself, or save it again.
 - Deleting a bookmark writes a deletion **tombstone** to Drive (and the local
-  cache), so the deletion is durable: a later `Sync now`, or a sync from another
+  cache), so the deletion is durable: a later `Sync Drive`, or a sync from another
   device that still holds the record, does **not** resurrect it. The one
   intended exception is when another device has a *strictly newer* explicit
   update for the same URL, which wins by the documented delete-vs-update rule
   (see `docs/design.md` "Delete vs. update conflict rules"). Tombstones are not
   pruned in the MVP, so the JSONL file retains one line per past deletion.
 - A local mutation (delete/save/update/re-analyze) made while Drive is
-  unavailable is kept in the cache and flagged **pending**; a later `Sync now`
+  unavailable is kept in the cache and flagged **pending**; a later `Sync Drive`
   re-pushes it rather than overwriting it with the remote state, so it is not
   silently lost and is written to Drive once it recovers (see `docs/design.md`
   "Preserving unsynced local mutations"). The MVP has no background retry queue,

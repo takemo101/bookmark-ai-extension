@@ -25,7 +25,7 @@ bun run dev            # start Vite dev build (uses a dev placeholder OAuth clie
 bun run typecheck      # tsc --noEmit
 bun run test           # run the Vitest suite once
 bun run test:watch     # run Vitest in watch mode
-bun run check          # typecheck + test (the gate automation wraps)
+bun run check          # format check + typecheck + test (the gate automation wraps)
 bun run validate       # check + production build (the full local baseline)
 bun run build          # production extension build into dist/
 ```
@@ -44,10 +44,11 @@ just hooks-install     # install the lefthook git hooks for this checkout
 just hooks-run         # run the pre-commit baseline without committing
 just typecheck         # bun run typecheck
 just test              # bun run test
-just check             # typecheck + test
-just fix               # apply safe formatter/lint fixes (no-op until such tooling exists)
+just check             # format check + typecheck + test
+just format-check      # check repository formatting without writing changes
+just fix               # apply Biome formatting fixes (bun run fix)
 just build             # bun run build (needs VITE_GOOGLE_OAUTH_CLIENT_ID)
-just validate          # typecheck + test + build — the default final check
+just validate          # format check + typecheck + test + build — the default final check
 ```
 
 `just validate` is the documented local validation baseline and the default
@@ -57,8 +58,8 @@ already set in the environment, so it runs without real OAuth values. To
 validate against your real dev client ID, export `VITE_GOOGLE_OAUTH_CLIENT_ID`
 (or keep it in `.env.local`) and run `bun run validate`.
 
-The lefthook pre-commit hook runs `typecheck` then `test` sequentially
-(`parallel: false`) to avoid duplicated concurrent `tsc`/Vitest runs. It does
+The lefthook pre-commit hook runs `format:check`, `typecheck`, then `test`
+sequentially (`parallel: false`) to avoid duplicated concurrent runs. It does
 not run the build, which needs an OAuth client ID; use `just validate` for that.
 After cloning, run `just install && just hooks-install` once to enable the hook.
 
@@ -98,7 +99,8 @@ scope, without needing a real OAuth client.
 After loading the unpacked build with a real dev client ID, run the
 [manual smoke checklist](docs/smoke-checklist.md) to verify sign-in, Drive
 folder/file creation, save (AI available and unavailable), and the options
-list/search/delete/re-analyze flows.
+list/search/delete flows (re-analysis runs from the popup's recent list;
+the Options UI offers no re-analyze action).
 
 ### Source layout
 
@@ -108,12 +110,15 @@ manifest.config.ts       MV3 manifest (permissions, OAuth scope)
 src/
   background/            service worker
   popup/                 Bookmark Receipt save-current-tab UI
-  options/               Research Ledger bookmark management UI
+  options/               Research Ledger management UI (Library / Analysis skills / Ask AI)
   lib/
     bookmarks/           schema, JSONL, upsert/merge, search (domain)
+    settings/            analysis-skill settings domain (settings.json schema/CRUD)
     drive/               Google auth + Drive I/O
     extraction/          page extraction + excerpt building
-    ai/                  Prompt API availability + Japanese analysis
+    ai/                  Prompt API availability + analysis + Ask AI recommendation
+    favicon/             Chrome _favicon URL resolution (display-only)
+    i18n/                browser-UI-language selection shared by popup/options
     storage/             chrome.storage.local cache
     app/                 use cases (ports + orchestration, Chrome-free)
     runtime/             extension composition: chrome.scripting + Drive adapters
@@ -126,7 +131,8 @@ src/
 - Visible Drive folder: `bookmark-ai/`.
 - `bookmarks.jsonl` as the primary data file.
 - Save current tab in the MVP.
-- Generate Japanese AI description, genre, and tags.
+- Generate an AI description, genre, and tags in Japanese or English
+  (auto-selected from the browser UI language).
 - Use Chrome Built-in AI / Prompt API only in the MVP.
 - Do not add external AI API fallback in the MVP.
 
