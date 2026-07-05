@@ -1289,13 +1289,15 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).toContain(">AIに聞く<");
 	});
 
-	it("renders the Ask AI screen as a rail/main workspace without other screens", () => {
+	it("renders the Ask AI screen as a chat-only layout without the shared workspace grid", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
 		expect(html).toContain('aria-label="Ask AI about saved bookmarks"');
 		expect(html).toMatch(/<h2[^>]*>Ask AI<\/h2>/);
-		// Same shared workspace grid as Library and Analysis skills (MIK-038).
-		expect(html).toContain("grid-template-columns:240px");
+		// Chat-only screen (MIK-050): no shared rail/main workspace grid and no
+		// left rail section — the chat is the primary full-width content.
+		expect(html).not.toContain("grid-template-columns:240px");
+		expect(html).not.toContain("<aside");
 		expect(html.match(/Bookmark AI/g)).toHaveLength(1);
 		// Neither the ledger nor the skills content leaks onto this screen.
 		expect(html).not.toContain('aria-label="Search bookmarks"');
@@ -1303,7 +1305,38 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).not.toContain("Built-in (read-only)");
 	});
 
-	it("shows the bookmark sync status and last synced time in the rail", () => {
+	it("keeps the shared workspace grid on the Library and Analysis skills screens", () => {
+		// MIK-050 removes the grid only on Ask AI; the other screens keep it.
+		const library = renderWithAskAi(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+			}),
+			askAiViewOf(),
+		);
+		const skills = renderWithAskAi(
+			syncedView,
+			askAiViewOf(),
+			"analysis-skills",
+		);
+
+		for (const html of [library, skills]) {
+			expect(html).toContain("grid-template-columns:240px");
+		}
+	});
+
+	it("lets the Ask AI chat use more width than the shared 1200px screen shell", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		// Only the shared app header keeps the 1200px cap; the Ask AI screen
+		// body itself gets a wider shell (MIK-050).
+		expect(html.match(/max-width:1200px/g)).toHaveLength(1);
+		expect(html).toContain("max-width:1600px");
+	});
+
+	it("shows the bookmark sync status and last synced time at the top of the chat", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
 		expect(html).toContain("Drive sync");
@@ -1312,7 +1345,43 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).toContain("2026");
 	});
 
-	it("explains the local-cache scope and chat non-persistence in the rail", () => {
+	it("renders the sync/scope/privacy context as the first item inside the chat viewport", () => {
+		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		// The context lives inside the one scrolling viewport of the chat —
+		// after the scroll container opens, before the welcome state and the
+		// pinned composer form — not as an external strip above the chat frame.
+		const viewport = html.indexOf("overflow-y:auto");
+		const context = html.indexOf('aria-label="About Ask AI"');
+		const welcome = html.indexOf("No questions yet");
+		const form = html.indexOf("<form");
+		for (const index of [viewport, context, welcome, form]) {
+			expect(index).toBeGreaterThanOrEqual(0);
+		}
+		expect(context).toBeGreaterThan(viewport);
+		expect(context).toBeLessThan(welcome);
+		expect(context).toBeLessThan(form);
+	});
+
+	it("keeps the chat context ahead of the transcript once messages exist", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: chatOf("typescript testing", {
+					kind: "weak-candidates",
+				}),
+			}),
+			"ask-ai",
+		);
+
+		const context = html.indexOf('aria-label="About Ask AI"');
+		const log = html.indexOf('role="log"');
+		expect(context).toBeGreaterThanOrEqual(0);
+		expect(log).toBeGreaterThanOrEqual(0);
+		expect(context).toBeLessThan(log);
+	});
+
+	it("explains the local-cache scope and chat non-persistence in the chat context", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
 		expect(html).toContain(
@@ -1323,7 +1392,7 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).toContain("this chat is never saved");
 	});
 
-	it("localizes the rail scope and privacy notes for the ja language", () => {
+	it("localizes the chat-context scope and privacy notes for the ja language", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai", "ja");
 
 		expect(html).toContain(
