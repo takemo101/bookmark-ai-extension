@@ -122,6 +122,25 @@ Public release may still require OAuth app verification or review, especially if
 - Clear explanation of why Drive access is needed.
 - A demo or instructions showing the extension only creates/manages `bookmark-ai/bookmarks.jsonl`.
 
+## Chrome Web Store Listing Assets
+
+The extension package includes runtime icons generated from the Bookmark AI
+Warm Library logo:
+
+- `public/icons/icon-16.png`
+- `public/icons/icon-32.png`
+- `public/icons/icon-48.png`
+- `public/icons/icon-128.png`
+
+The Chrome Web Store listing upload assets live outside the extension package
+in `store-assets/`:
+
+- `store-assets/store-icon-128.png` — listing icon.
+- `store-assets/screenshot-library-1280x800.png` — screenshot candidate.
+- `store-assets/promo-small-440x280.png` — small promotional tile candidate.
+- `store-assets/promo-marquee-1400x560.png` — marquee / large promotional tile
+  candidate if requested.
+
 ## Chrome Web Store Review Notes
 
 Keep the extension's permissions aligned with the actual MVP:
