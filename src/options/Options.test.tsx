@@ -1470,6 +1470,11 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		// The app header and screen shell keep the shared 1200px width cap; the
 		// chat itself is centered in a narrower comfortable column inside it.
 		expect(html.match(/max-width:1200px/g)).toHaveLength(2);
+		// Regression: because Ask AI makes the page a flex column, the app header
+		// must keep a real full row width instead of shrinking to its content.
+		expect(html).toContain(
+			"max-width:1200px;margin:0 auto;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box",
+		);
 		expect(html).not.toContain("max-width:1600px");
 		expect(html).toContain("max-width:960px");
 		// The centered chat wrapper hosts the scrolling chat viewport.
