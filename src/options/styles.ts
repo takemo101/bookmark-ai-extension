@@ -252,13 +252,21 @@ export const screenHelpPanel: CSSProperties = {
 };
 
 /**
+ * The one max width shared by every no-rail content column (MIK-054): screens
+ * without an active side rail (Analysis skills, Ask AI) render at this width
+ * so their usable content width never diverges. Only the Library is wider —
+ * its 1200px shell hosts the 240px filter rail.
+ */
+const noRailMaxWidth = 880;
+
+/**
  * Centered single-column body for no-rail screens (MIK-052): screens whose
  * rail held only explanations render their main content in this readable
  * column instead of the {@link workspaceBody} grid.
  */
 export const noRailContent: CSSProperties = {
 	width: "100%",
-	maxWidth: 880,
+	maxWidth: noRailMaxWidth,
 	margin: "0 auto",
 	boxSizing: "border-box",
 };
@@ -276,15 +284,17 @@ export const noRailColumn: CSSProperties = {
 };
 
 /**
- * Centered comfortable chat column for the ScreenFrame `chat` variant
- * (MIK-052; header included since MIK-053): a bit wider than
- * {@link noRailContent} so recommendation cards breathe, but narrower than
- * the 1200px shell for chat readability. Hosts the screen header and the
- * chat body so the title/subtitle/help align with the chat itself.
+ * Centered chat column for the ScreenFrame `chat` variant (MIK-052; header
+ * included since MIK-053; width unified by MIK-054): shares the
+ * {@link noRailMaxWidth} with the other no-rail screens so Ask AI and
+ * Analysis skills read at one content width. Hosts the screen header and the
+ * chat body so the title/subtitle/help align with the chat itself; the flex
+ * column passes the bounded viewport height down so the transcript stays the
+ * only scroller and the composer stays pinned.
  */
 export const chatColumn: CSSProperties = {
 	width: "100%",
-	maxWidth: 960,
+	maxWidth: noRailMaxWidth,
 	margin: "0 auto",
 	boxSizing: "border-box",
 	flex: 1,
@@ -467,9 +477,19 @@ export const rowDeleteButton: CSSProperties = {
 };
 
 /**
- * Expanded TAGS facet container (MIK-024): once the user shows all tags, the
- * list scrolls inside a capped box instead of stretching the sticky rail past
- * the viewport.
+ * Capped facet container (MIK-054): even the default "fewer" state gets a
+ * small scroll box because long Domain/Genre chips can wrap into more rows
+ * than the expanded all-values box, making "Show fewer" look inverted.
+ */
+export const facetListCapped: CSSProperties = {
+	maxHeight: 160,
+	overflowY: "auto",
+};
+
+/**
+ * Expanded facet container (MIK-024, generalized by MIK-054): once the user
+ * shows all values, the list scrolls inside a taller capped box instead of
+ * stretching the sticky rail past the viewport.
  */
 export const tagListExpanded: CSSProperties = {
 	maxHeight: 240,
@@ -522,6 +542,25 @@ export const facetCollapsedCount: CSSProperties = {
 	marginLeft: "auto",
 	fontSize: 11,
 	color: palette.inkFaint,
+};
+
+/**
+ * Compact Show all/fewer toggle under a capped facet list (MIK-054): a small
+ * pill visually subordinate to the facet chips, replacing the heavier
+ * {@link subtleButton}. Still a native button, so it stays keyboard-focusable.
+ */
+export const facetOverflowButton: CSSProperties = {
+	display: "inline-flex",
+	alignItems: "center",
+	marginTop: 6,
+	padding: "1px 8px",
+	fontFamily: fontStack,
+	fontSize: 11,
+	color: palette.inkSoft,
+	background: "transparent",
+	border: `1px solid ${palette.border}`,
+	borderRadius: 999,
+	cursor: "pointer",
 };
 
 /**

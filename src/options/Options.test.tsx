@@ -463,6 +463,10 @@ describe("Options facet cap (MIK-024)", () => {
 		expect(visibleFacetValues(manyTags, undefined, false)).toHaveLength(12);
 		expect(visibleFacetValues(manyTags, "tag-20", false)).toContain("tag-20");
 	});
+
+	it("puts an active value outside the cap first so it stays visibly reachable", () => {
+		expect(visibleFacetValues(manyTags, "tag-20", false)[0]).toBe("tag-20");
+	});
 });
 
 describe("Options collapsible facet groups (MIK-035)", () => {
@@ -533,6 +537,80 @@ describe("Options collapsible facet groups (MIK-035)", () => {
 
 		expect(html).toContain("20件");
 		expect(html).not.toContain("20 options");
+	});
+});
+
+describe("Options no-rail width and facet polish (MIK-054)", () => {
+	const manyGenres = Array.from(
+		{ length: 15 },
+		(_, i) => `genre-${String(i + 1).padStart(2, "0")}`,
+	);
+	const genreView = (overrides: Partial<OptionsView> = {}) =>
+		viewOf({
+			rows: [rowOf()],
+			totalCount: 1,
+			filteredCount: 1,
+			empty: false,
+			facets: {
+				genres: manyGenres,
+				tags: [],
+				statuses: ["ready", "pending", "unavailable", "failed"],
+				domains: [],
+			},
+			...overrides,
+		});
+
+	it("collapses a long genre list behind a Show all toggle like Domain and Tags", () => {
+		const html = render(genreView());
+
+		expect(html).toContain(">genre-12<");
+		expect(html).not.toContain("genre-13");
+		expect(html).toContain("Show all 15 genres");
+	});
+
+	it("keeps the active genre visible while the genre list is capped", () => {
+		const html = render(
+			genreView({ filters: { query: "", genre: "genre-15" } }),
+		);
+
+		expect(html).toContain(">genre-15<");
+		expect(html).not.toContain("genre-13");
+	});
+
+	it("renders the show-all toggle as a compact pill, not a full subtle button", () => {
+		const manyDomains = Array.from(
+			{ length: 15 },
+			(_, i) => `site-${String(i + 1).padStart(2, "0")}.test`,
+		);
+		const html = render(
+			viewOf({
+				rows: [rowOf()],
+				totalCount: 1,
+				filteredCount: 1,
+				empty: false,
+				facets: {
+					genres: [],
+					tags: [],
+					statuses: ["ready", "pending", "unavailable", "failed"],
+					domains: manyDomains,
+				},
+			}),
+		);
+
+		// The overflow toggle stays a native button (keyboard-focusable) but
+		// wears the compact facet pill instead of the heavier subtleButton.
+		expect(html).toMatch(
+			/<button type="button" style="[^"]*font-size:11px[^"]*border-radius:999px[^"]*">Show all 15 domains<\/button>/,
+		);
+	});
+
+	it("keeps the capped state height-constrained so Show fewer cannot look larger", () => {
+		const html = render(genreView());
+
+		// Long Domain/Genre chips can wrap into many rows. The capped state keeps
+		// a lower scroll box than the expanded all-values state, so clicking Show
+		// fewer never removes the height constraint and appears to grow the group.
+		expect(html).toContain("max-height:160px;overflow-y:auto");
 	});
 });
 
@@ -1464,7 +1542,7 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(skills).not.toContain("grid-template-columns:240px");
 	});
 
-	it("centers the Ask AI chat in a comfortable no-rail chat column (MIK-052)", () => {
+	it("centers the Ask AI chat in the shared no-rail column width (MIK-054)", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
 		// The app header and screen shell keep the shared 1200px width cap; the
@@ -1476,11 +1554,29 @@ describe("Ask AI screen shell (MIK-045)", () => {
 			"max-width:1200px;margin:0 auto;padding:16px 24px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;box-sizing:border-box",
 		);
 		expect(html).not.toContain("max-width:1600px");
-		expect(html).toContain("max-width:960px");
+		// Both no-rail screens share one content width (MIK-054): the chat
+		// column matches the Analysis skills 880px column instead of the old
+		// wider 960px chat width.
+		expect(html).toContain("max-width:880px");
+		expect(html).not.toContain("max-width:960px");
 		// The centered chat wrapper hosts the scrolling chat viewport.
-		expect(html.indexOf("max-width:960px")).toBeLessThan(
+		expect(html.indexOf("max-width:880px")).toBeLessThan(
 			html.indexOf("overflow-y:auto"),
 		);
+	});
+
+	it("gives Analysis skills and Ask AI the same no-rail content width (MIK-054)", () => {
+		const skills = renderWithSkills(
+			syncedView,
+			skillsViewOf(),
+			"analysis-skills",
+		);
+		const askAi = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
+
+		expect(skills).toContain("max-width:880px");
+		expect(askAi).toContain("max-width:880px");
+		expect(skills).not.toContain("max-width:960px");
+		expect(askAi).not.toContain("max-width:960px");
 	});
 
 	it("locks the Ask AI outer page so the chat viewport is the only scroller", () => {
@@ -2237,9 +2333,10 @@ describe("Options shared UI foundation (MIK-053)", () => {
 		it("aligns the Ask AI header with the chat column", () => {
 			const html = renderWithAskAi(viewOf(), askAiViewOf(), "ask-ai");
 
-			// The 960px chat column opens before the screen title: header, help,
-			// subtitle, and chat body all live in the same centered column.
-			const column = html.indexOf("max-width:960px");
+			// The shared 880px no-rail column (MIK-054) opens before the screen
+			// title: header, help, subtitle, and chat body all live in the same
+			// centered column.
+			const column = html.indexOf("max-width:880px");
 			const title = html.indexOf(">Ask AI</h2>");
 			expect(column).toBeGreaterThanOrEqual(0);
 			expect(title).toBeGreaterThanOrEqual(0);

@@ -539,9 +539,14 @@ the existing screens from drifting apart:
     same centered 880px column, so the title can never sit wider than the
     content. Used by Analysis skills.
   - `chat`: the outer page is locked (`height: 100vh`, `overflow: hidden`);
-    the header and the chat body share the centered 960px chat column and
-    the transcript viewport stays the only scroller with the composer
-    pinned. Used by Ask AI.
+    the header and the chat body share the same centered 880px no-rail
+    width and the transcript viewport stays the only scroller with the
+    composer pinned. Used by Ask AI.
+
+  No-rail width rule (MIK-054): every screen without an active side rail
+  (Analysis skills, Ask AI) renders its content at the one shared 880px max
+  width so the no-rail screens never diverge. Only the Library is wider —
+  its 1200px shell exists to host the 240px search/filter rail.
 - `ScreenHelp.tsx` — the title-adjacent `?` trigger plus fixed popover
   described above.
 - `Drawer.tsx` — the shared right drawer/backdrop foundation described
@@ -602,9 +607,9 @@ The options page has top-level navigation for three screens:
   explanation of domain/URL-pattern/priority matching.
 - **Ask AI / AIに聞く**: the chat-style screen for asking about saved
   bookmarks. It renders on the `chat` frame variant (MIK-053): the screen
-  header and chat surface share the centered 960px chat column, the outer
-  page is locked, and the transcript viewport is the only vertical scroller
-  while the composer stays pinned. Ask AI searches the local bookmark cache
+  header and chat surface share the centered 880px no-rail column
+  (MIK-054), the outer page is locked, and the transcript viewport is the
+  only vertical scroller while the composer stays pinned. Ask AI searches the local bookmark cache
   only, does not search the open web, and keeps chat/session state in memory
   only. Recommendation cards reuse the shared bookmark summary item and show
   the same favicon/fallback icon treatment as Library rows.
@@ -617,11 +622,14 @@ Use a two-zone ledger layout with a row-click detail drawer:
 - Left rail: two cards — Search (with the shown/total count and Clear
   filters) and one grouped Filters panel
   (MIK-028) with uniform subsections in a fixed order: Domain, Genre, Tags,
-  AI status. Domain and Tags can grow without bound, so each shows a capped
-  set of chips (12) with a `Show all N domains/tags` / `Show fewer` toggle;
-  the expanded list scrolls inside a max-height container so a large facet
-  never makes the rail taller than the viewport, and the active filter value
-  stays visible even while collapsed.
+  AI status. Domain, Genre, and Tags can grow without bound, so each shows a
+  capped set of chips (12) with a `Show all N domains/genres/tags` / `Show
+  fewer` toggle (MIK-054) rendered as a compact pill-style native button,
+  visually subordinate to the chips but still keyboard-focusable; both the
+  capped and expanded lists scroll inside max-height containers (expanded is
+  taller than capped) so clicking `Show fewer` can never visually grow a long
+  Domain/Genre group, and the active filter value stays visible even while
+  capped or collapsed.
 - Center list: scannable bookmark rows with title, a short clamped AI summary,
   genre/tags/profile metadata, status, updated time, and a small quick delete
   button. Quick delete goes through the existing delete use case, is disabled
