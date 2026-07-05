@@ -1,7 +1,7 @@
 {
 	"name": "bookmark-ai-extension",
 	"private": true,
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"description": "Chrome MV3 extension that saves the current tab as an AI-enriched bookmark in the user's Google Drive.",
 	"scripts": {
