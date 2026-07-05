@@ -89,6 +89,8 @@ export const appHeader: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 8,
+	width: "100%",
+	boxSizing: "border-box",
 };
 
 /** The product title inside the shared app header (MIK-036). */
