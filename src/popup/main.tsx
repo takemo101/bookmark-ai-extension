@@ -2,8 +2,13 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 import { Popup } from "./Popup";
+import { applyPopupPageReset } from "./page-reset";
 import { createRuntimeUseCases } from "./runtime";
 import { createPopupController } from "./view-model";
+
+// The document body must match the receipt surface before first paint: zero
+// margin, Warm Library paper background (MIK-056).
+applyPopupPageReset(document.body);
 
 const container = document.getElementById("root");
 if (!container) {

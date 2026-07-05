@@ -100,7 +100,7 @@ export function Popup({
 
 function Header({ m }: { m: PopupMessages }) {
 	return (
-		<header style={{ marginBottom: 10 }}>
+		<header style={{ marginBottom: 8 }}>
 			<h1 style={{ fontSize: 16, margin: 0, letterSpacing: 0.2 }}>
 				Bookmark AI
 			</h1>
@@ -124,7 +124,7 @@ function TabReceipt({
 		view.tab?.title ?? (view.loading ? m.readingTab : m.noActiveTab);
 	const url = view.tab?.url ?? "";
 	return (
-		<section style={{ ...card, marginBottom: 8 }}>
+		<section style={{ ...card, marginBottom: 6 }}>
 			<div
 				style={{
 					fontSize: 10,
@@ -223,7 +223,7 @@ function CurrentBookmark({
 function Badges({ view, m }: { view: PopupView; m: PopupMessages }) {
 	return (
 		<section
-			style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}
+			style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}
 		>
 			<Badge
 				label={m.googleLabel}
@@ -313,7 +313,7 @@ function Flow({ flow, m }: { flow: FlowView; m: PopupMessages }) {
 		return null;
 	}
 	return (
-		<section style={{ ...card, marginTop: 10 }}>
+		<section style={{ ...card, marginTop: 8 }}>
 			<Trail trail={flow.trail} m={m} />
 			{flow.kind === "running" ? (
 				<p
@@ -356,7 +356,7 @@ function Trail({
 						fontSize: 12,
 						color:
 							stage.status === "pending" ? palette.inkFaint : palette.inkSoft,
-						padding: "2px 0",
+						padding: "1px 0",
 					}}
 				>
 					<span aria-hidden>{stageGlyph(stage.status)}</span>
@@ -478,7 +478,7 @@ function Recent({
 		return null;
 	}
 	return (
-		<section style={{ marginTop: 12 }}>
+		<section style={{ marginTop: 10 }}>
 			<h2
 				style={{
 					fontSize: 11,
@@ -700,8 +700,8 @@ function Footer({ m }: { m: PopupMessages }) {
 	return (
 		<footer
 			style={{
-				marginTop: 12,
-				paddingTop: 8,
+				marginTop: 10,
+				paddingTop: 6,
 				borderTop: `1px solid ${palette.border}`,
 				display: "flex",
 				justifyContent: "flex-end",
