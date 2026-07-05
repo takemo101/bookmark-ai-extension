@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Privacy Policy — Bookmark AI</title>
+		<meta
+			name="description"
+			content="Privacy policy for the Bookmark AI Extension: what data it processes, what is stored in your Google Drive, and what never leaves your browser."
+		/>
+		<meta property="og:type" content="article" />
+		<meta property="og:title" content="Privacy Policy — Bookmark AI" />
+		<meta
+			property="og:description"
+			content="What the Bookmark AI Extension processes, what is stored in your own Google Drive, and what never leaves your browser."
+		/>
+		<meta
+			property="og:url"
+			content="https://takemo101.github.io/bookmark-ai-extension/privacy/"
+		/>
+		<meta property="og:site_name" content="Bookmark AI" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="Privacy Policy — Bookmark AI" />
+		<meta
+			name="twitter:description"
+			content="What the Bookmark AI Extension processes, what is stored in your own Google Drive, and what never leaves your browser."
+		/>
+		<link rel="stylesheet" href="../assets/style.css" />
+	</head>
+	<body>
+		<header class="site-header">
+			<div class="wrap">
+				<a class="brand" href="../">
+					<span class="brand-mark" aria-hidden="true">B</span>
+					Bookmark AI
+				</a>
+				<nav class="site-nav" aria-label="Site">
+					<a href="../">Home</a>
+					<a
+						href="https://github.com/takemo101/bookmark-ai-extension"
+						rel="noreferrer"
+						>GitHub</a
+					>
+				</nav>
+			</div>
+		</header>
+
+		<main class="policy">
+			<div class="wrap policy-body">
+				<h1>Privacy Policy</h1>
+				<p class="policy-meta">
+					Bookmark AI Extension &middot; Last updated: July 5, 2026
+				</p>
+
+				<p>
+					Bookmark AI Extension ("the extension", presented as "Bookmark
+					AI") is a Chrome extension that saves the current browser tab as
+					an AI-enriched bookmark in the user's own Google Drive. This
+					policy describes what data the extension processes, where that
+					data is stored, and the choices you have. In short: your bookmark
+					data lives in your own Google Drive, the extension has no backend
+					database of its own, and it does not send your page content to
+					external AI services.
+				</p>
+
+				<h2 id="data-processed">Data processed when you save a page</h2>
+				<p>
+					The extension accesses page content only when you explicitly save
+					the current tab (via the <code>activeTab</code> and
+					<code>scripting</code> permissions). When you click Save, the
+					extension may process:
+				</p>
+				<ul>
+					<li>The current tab's URL and title.</li>
+					<li>
+						Page metadata such as the meta description, Open Graph fields,
+						and headings.
+					</li>
+					<li>
+						A temporary, size-capped excerpt of the visible page text, used
+						only as input for AI analysis (see
+						<a href="#excerpts">Page text excerpts</a>).
+					</li>
+					<li>
+						AI-generated bookmark information: a description, a genre,
+						tags, a long-form Markdown analysis note, and an AI generation
+						status. Output language is Japanese or English.
+					</li>
+				</ul>
+
+				<h2 id="drive-storage">Data stored in your Google Drive</h2>
+				<p>
+					Bookmark records are stored in a visible folder in your own
+					Google Drive, in the file
+					<code>bookmark-ai/bookmarks.jsonl</code>. Each record may
+					include: the URL and canonical URL, page title, AI-generated
+					description, genre, tags, a long-form AI-generated Markdown
+					analysis (never a copy of the page's raw text) with the ID of the
+					analysis profile used, creation/update timestamps, and an AI
+					status value.
+				</p>
+				<p>
+					If you define custom analysis skills (optional and
+					user-initiated), those settings are stored in
+					<code>bookmark-ai/settings.json</code>. This file contains only
+					your custom skill definitions — name, enabled state, priority,
+					domains, URL patterns, instruction text, and timestamps. It never
+					contains page excerpts, bookmark records, or other browsing data.
+				</p>
+				<p>
+					Both files are created and managed by the extension in your
+					Drive, are visible to you, and can be inspected or deleted by you
+					at any time.
+				</p>
+
+				<h2 id="excerpts">Page text excerpts are temporary</h2>
+				<ul>
+					<li>
+						Raw page text excerpts are used transiently, in memory, as
+						input for AI analysis.
+					</li>
+					<li>
+						Raw excerpts are not stored in
+						<code>bookmarks.jsonl</code>, <code>settings.json</code>, or
+						the local browser cache, and are not intentionally persisted
+						by the extension anywhere.
+					</li>
+					<li>
+						If a page needs re-analysis, the extension re-extracts content
+						from the live page rather than keeping a stored copy.
+					</li>
+				</ul>
+
+				<h2 id="favicons">Site favicons</h2>
+				<p>
+					The extension shows website favicons next to saved bookmarks in
+					its popup and options pages. Favicons are resolved by Chrome
+					itself, at display time, through Chrome's extension-local favicon
+					endpoint (the <code>favicon</code> permission), derived from the
+					saved bookmark URL only. No external favicon service is used, and
+					favicon image data is never stored in the bookmark file, the
+					settings file, the local cache, or Google Drive.
+				</p>
+
+				<h2 id="ai-processing">AI processing</h2>
+				<p>
+					The extension uses Chrome Built-in AI (the Prompt API) when it is
+					available in your browser. AI analysis is performed through this
+					Chrome-provided capability; the behavior and any model handling
+					of Chrome's built-in AI are part of Chrome and are governed by
+					Google's documentation and policies.
+				</p>
+				<p>What the extension itself guarantees:</p>
+				<ul>
+					<li>
+						It does not send page content, excerpts, or bookmark data to
+						external AI APIs (such as a Gemini API key integration or
+						OpenAI) — the current version has no external AI provider or
+						API-key fallback of any kind.
+					</li>
+					<li>
+						It does not send your data to any server operated by the
+						developer.
+					</li>
+					<li>
+						If Chrome Built-in AI is unavailable, the bookmark is still
+						saved without AI-generated fields and marked accordingly.
+					</li>
+				</ul>
+
+				<h2 id="ask-ai">Ask AI chat</h2>
+				<p>
+					The options page includes an "Ask AI" chat screen for asking
+					questions about your saved bookmarks.
+				</p>
+				<ul>
+					<li>
+						Ask AI searches only the locally cached bookmark list; it does
+						not search the open web.
+					</li>
+					<li>
+						Recommendation prompts sent to Chrome's built-in AI include
+						only compact bookmark fields (an internal candidate ID, title,
+						site domain, genre, capped tags, and a capped short
+						description) — never full URLs, long-form analysis text, raw
+						page excerpts, or Drive metadata.
+					</li>
+					<li>
+						Chat questions, answers, and follow-up context are kept in
+						memory only. They are never written to Google Drive, local
+						extension storage, or any external service, and are discarded
+						when the chat is cleared or the page closes.
+					</li>
+				</ul>
+
+				<h2 id="google-drive-access">Google Drive access</h2>
+				<p>
+					The extension signs in with Google OAuth through Chrome's
+					identity API. The only Drive scope it requests is:
+				</p>
+				<p><code>https://www.googleapis.com/auth/drive.file</code></p>
+				<p>
+					This narrow scope allows the extension to create and manage only
+					the files it creates itself (or files explicitly opened with it).
+					The extension uses it solely for its own
+					<code>bookmark-ai</code> folder and the files described above. It
+					cannot read, list, or modify the rest of your Drive, and it does
+					not request full Drive access.
+				</p>
+
+				<h2 id="local-storage">Local browser storage</h2>
+				<p>
+					The extension uses Chrome's local extension storage
+					(<code>chrome.storage.local</code>) as a cache to make its pages
+					open quickly. The cache may hold: a snapshot of your bookmark
+					list, Google Drive file/folder IDs and sync metadata, last sync
+					status and error messages, and a cached copy of your custom skill
+					settings. Google Drive remains the source of truth; the cache
+					never contains raw page excerpts or chat history.
+				</p>
+
+				<h2 id="no-backend">No custom backend, no data sales</h2>
+				<ul>
+					<li>
+						The extension does not operate a backend database or any
+						developer-run server that receives your bookmark data.
+					</li>
+					<li>The extension does not sell personal data.</li>
+					<li>
+						The extension does not intentionally share bookmark data with
+						third parties.
+					</li>
+					<li>
+						Google services and Chrome APIs are used for authentication,
+						Drive storage, and built-in AI capability. Their use is
+						subject to Google's own terms and privacy policies.
+					</li>
+				</ul>
+
+				<h2 id="user-controls">Your controls and data retention</h2>
+				<p>You can:</p>
+				<ul>
+					<li>Delete individual bookmark records from the extension UI.</li>
+					<li>
+						Inspect or delete <code>bookmark-ai/bookmarks.jsonl</code> and
+						<code>bookmark-ai/settings.json</code> directly in Google
+						Drive.
+					</li>
+					<li>
+						Revoke the extension's access to your Google account from your
+						Google Account security settings.
+					</li>
+					<li>Remove the extension from Chrome.</li>
+				</ul>
+				<p>
+					Bookmark records remain in your Google Drive until you delete
+					them through the extension or directly in Drive. The local cache
+					remains in Chrome's extension storage until it is cleared by the
+					extension, by clearing browser data, or by removing the
+					extension.
+				</p>
+
+				<h2 id="security">Security notes</h2>
+				<ul>
+					<li>
+						Authentication uses Google OAuth via Chrome's identity API;
+						the extension does not handle your Google password.
+					</li>
+					<li>
+						OAuth access tokens are managed by Chrome and are not written
+						to the bookmark file or synced storage by the extension.
+					</li>
+					<li>
+						All Google Drive API communication uses HTTPS
+						(<code>https://www.googleapis.com</code>).
+					</li>
+					<li>
+						The project keeps client secrets, API keys, and tokens out of
+						its public source repository; the OAuth client ID embedded in
+						the extension is, by design, not a secret.
+					</li>
+				</ul>
+
+				<h2 id="changes">Changes to this policy</h2>
+				<p>
+					If the extension's data practices change — for example, if a
+					future version adds an optional external AI provider — this
+					policy will be updated before that change ships, and the "Last
+					updated" date above will be revised.
+				</p>
+
+				<h2 id="contact">Contact and support</h2>
+				<p>
+					Questions, requests, or reports about privacy can be filed on the
+					project's public issue tracker:
+					<a
+						href="https://github.com/takemo101/bookmark-ai-extension/issues"
+						rel="noreferrer"
+						>github.com/takemo101/bookmark-ai-extension/issues</a
+					>.
+				</p>
+
+				<p><a href="../">&larr; Back to the Bookmark AI home page</a></p>
+			</div>
+		</main>
+
+		<footer class="site-footer">
+			<div class="wrap">
+				<ul class="footer-links">
+					<li><a href="../">Home</a></li>
+					<li>
+						<a
+							href="https://github.com/takemo101/bookmark-ai-extension"
+							rel="noreferrer"
+							>GitHub repository</a
+						>
+					</li>
+					<li>
+						<a
+							href="https://github.com/takemo101/bookmark-ai-extension/issues"
+							rel="noreferrer"
+							>Support — GitHub Issues</a
+						>
+					</li>
+				</ul>
+				<p>
+					Bookmark AI (formal name: "Bookmark AI Extension") is an independent
+					open-source project, not affiliated with or endorsed by Google.
+				</p>
+			</div>
+		</footer>
+	</body>
+</html>

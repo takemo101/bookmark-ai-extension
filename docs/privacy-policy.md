@@ -2,6 +2,12 @@
 
 Date: 2026-06-24
 
+> **Public source of truth:** the published privacy policy lives at
+> [`site/privacy/index.html`](../site/privacy/index.html), deployed to
+> <https://takemo101.github.io/bookmark-ai-extension/privacy/>. This document
+> remains an internal reference draft; user-facing policy changes must be made
+> in the public page.
+
 > This is a draft for the MVP and future Chrome Web Store publication. It should be reviewed and adapted before public release.
 
 ## Summary

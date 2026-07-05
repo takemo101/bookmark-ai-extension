@@ -117,7 +117,10 @@ Publication copy should emphasize:
 - AI output is generated locally by Chrome Built-in AI / Prompt API when available.
 - No external AI API key fallback is included in MVP.
 
-See [`privacy-policy.md`](privacy-policy.md) for the draft policy text.
+See [`privacy-policy.md`](privacy-policy.md) for the internal draft text. The
+public privacy policy is `site/privacy/index.html`, published at
+<https://takemo101.github.io/bookmark-ai-extension/privacy/> — use that URL for
+the Chrome Web Store listing and the Google OAuth consent screen.
 
 ## Release Checklist
 
