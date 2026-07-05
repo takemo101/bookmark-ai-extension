@@ -3,12 +3,14 @@
  *
  * A pure projection of {@link OptionsController.getView} with two top-level
  * screens behind a small nav (MIK-025): the Library — the two-zone ledger
- * (left rail with search, sync state, genre/tag/status filters; center
- * bookmark rows with per-row quick delete) plus a floating Drive sync action
- * and a detail side sheet overlay (MIK-022, MIK-024) — and the Analysis
- * skills settings screen, which follows the same rail/main workspace body and
- * floating sync pattern (MIK-038) and opens the custom skill create/edit form
- * as a modal with authoring guidance. It dispatches user intent back through the
+ * (left rail with search and genre/tag/status filters; center bookmark rows
+ * with per-row quick delete) plus a detail side sheet overlay (MIK-022,
+ * MIK-024) — and the Analysis skills settings screen, which follows the same
+ * rail/main workspace body (MIK-038) and opens the custom skill create/edit
+ * form as a modal with authoring guidance. Bookmark Drive sync and analysis
+ * settings sync status/actions live in one shared app-header sync hub
+ * (MIK-051) instead of per-screen rail panels and floating buttons. It
+ * dispatches user intent back through the
  * controllers and imports only the controllers, view types, style tokens, and
  * the pure profile-display resolver (MIK-031); no Drive client, Prompt API
  * client, JSONL parser, or merge internals appear here (AGENTS.md
@@ -54,6 +56,7 @@ import type { AiStatus } from "./view-types";
 import {
 	aiStatusTone,
 	appHeader,
+	appHeaderActions,
 	askAiAssistantTurn,
 	askAiChatContext,
 	askAiChatShell,
@@ -74,7 +77,6 @@ import {
 	facetCollapsedCount,
 	facetHeaderButton,
 	facetHeaderLabel,
-	floatingSyncButton,
 	guidanceBox,
 	modalBackdrop,
 	modalBody,
@@ -106,6 +108,9 @@ import {
 	statusColor,
 	subtleButton,
 	summaryClamp,
+	syncHub,
+	syncHubPanel,
+	syncHubSummary,
 	syncTone,
 	tagListExpanded,
 	truncate,
@@ -211,56 +216,62 @@ export function Options({
 	return (
 		<main style={page}>
 			{/* Shared app header (MIK-036): the product brand lives here on every
-			    screen; the nav renders only when another screen exists. */}
+			    screen; the sync hub (MIK-051) travels with it, and the nav renders
+			    only when another screen exists. */}
 			<header style={appHeader}>
 				<h1 style={brandTitle}>Bookmark AI</h1>
-				{skillsController || askAiController ? (
-					<nav aria-label={m.navAria} style={{ display: "flex", gap: 8 }}>
-						<NavTab
-							label={m.library}
-							active={showLibrary}
-							onClick={() => switchScreen("library")}
-						/>
-						{skillsController ? (
-							<NavTab
-								label={m.analysisSkills}
-								active={activeScreen === "analysis-skills"}
-								onClick={() => switchScreen("analysis-skills")}
-							/>
-						) : null}
-						{askAiController ? (
-							<NavTab
-								label={m.askAi}
-								active={activeScreen === "ask-ai"}
-								onClick={() => switchScreen("ask-ai")}
-							/>
-						) : null}
-					</nav>
-				) : null}
-			</header>
-			{showLibrary ? (
-				<>
-					<div style={screenShell}>
-						<ScreenHeader title={m.library} subtitle={m.researchLedger} />
-						<div style={workspaceBody}>
-							<LeftRail view={view} m={m} controller={controller} />
-							<CenterList view={view} m={m} controller={controller} />
-						</div>
-					</div>
-					<FloatingSyncButton
+				<div style={appHeaderActions}>
+					<SyncHub
 						sync={view.sync}
 						loading={view.loading}
+						skillsSync={skillsView?.sync}
+						skillsLoading={skillsView?.loading === true}
 						m={m}
 						onRefresh={() => void controller.refresh()}
+						onRefreshSettings={
+							skillsController
+								? () => void skillsController.refresh()
+								: undefined
+						}
 					/>
-				</>
+					{skillsController || askAiController ? (
+						<nav aria-label={m.navAria} style={{ display: "flex", gap: 8 }}>
+							<NavTab
+								label={m.library}
+								active={showLibrary}
+								onClick={() => switchScreen("library")}
+							/>
+							{skillsController ? (
+								<NavTab
+									label={m.analysisSkills}
+									active={activeScreen === "analysis-skills"}
+									onClick={() => switchScreen("analysis-skills")}
+								/>
+							) : null}
+							{askAiController ? (
+								<NavTab
+									label={m.askAi}
+									active={activeScreen === "ask-ai"}
+									onClick={() => switchScreen("ask-ai")}
+								/>
+							) : null}
+						</nav>
+					) : null}
+				</div>
+			</header>
+			{showLibrary ? (
+				<div style={screenShell}>
+					<ScreenHeader title={m.library} subtitle={m.researchLedger} />
+					<div style={workspaceBody}>
+						<LeftRail view={view} m={m} controller={controller} />
+						<CenterList view={view} m={m} controller={controller} />
+					</div>
+				</div>
 			) : activeScreen === "analysis-skills" && skillsController ? (
 				<SkillsScreen skillsController={skillsController} m={m} />
 			) : askAiController ? (
 				<AskAiScreen
 					controller={askAiController}
-					sync={view.sync}
-					loading={view.loading}
 					m={m}
 					onOpenBookmark={(canonicalUrl) => controller.select(canonicalUrl)}
 				/>
@@ -406,8 +417,6 @@ function LeftRail({
 				) : null}
 			</section>
 
-			<SyncPanel sync={view.sync} loading={view.loading} m={m} />
-
 			<FilterFacets
 				facets={view.facets}
 				filters={view.filters}
@@ -462,9 +471,9 @@ function settingsSyncProgressText(
 }
 
 /**
- * The small tone-colored status dot every sync readout and floating sync
- * action opens with (MIK-038): one shape for the Library Drive sync and the
- * Analysis skills settings sync.
+ * The small tone-colored status dot every sync readout opens with (MIK-038):
+ * one shape for the Library Drive sync and the Analysis skills settings sync
+ * inside the shared sync hub (MIK-051).
  */
 function SyncStatusDot({ status }: { status: string }) {
 	return (
@@ -481,27 +490,188 @@ function SyncStatusDot({ status }: { status: string }) {
 }
 
 /**
- * Left-rail Drive sync status readout (MIK-024): status, pending changes, last
- * synced time, and safe errors stay visible here, but the sync action itself
- * moved to {@link FloatingSyncButton} so the rail stays compact. In-flight
- * loading/syncing/writing progress renders as an explicit line (MIK-026).
+ * The per-sync-source inputs the hub summary pill weighs (MIK-051). Exported
+ * for tests only — pure view logic, no controller state.
  */
-function SyncPanel({
+export type SyncHubSectionState = {
+	readonly status: string;
+	readonly pendingLocalChanges: boolean;
+	readonly syncing: boolean;
+	readonly writing: boolean;
+	readonly loading: boolean;
+};
+
+export type SyncHubSummary = "error" | "syncing" | "pending" | "synced";
+
+/**
+ * The glance state of the sync hub pill (MIK-051): the worst state across all
+ * sync sources wins — an error outranks in-flight progress, which outranks
+ * pending local changes, which outranks the everything-synced resting state.
+ * Exported for tests only.
+ */
+export function syncHubSummaryKind(
+	sections: readonly SyncHubSectionState[],
+): SyncHubSummary {
+	if (sections.some((s) => syncTone(s.status) === "danger")) {
+		return "error";
+	}
+	if (sections.some((s) => s.loading || s.syncing || s.writing)) {
+		return "syncing";
+	}
+	if (sections.some((s) => s.pendingLocalChanges)) {
+		return "pending";
+	}
+	return "synced";
+}
+
+/** The dot tone of each hub summary state (MIK-051). */
+const SYNC_HUB_SUMMARY_TONE: Readonly<
+	Record<SyncHubSummary, "ok" | "warn" | "danger">
+> = {
+	synced: "ok",
+	syncing: "warn",
+	pending: "warn",
+	error: "danger",
+};
+
+/**
+ * Shared app-header sync hub (MIK-051): the one place for bookmark Drive sync
+ * and analysis settings sync. A native `<details>` disclosure — no dependency,
+ * no custom open/close state — whose summary pill reads the combined state at
+ * a glance and whose panel holds the full readouts and the manual actions the
+ * old rail panels and floating buttons offered. Actions dispatch the existing
+ * {@link OptionsController.refresh} / {@link SkillsController.refresh} paths
+ * unchanged; in-flight sections disable their action so a slow sync can never
+ * be double-clicked into a second one (MIK-026; the controllers drop
+ * duplicates too).
+ */
+function SyncHub({
 	sync,
 	loading,
+	skillsSync,
+	skillsLoading,
 	m,
+	onRefresh,
+	onRefreshSettings,
 }: {
 	sync: SyncView;
 	loading: boolean;
+	/** Present only when a skills controller is injected. */
+	skillsSync?: SkillsView["sync"];
+	skillsLoading: boolean;
+	m: OptionsMessages;
+	onRefresh: () => void;
+	onRefreshSettings?: () => void;
+}) {
+	const sections: SyncHubSectionState[] = [
+		{
+			status: sync.status,
+			pendingLocalChanges: sync.pendingLocalChanges,
+			syncing: sync.syncing,
+			writing: sync.writing,
+			loading,
+		},
+	];
+	if (skillsSync) {
+		sections.push({
+			status: skillsSync.status,
+			pendingLocalChanges: skillsSync.pendingLocalChanges,
+			syncing: skillsSync.syncing,
+			writing: skillsSync.writing,
+			loading: skillsLoading,
+		});
+	}
+	const kind = syncHubSummaryKind(sections);
+	const summaryLabel: Readonly<Record<SyncHubSummary, string>> = {
+		synced: m.syncHubSynced,
+		syncing: m.syncHubSyncing,
+		pending: m.syncHubPending,
+		error: m.syncHubError,
+	};
+
+	return (
+		<details style={syncHub} aria-label={m.syncHubAria}>
+			<summary style={syncHubSummary}>
+				<span
+					aria-hidden
+					style={{
+						width: 8,
+						height: 8,
+						borderRadius: 999,
+						background: statusColor(SYNC_HUB_SUMMARY_TONE[kind]),
+					}}
+				/>
+				<span>{summaryLabel[kind]}</span>
+			</summary>
+			<div style={syncHubPanel}>
+				<SyncHubSection
+					label={m.driveSync}
+					status={sync.status}
+					progress={syncProgressText(sync, loading, m)}
+					pending={sync.pendingLocalChanges}
+					lastSyncedAt={sync.lastSyncedAt}
+					error={sync.error}
+					actionLabel={m.syncButton}
+					actionAria={m.syncAria}
+					inFlight={loading || sync.syncing || sync.writing}
+					onAction={onRefresh}
+					m={m}
+				/>
+				{skillsSync && onRefreshSettings ? (
+					<SyncHubSection
+						label={m.settingsSync}
+						status={skillsSync.status}
+						progress={settingsSyncProgressText(skillsSync, skillsLoading, m)}
+						pending={skillsSync.pendingLocalChanges}
+						lastSyncedAt={skillsSync.lastSyncedAt}
+						actionLabel={m.syncSettingsButton}
+						actionAria={m.settingsSyncAria}
+						inFlight={skillsLoading || skillsSync.syncing || skillsSync.writing}
+						onAction={onRefreshSettings}
+						m={m}
+					/>
+				) : null}
+			</div>
+		</details>
+	);
+}
+
+/**
+ * One sync source inside the hub panel (MIK-051): the status readout the old
+ * rail panels carried — status dot, in-flight progress (MIK-026), pending
+ * local changes, last synced time, safe errors — plus its manual sync action.
+ */
+function SyncHubSection({
+	label,
+	status,
+	progress,
+	pending,
+	lastSyncedAt,
+	error,
+	actionLabel,
+	actionAria,
+	inFlight,
+	onAction,
+	m,
+}: {
+	label: string;
+	status: string;
+	progress?: string;
+	pending: boolean;
+	lastSyncedAt?: string;
+	error?: string;
+	actionLabel: string;
+	actionAria: string;
+	inFlight: boolean;
+	onAction: () => void;
 	m: OptionsMessages;
 }) {
-	const progress = syncProgressText(sync, loading, m);
 	return (
-		<section style={panel}>
-			<p style={railLabel}>{m.driveSync}</p>
+		<section>
+			<p style={railLabel}>{label}</p>
 			<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-				<SyncStatusDot status={sync.status} />
-				<span style={{ fontSize: 13 }}>{sync.status}</span>
+				<SyncStatusDot status={status} />
+				<span style={{ fontSize: 13 }}>{status}</span>
 			</div>
 			{progress ? (
 				<p
@@ -511,71 +681,36 @@ function SyncPanel({
 					{progress}
 				</p>
 			) : null}
-			{sync.pendingLocalChanges ? (
+			{pending ? (
 				<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
 					{m.pendingLocal}
 				</p>
 			) : null}
-			{sync.lastSyncedAt ? (
+			{lastSyncedAt ? (
 				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}>
-					{m.lastSynced(formatTime(sync.lastSyncedAt))}
+					{m.lastSynced(formatTime(lastSyncedAt))}
 				</p>
 			) : null}
-			{sync.error ? (
+			{error ? (
 				<p style={{ fontSize: 12, color: palette.danger, margin: "6px 0 0" }}>
-					{sync.error}
+					{error}
 				</p>
 			) : null}
+			<button
+				type="button"
+				style={
+					inFlight
+						? { ...subtleButton, ...disabledButton, marginTop: 8 }
+						: { ...subtleButton, marginTop: 8 }
+				}
+				disabled={inFlight}
+				aria-busy={inFlight || undefined}
+				aria-label={actionAria}
+				onClick={onAction}
+			>
+				{actionLabel}
+			</button>
 		</section>
-	);
-}
-
-/**
- * Floating Drive sync action (MIK-024): the always-reachable replacement for
- * the old rail "Sync now" button. Shows the current sync tone/status and
- * dispatches the existing {@link OptionsController.refresh}. While the cache
- * is loading or a Drive pull/write is in flight the button is disabled and
- * reads what is happening, so a slow sync can never be double-clicked into a
- * second one (MIK-026; the controller drops duplicates too).
- */
-function FloatingSyncButton({
-	sync,
-	loading,
-	m,
-	onRefresh,
-}: {
-	sync: SyncView;
-	loading: boolean;
-	m: OptionsMessages;
-	onRefresh: () => void;
-}) {
-	const inFlight = loading || sync.syncing || sync.writing;
-	const detail = loading
-		? m.syncDetail.loading
-		: sync.syncing
-			? m.syncDetail.syncing
-			: sync.writing
-				? m.syncDetail.writing
-				: sync.status;
-	return (
-		<button
-			type="button"
-			style={
-				inFlight
-					? { ...floatingSyncButton, ...disabledButton }
-					: floatingSyncButton
-			}
-			disabled={inFlight}
-			aria-busy={inFlight || undefined}
-			onClick={onRefresh}
-			aria-label={m.syncAria}
-		>
-			<SyncStatusDot status={sync.status} />
-			<span>{m.syncButton}</span>
-			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
-				{detail}
-			</span>
-		</button>
 	);
 }
 
@@ -1241,13 +1376,12 @@ function DetailSheet({
  * docs/ai-analysis-v2.md "Settings file"): a pure projection of
  * {@link SkillsController.getView}, rendered as its own top-level screen
  * instead of a panel below the ledger. It follows the same workspace body as
- * the Library (MIK-038): the left rail holds the settings sync readout and
- * the settings-file guidance, the main area holds the Drive-synced custom
- * skills (full CRUD) and the fixed built-in profiles read-only, and settings
- * refresh lives in a floating sync action mirroring the Library's `Sync
- * Drive` button. The create/edit form opens as a modal. Never computes
- * matching/priority itself — that stays inside `ai/profile.ts`'s
- * `selectAnalysisProfile`.
+ * the Library (MIK-038): the left rail holds the settings-file guidance and
+ * the main area holds the Drive-synced custom skills (full CRUD) and the
+ * fixed built-in profiles read-only. Settings sync status and refresh live in
+ * the shared app-header sync hub (MIK-051). The create/edit form opens as a
+ * modal. Never computes matching/priority itself — that stays inside
+ * `ai/profile.ts`'s `selectAnalysisProfile`.
  */
 function SkillsScreen({
 	skillsController,
@@ -1272,16 +1406,10 @@ function SkillsScreen({
 			<section style={screenShell} aria-label={m.skillsScreenAria}>
 				<ScreenHeader title={m.analysisSkills} subtitle={m.skillsSubtitle} />
 				<div style={workspaceBody}>
-					<SkillsRail view={view} m={m} />
+					<SkillsRail m={m} />
 					<SkillsMain view={view} m={m} skillsController={skillsController} />
 				</div>
 			</section>
-			<FloatingSettingsSyncButton
-				sync={view.sync}
-				loading={view.loading}
-				m={m}
-				onRefresh={() => void skillsController.refresh()}
-			/>
 			{view.formOpen ? (
 				<SkillFormModal view={view} skillsController={skillsController} m={m} />
 			) : null}
@@ -1290,41 +1418,14 @@ function SkillsScreen({
 }
 
 /**
- * Analysis skills left rail (MIK-038): the settings sync status/pending
- * readout — the sync action itself floats, mirroring the Library rail — and
- * the `bookmark-ai/settings.json` context copy that used to live in the
- * screen subtitle.
+ * Analysis skills left rail (MIK-038, slimmed by MIK-051): only the
+ * `bookmark-ai/settings.json` context copy that used to live in the screen
+ * subtitle — the settings sync readout and action moved to the shared
+ * app-header sync hub.
  */
-function SkillsRail({ view, m }: { view: SkillsView; m: OptionsMessages }) {
-	const progress = settingsSyncProgressText(view.sync, view.loading, m);
+function SkillsRail({ m }: { m: OptionsMessages }) {
 	return (
 		<aside style={rail}>
-			<section style={panel}>
-				<p style={railLabel}>{m.settingsSync}</p>
-				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-					<SyncStatusDot status={view.sync.status} />
-					<span style={{ fontSize: 13 }}>{view.sync.status}</span>
-				</div>
-				{progress ? (
-					<p
-						style={{ fontSize: 12, color: palette.inkSoft, margin: "6px 0 0" }}
-					>
-						{progress}
-					</p>
-				) : null}
-				{view.sync.pendingLocalChanges ? (
-					<p style={{ fontSize: 12, color: palette.warn, margin: "6px 0 0" }}>
-						{m.pendingLocal}
-					</p>
-				) : null}
-				{view.sync.lastSyncedAt ? (
-					<p
-						style={{ fontSize: 11, color: palette.inkFaint, margin: "4px 0 0" }}
-					>
-						{m.lastSynced(formatTime(view.sync.lastSyncedAt))}
-					</p>
-				) : null}
-			</section>
 			<section style={panel}>
 				<p style={railLabel}>{m.skillsAbout}</p>
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
@@ -1416,74 +1517,22 @@ function SkillsMain({
 }
 
 /**
- * Floating settings sync action (MIK-038): the Analysis skills counterpart of
- * the Library's {@link FloatingSyncButton}. Dispatches the existing
- * {@link SkillsController.refresh} path and is disabled while a skills action
- * is busy — the same guard the old inline refresh button used (the controller
- * drops overlapping actions too).
- */
-function FloatingSettingsSyncButton({
-	sync,
-	loading,
-	m,
-	onRefresh,
-}: {
-	sync: SkillsView["sync"];
-	loading: boolean;
-	m: OptionsMessages;
-	onRefresh: () => void;
-}) {
-	const inFlight = loading || sync.syncing || sync.writing;
-	const detail = loading
-		? m.syncDetail.loading
-		: sync.syncing
-			? m.syncDetail.syncing
-			: sync.writing
-				? m.syncDetail.writing
-				: sync.status;
-	return (
-		<button
-			type="button"
-			style={
-				inFlight
-					? { ...floatingSyncButton, ...disabledButton }
-					: floatingSyncButton
-			}
-			disabled={inFlight}
-			aria-busy={inFlight || undefined}
-			onClick={onRefresh}
-			aria-label={m.settingsSyncAria}
-		>
-			<SyncStatusDot status={sync.status} />
-			<span>{m.syncSettingsButton}</span>
-			<span style={{ fontSize: 11, fontWeight: 400, color: palette.inkFaint }}>
-				{detail}
-			</span>
-		</button>
-	);
-}
-
-/**
  * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session; MIK-050
  * chat-only layout): the chat-style saved-bookmark recommendation surface.
  * Unlike the Library and Analysis skills, this screen has no left rail and no
- * shared workspace grid — the chat is the primary content inside the wider
- * {@link askAiScreenShell}, and the old rail's sync/scope/privacy cues render
- * as {@link AskAiChatContext} at the top of the chat viewport. The
+ * shared workspace grid — the chat is the primary content, and the compact
+ * scope/privacy cues render as {@link AskAiChatContext} at the top of the
+ * chat viewport. The
  * conversation state — transcript, Prompt API session, narrowed candidate
  * context — lives only inside the injected {@link AskAiController} and is
  * never persisted.
  */
 function AskAiScreen({
 	controller,
-	sync,
-	loading,
 	m,
 	onOpenBookmark,
 }: {
 	controller: AskAiController;
-	sync: SyncView;
-	loading: boolean;
 	m: OptionsMessages;
 	/** Route a recommendation card into the existing detail-opening path. */
 	onOpenBookmark: (canonicalUrl: string) => void;
@@ -1499,8 +1548,6 @@ function AskAiScreen({
 			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
 			<AskAiMain
 				view={view}
-				sync={sync}
-				loading={loading}
 				m={m}
 				controller={controller}
 				onOpenBookmark={onOpenBookmark}
@@ -1510,45 +1557,17 @@ function AskAiScreen({
 }
 
 /**
- * Compact Ask AI chat context (MIK-050): the informational cues that lived in
- * the MIK-045 left rail — bookmark Drive-sync status, in-flight progress,
- * pending local changes, last synced time and safe sync errors (cache
- * freshness), plus the scope note (all saved bookmarks from the local cache,
- * never the open web) and the privacy note (short saved-bookmark info only;
- * the chat itself is never saved) — as one wrapping inline panel rendered as
- * the first item inside the chat's scrollable viewport, ahead of the welcome
- * state or the transcript. Informational only: the sync action stays on the
- * Library screen.
+ * Compact Ask AI chat context (MIK-050, slimmed by MIK-051): the scope note
+ * (all saved bookmarks from the local cache, never the open web) and the
+ * privacy note (short saved-bookmark info only; the chat itself is never
+ * saved) as one wrapping inline panel rendered as the first item inside the
+ * chat's scrollable viewport, ahead of the welcome state or the transcript.
+ * Informational only: cache freshness, the full sync readout, and the sync
+ * action live in the shared app-header sync hub.
  */
-function AskAiChatContext({
-	sync,
-	loading,
-	m,
-}: {
-	sync: SyncView;
-	loading: boolean;
-	m: OptionsMessages;
-}) {
-	const progress = syncProgressText(sync, loading, m);
+function AskAiChatContext({ m }: { m: OptionsMessages }) {
 	return (
 		<section style={askAiChatContext} aria-label={m.askAiAbout}>
-			<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-				<SyncStatusDot status={sync.status} />
-				<span>{m.driveSync}</span>
-				<span style={{ color: palette.ink }}>{sync.status}</span>
-			</span>
-			{progress ? <span role="status">{progress}</span> : null}
-			{sync.pendingLocalChanges ? (
-				<span style={{ color: palette.warn }}>{m.pendingLocal}</span>
-			) : null}
-			{sync.lastSyncedAt ? (
-				<span style={{ color: palette.inkFaint }}>
-					{m.lastSynced(formatTime(sync.lastSyncedAt))}
-				</span>
-			) : null}
-			{sync.error ? (
-				<span style={{ color: palette.danger }}>{sync.error}</span>
-			) : null}
 			<span>{m.askAiScopeNote}</span>
 			<span>{m.askAiPrivacyNote}</span>
 		</section>
@@ -1604,7 +1623,7 @@ export function askAiLatestButtonVisible(
  * sitesurf-aligned chat surface. The shell is a fixed-height flex column —
  * only the transcript viewport scrolls while the composer stays pinned at the
  * bottom. The viewport opens with the compact {@link AskAiChatContext}
- * sync/scope/privacy cues (MIK-050), scrolling away with the conversation
+ * cache/scope/privacy cues (MIK-050), scrolling away with the conversation
  * like any other content. Before the first user message the viewport centers
  * the welcome
  * state with localized clickable example prompts; afterwards it renders the
@@ -1624,15 +1643,11 @@ export function askAiLatestButtonVisible(
  */
 function AskAiMain({
 	view,
-	sync,
-	loading,
 	m,
 	controller,
 	onOpenBookmark,
 }: {
 	view: AskAiView;
-	sync: SyncView;
-	loading: boolean;
 	m: OptionsMessages;
 	controller: AskAiController;
 	onOpenBookmark: (canonicalUrl: string) => void;
@@ -1679,7 +1694,7 @@ function AskAiMain({
 		<section style={askAiChatShell}>
 			<div style={askAiViewportShell}>
 				<div ref={viewportRef} onScroll={handleScroll} style={askAiViewport}>
-					<AskAiChatContext sync={sync} loading={loading} m={m} />
+					<AskAiChatContext m={m} />
 					{view.messages.length === 0 ? (
 						<AskAiWelcome m={m} controller={controller} />
 					) : (
@@ -1756,7 +1771,7 @@ function AskAiWelcome({
 						key={example}
 						type="button"
 						style={chip}
-						onClick={() => controller.useExample(example)}
+						onClick={() => controller.setQuestion(example)}
 					>
 						{example}
 					</button>

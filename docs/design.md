@@ -484,8 +484,8 @@ Options page responsibilities:
   from canonical URL hostnames (lowercased, `www.` dropped) — never stored on
   records (MIK-028).
 - Delete bookmarks — via a per-row quick delete and from the detail sheet.
-- Show Drive sync status and errors, with the sync action as a floating
-  button.
+- Show Drive sync status and errors, with the manual sync action in the
+  shared app-header sync hub (MIK-051).
 - Show visible progress for slow Drive operations, distinguishing cached
   loading, a Drive pull, a Drive write, and failed-sync pending local changes
   (MIK-026).
@@ -509,32 +509,42 @@ This matches the manual posture documented in
 re-analyze from the page's own tab, or save it again.
 
 Both screens render inside a shared Options shell (MIK-036): a persistent
-app header carries the product title (`Bookmark AI`) and the top-level screen
-navigation on every screen, and each screen opens with the same screen-header
-rhythm — a screen title plus a one-line user-facing subtitle (`Library` /
-`Research Ledger` and `Analysis skills` / a plain-language tuning line).
-Below the header, both screens share the same workspace body and sync
-placement (MIK-038): a left rail for screen-specific status and guidance, a
-main area for the primary content, and a floating bottom-right sync action —
-so the two screens read as one app. The Library left rail hosts only controls
-(search, sync status, filters), never app branding; the Analysis skills rail
-hosts the settings sync readout and the `bookmark-ai/settings.json` guidance
-copy.
+app header carries the product title (`Bookmark AI`), the shared sync hub
+(MIK-051), and the top-level screen navigation on every screen, and each
+screen opens with the same screen-header rhythm — a screen title plus a
+one-line user-facing subtitle (`Library` / `Research Ledger` and
+`Analysis skills` / a plain-language tuning line).
+
+The app-header sync hub (MIK-051) is the single place for sync status and
+manual sync actions on every screen: a compact glance pill whose tone/text
+reads the worst state across bookmark Drive sync and analysis settings sync
+(error > in-flight > pending local changes > synced), disclosing a panel with
+one section per sync source — status, in-flight progress (MIK-026), pending
+local changes, last-synced time, safe errors, and the manual `Sync Drive` /
+`Sync settings` action. The actions dispatch the existing controller refresh
+paths unchanged and are disabled while their sync is loading/syncing/writing;
+the settings section renders only when the skills controller is present.
+Screen bodies no longer carry sync rail panels or floating sync buttons.
+
+Below the header, both screens share the same workspace body (MIK-038): a
+left rail for screen-specific controls and guidance and a main area for the
+primary content — so the two screens read as one app. The Library left rail
+hosts only controls (search, filters), never app branding; the Analysis
+skills rail hosts only the `bookmark-ai/settings.json` guidance copy.
 
 The options page has a top-level navigation with two screens (MIK-025):
 
-- **Library** (default): the two-zone ledger, floating sync action, and detail
-  side sheet described below.
+- **Library** (default): the two-zone ledger and detail side sheet described
+  below.
 - **Analysis skills**: the settings screen for analysis skills, no longer a
   panel below the bookmark list. It uses the shared rail/main workspace body
-  (MIK-038): the left rail shows the settings sync status/pending readout and
-  the settings-file context (custom skills are stored only in
-  `bookmark-ai/settings.json` on Drive); the main area shows custom skills
-  with create/edit/delete/enable-disable (and the `Add custom skill` action)
-  followed by built-in profiles read-only. Settings refresh is a floating
-  bottom-right `Sync settings` action analogous to the Library's `Sync Drive`
-  button — it dispatches the existing refresh path, shows the sync tone/
-  status, and is disabled while a skills action is busy. The create/edit form
+  (MIK-038): the left rail shows the settings-file context (custom skills are
+  stored only in `bookmark-ai/settings.json` on Drive); the main area shows
+  custom skills with create/edit/delete/enable-disable (and the `Add custom
+  skill` action) followed by built-in profiles read-only. Settings sync
+  status and the `Sync settings` refresh live in the shared app-header sync
+  hub (MIK-051) — the hub dispatches the existing refresh path and disables
+  the action while a skills action is busy. The create/edit form
   opens as a centered modal dialog that closes via its Close/Cancel buttons,
   the Escape key, or a backdrop click, and locks the page scroll while open. Instruction-authoring
   guidance sits next to the form: what the instruction changes, per-source
@@ -548,8 +558,8 @@ state or the skill form draft.
 
 Use a two-zone ledger layout with a row-click detail sheet:
 
-- Left rail: three cards — Search (with the shown/total count and Clear
-  filters), the Drive sync status readout, and one grouped Filters panel
+- Left rail: two cards — Search (with the shown/total count and Clear
+  filters) and one grouped Filters panel
   (MIK-028) with uniform subsections in a fixed order: Domain, Genre, Tags,
   AI status. Domain and Tags can grow without bound, so each shows a capped
   set of chips (12) with a `Show all N domains/tags` / `Show fewer` toggle;
@@ -561,14 +571,13 @@ Use a two-zone ledger layout with a row-click detail sheet:
   button. Quick delete goes through the existing delete use case, is disabled
   while an action is busy, and stops event propagation so it never opens the
   detail sheet.
-- Floating sync action: a fixed bottom-right `Sync Drive` button shows the
-  current sync tone/status and triggers the existing refresh path. The left
-  rail keeps the sync status/pending/error readout but no longer contains a
-  `Sync now` button. While the cache is loading or a Drive pull/write is in
-  flight the button is disabled and reads the in-flight state
-  (`loading…` / `syncing…` / `writing…`), and the controller drops duplicate
-  refresh calls, so a slow sync can never be stacked into a second one
-  (MIK-026).
+- Sync action: the app-header sync hub's `Sync Drive` button (MIK-051)
+  triggers the existing refresh path; the hub carries the sync
+  status/pending/error readout. There is no rail sync panel and no floating
+  sync button. While the cache is loading or a Drive pull/write is in flight
+  the button is disabled and the hub shows the in-flight progress line, and
+  the controller drops duplicate refresh calls, so a slow sync can never be
+  stacked into a second one (MIK-026).
 - Detail side sheet: clicking a row opens a right-side modal sheet (fullscreen
   on narrow viewports) showing the full bookmark detail — description, genre,
   tags, profile, URL, timestamps, the full `analysisMarkdown` note — and the
@@ -591,8 +600,8 @@ Detail sheet behavior:
 
 Drive sync progress feedback (MIK-026):
 
-- The left-rail sync panel shows one explicit progress line while something
-  slow is happening: `Loading cached bookmarks…` during the initial cached
+- The app-header sync hub (MIK-051) shows one explicit progress line while
+  something slow is happening: `Loading cached bookmarks…` during the initial cached
   load, `Syncing with Google Drive…` while a Drive pull/merge is in flight,
   and `Writing changes to Google Drive…` while a delete/re-analyze write
   runs. When a Drive write fails, the existing pending readout (`Local

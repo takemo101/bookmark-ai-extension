@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { createAskAiController } from "./ask-ai-view-model";
 import { Options } from "./Options";
+import { applyOptionsPageReset } from "./page-reset";
 import {
 	createRuntimeAskAiDeps,
 	createRuntimeSkillsUseCases,
@@ -16,6 +17,11 @@ const container = document.getElementById("root");
 if (!container) {
 	throw new Error("Options root element #root not found");
 }
+
+// Chrome keeps the browser default body margin for extension pages; the Options
+// shell owns its spacing explicitly, so reset the outer page chrome before
+// mounting React.
+applyOptionsPageReset(document.body);
 
 // Composition root: build the real use cases, wrap them in the controller, and
 // inject it. The component itself stays free of Chrome/Drive/AI wiring.
