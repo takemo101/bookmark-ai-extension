@@ -1327,13 +1327,13 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		}
 	});
 
-	it("lets the Ask AI chat use more width than the shared 1200px screen shell", () => {
+	it("keeps the Ask AI chat shell aligned with the shared 1200px screen width", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
-		// Only the shared app header keeps the 1200px cap; the Ask AI screen
-		// body itself gets a wider shell (MIK-050).
-		expect(html.match(/max-width:1200px/g)).toHaveLength(1);
-		expect(html).toContain("max-width:1600px");
+		// The app header and Ask AI screen body share the Library/Skills width cap;
+		// removing the rail still gives the chat more room than the old right pane.
+		expect(html.match(/max-width:1200px/g)).toHaveLength(2);
+		expect(html).not.toContain("max-width:1600px");
 	});
 
 	it("shows the bookmark sync status and last synced time at the top of the chat", () => {
