@@ -59,7 +59,6 @@ import {
 	askAiChatShell,
 	askAiComposer,
 	askAiLatestButton,
-	askAiScreenShell,
 	askAiTurnLabel,
 	askAiUserBubble,
 	askAiUserTurn,
@@ -1496,7 +1495,7 @@ function AskAiScreen({
 	);
 
 	return (
-		<section style={askAiScreenShell} aria-label={m.askAiScreenAria}>
+		<section style={screenShell} aria-label={m.askAiScreenAria}>
 			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
 			<AskAiMain
 				view={view}
