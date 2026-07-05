@@ -1,0 +1,122 @@
+# Builds the Chrome extension from a version tag and attaches the zip to a
+# GitHub Release. The zip is suitable for Chrome Web Store upload or manual
+# unpacked-extension inspection.
+name: Release extension zip
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to publish, for example v0.1.0"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a pre-release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-extension-zip
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRODUCTION_CLIENT_ID_VAR: ${{ vars.PRODUCTION_GOOGLE_OAUTH_CLIENT_ID }}
+      PRODUCTION_CLIENT_ID_SECRET: >-
+        ${{ secrets.PRODUCTION_GOOGLE_OAUTH_CLIENT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag_name || github.ref }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Resolve release settings
+        shell: bash
+        env:
+          RELEASE_TAG_INPUT: ${{ github.event.inputs.tag_name }}
+          RELEASE_TAG_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG_INPUT:-$RELEASE_TAG_REF}"
+          version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'
+          if [[ ! "$release_tag" =~ $version_pattern ]]; then
+            echo "::error::Release tag must look like v0.1.0."
+            echo "::error::Got '$release_tag'."
+            exit 1
+          fi
+          client_id="${PRODUCTION_CLIENT_ID_VAR:-$PRODUCTION_CLIENT_ID_SECRET}"
+          if [[ -z "$client_id" ]]; then
+            echo "::error::Set PRODUCTION_GOOGLE_OAUTH_CLIENT_ID."
+            echo "::error::Use a repo variable or secret before releasing."
+            exit 1
+          fi
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=bookmark-ai-extension-${release_tag}.zip" \
+            >> "$GITHUB_ENV"
+          echo "VITE_GOOGLE_OAUTH_CLIENT_ID=$client_id" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate and build
+        run: bun run validate
+
+      - name: Package dist as Chrome extension zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$ARTIFACT_NAME"
+          (
+            cd dist
+            find . -type f | LC_ALL=C sort | zip -X -q -@ "../$ARTIFACT_NAME"
+          )
+          unzip -t "$ARTIFACT_NAME"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          PRERELEASE_INPUT: ${{ github.event.inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Chrome extension build for ${RELEASE_TAG}.
+
+          Use ${ARTIFACT_NAME} for Chrome Web Store upload or manual
+          unpacked-extension inspection. The build embeds the production
+          Chrome Extension OAuth client ID configured in this repository's
+          Actions variables or secrets.
+          EOF
+          prerelease_flag=()
+          if [[ "${PRERELEASE_INPUT:-false}" == "true" ]]; then
+            prerelease_flag=(--prerelease)
+          fi
+          asset="$ARTIFACT_NAME#Chrome extension zip"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$asset" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$asset" \
+              --title "$RELEASE_TAG" \
+              --notes-file release-notes.md \
+              "${prerelease_flag[@]}"
+          fi
