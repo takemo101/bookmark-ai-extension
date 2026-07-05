@@ -42,6 +42,14 @@ export type OptionsMessages = {
 	readonly lastSynced: (time: string) => string;
 	readonly syncButton: string;
 	readonly syncAria: string;
+	/** Visible label next to the app-header theme selector. */
+	readonly themeLabel: string;
+	/** Accessible name of the theme preference selector. */
+	readonly themeSelectAria: string;
+	/** The three theme preference option labels. */
+	readonly themeSystem: string;
+	readonly themeLight: string;
+	readonly themeDark: string;
 	/** Accessible label of the shared app-header sync hub (MIK-051). */
 	readonly syncHubAria: string;
 	/** Glance summary texts of the sync hub pill (MIK-051). */
@@ -191,6 +199,11 @@ const EN: OptionsMessages = {
 	lastSynced: (time) => `Last synced ${time}`,
 	syncButton: "Sync Drive",
 	syncAria: "Sync with Google Drive",
+	themeLabel: "Theme",
+	themeSelectAria: "Color theme",
+	themeSystem: "System",
+	themeLight: "Light",
+	themeDark: "Dark",
 	syncHubAria: "Sync status",
 	syncHubSynced: "Synced",
 	syncHubSyncing: "Syncing…",
@@ -354,6 +367,11 @@ const JA: OptionsMessages = {
 	lastSynced: (time) => `最終同期 ${time}`,
 	syncButton: "Driveと同期",
 	syncAria: "Google Driveと同期",
+	themeLabel: "テーマ",
+	themeSelectAria: "配色テーマ",
+	themeSystem: "システム",
+	themeLight: "ライト",
+	themeDark: "ダーク",
 	syncHubAria: "同期状態",
 	syncHubSynced: "同期済み",
 	syncHubSyncing: "同期中…",

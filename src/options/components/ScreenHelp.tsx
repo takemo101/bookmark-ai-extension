@@ -14,7 +14,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { screenHelp, screenHelpPanel, screenHelpTrigger } from "../styles";
+import { screenHelp } from "../styles";
+import { useOptionsTheme } from "../theme";
 
 /** Gap between the trigger's bottom edge and the popover panel. */
 const PANEL_OFFSET = 8;
@@ -47,6 +48,7 @@ export function ScreenHelp({
 	/** The explanatory guidance disclosed by the popover. */
 	children: ReactNode;
 }) {
+	const { styles } = useOptionsTheme();
 	const [open, setOpen] = useState(false);
 	const [position, setPosition] = useState<PanelPosition | undefined>();
 	const anchorRef = useRef<HTMLSpanElement>(null);
@@ -97,7 +99,7 @@ export function ScreenHelp({
 				aria-label={label}
 				aria-expanded={open}
 				aria-controls={panelId}
-				style={screenHelpTrigger}
+				style={styles.screenHelpTrigger}
 				onClick={toggle}
 			>
 				?
@@ -105,7 +107,11 @@ export function ScreenHelp({
 			<div
 				id={panelId}
 				hidden={!open}
-				style={{ ...screenHelpPanel, top: position?.top, left: position?.left }}
+				style={{
+					...styles.screenHelpPanel,
+					top: position?.top,
+					left: position?.left,
+				}}
 			>
 				{children}
 			</div>

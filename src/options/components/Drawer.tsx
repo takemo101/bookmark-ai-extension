@@ -21,14 +21,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import {
-	drawerBackdrop,
-	drawerBody,
-	drawerFooter,
-	drawerHeader,
-	drawerPanel,
-	drawerPanelFullscreen,
-} from "../styles";
+import { drawerBody } from "../styles";
+import { useOptionsTheme } from "../theme";
 
 /** Media query below which the drawer panel goes fullscreen. */
 const NARROW_VIEWPORT_QUERY = "(max-width: 720px)";
@@ -67,6 +61,7 @@ export function Drawer({
 	footer?: ReactNode;
 	children: ReactNode;
 }) {
+	const { styles } = useOptionsTheme();
 	const isNarrow = useIsNarrowViewport();
 	const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -95,16 +90,16 @@ export function Drawer({
 	}, [onClose]);
 
 	return (
-		<div ref={backdropRef} style={drawerBackdrop}>
+		<div ref={backdropRef} style={styles.drawerBackdrop}>
 			<section
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby={labelledBy}
-				style={isNarrow ? drawerPanelFullscreen : drawerPanel}
+				style={isNarrow ? styles.drawerPanelFullscreen : styles.drawerPanel}
 			>
-				<header style={drawerHeader}>{header}</header>
+				<header style={styles.drawerHeader}>{header}</header>
 				<div style={drawerBody}>{children}</div>
-				{footer ? <footer style={drawerFooter}>{footer}</footer> : null}
+				{footer ? <footer style={styles.drawerFooter}>{footer}</footer> : null}
 			</section>
 		</div>
 	);

@@ -38,6 +38,7 @@ import {
 	type AskAiView,
 	isAskAiComposerSubmitKey,
 } from "./ask-ai-view-model";
+import { statusColor } from "../lib/theme/index";
 import {
 	BookmarkSummaryItem,
 	StatusPill,
@@ -48,6 +49,7 @@ import {
 	type ScreenFrameVariant,
 	screenFramePageStyle,
 } from "./components/ScreenFrame";
+import { ThemeSelect } from "./components/ThemeSelect";
 import { Favicon } from "./favicon";
 import { type FacetUnit, type OptionsMessages, optionsMessages } from "./i18n";
 import { AnalysisMarkdown } from "./markdown";
@@ -67,51 +69,26 @@ import type {
 	RowView,
 	SyncView,
 } from "./view-model";
+import { paintOptionsPageBackground } from "./page-reset";
 import {
 	appHeader,
 	appHeaderActions,
 	askAiAssistantTurn,
-	askAiChatContext,
 	askAiChatShell,
-	askAiComposer,
-	askAiLatestButton,
-	askAiTurnLabel,
-	askAiUserBubble,
 	askAiUserTurn,
 	askAiViewport,
 	askAiViewportShell,
 	askAiWelcome,
 	brandTitle,
-	chip,
-	chipActive,
-	dangerButton,
 	disabledButton,
-	drawerTips,
-	drawerTipsSummary,
-	facetActiveSummary,
-	facetCollapsedCount,
 	facetHeaderButton,
-	facetHeaderLabel,
 	facetListCapped,
-	facetOverflowButton,
-	navTab,
-	navTabActive,
-	palette,
-	panel,
-	primaryButton,
-	profileEditButton,
 	rail,
-	railLabel,
-	rowDeleteButton,
-	searchInput,
-	statusColor,
-	subtleButton,
 	syncHub,
-	syncHubPanel,
-	syncHubSummary,
 	syncTone,
 	tagListExpanded,
 } from "./styles";
+import { useOptionsTheme } from "./theme";
 
 /**
  * The top-level options screens (MIK-025, MIK-045). Presentation-only UI
@@ -161,10 +138,19 @@ export function Options({
 	);
 	const [screen, setScreen] = useState<OptionsScreen>(initialScreen);
 	const m = optionsMessages(language ?? detectUiLanguage());
+	const { styles: s, palette } = useOptionsTheme();
 
 	useEffect(() => {
 		void controller.init();
 	}, [controller]);
+
+	// Keep the document body on the active theme's paper: the pre-mount reset
+	// painted the light default before the stored preference resolved.
+	useEffect(() => {
+		if (typeof document !== "undefined") {
+			paintOptionsPageBackground(document.body, palette.paper);
+		}
+	}, [palette]);
 
 	useEffect(() => {
 		// Settings load on mount rather than on the first skills-screen visit:
@@ -218,13 +204,16 @@ export function Options({
 				: "library";
 
 	return (
-		<main style={screenFramePageStyle(frameVariant)}>
+		<main style={screenFramePageStyle(s, frameVariant)}>
 			{/* Shared app header (MIK-036): the product brand lives here on every
 			    screen; the sync hub (MIK-051) travels with it, and the nav renders
 			    only when another screen exists. */}
 			<header style={appHeader}>
 				<h1 style={brandTitle}>Bookmark AI</h1>
 				<div style={appHeaderActions}>
+					{/* The one place the light/dark/system preference is picked; the
+					    Popup reflects it without a selector of its own. */}
+					<ThemeSelect m={m} />
 					<SyncHub
 						sync={view.sync}
 						loading={view.loading}
@@ -316,9 +305,10 @@ export function Options({
  * title-adjacent `?` so the rail stays reserved for active controls.
  */
 function LibraryHelp({ m }: { m: OptionsMessages }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<>
-			<p style={railLabel}>{m.libraryAbout}</p>
+			<p style={s.railLabel}>{m.libraryAbout}</p>
 			<p style={{ margin: 0 }}>{m.libraryHelpSearch}</p>
 			<p style={{ margin: "6px 0 0" }}>{m.libraryHelpDetail}</p>
 			<p style={{ margin: "6px 0 0" }}>{m.libraryHelpSync}</p>
@@ -335,10 +325,11 @@ function NavTab({
 	active: boolean;
 	onClick: () => void;
 }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<button
 			type="button"
-			style={active ? navTabActive : navTab}
+			style={active ? s.navTabActive : s.navTab}
 			aria-current={active ? "page" : undefined}
 			onClick={onClick}
 		>
@@ -386,6 +377,7 @@ function LeftRail({
 	m: OptionsMessages;
 	controller: OptionsController;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	const hasFilters =
 		view.filters.query.length > 0 ||
 		view.filters.genre !== undefined ||
@@ -395,14 +387,14 @@ function LeftRail({
 
 	return (
 		<aside style={rail}>
-			<section style={panel}>
-				<p style={railLabel}>{m.search}</p>
+			<section style={s.panel}>
+				<p style={s.railLabel}>{m.search}</p>
 				<input
 					type="search"
 					value={view.filters.query}
 					placeholder={m.searchPlaceholder}
 					onChange={(e) => controller.setQuery(e.target.value)}
-					style={searchInput}
+					style={s.searchInput}
 					aria-label={m.searchAria}
 				/>
 				<p style={{ fontSize: 11, color: palette.inkFaint, margin: "8px 0 0" }}>
@@ -411,7 +403,7 @@ function LeftRail({
 				{hasFilters ? (
 					<button
 						type="button"
-						style={{ ...subtleButton, marginTop: 8 }}
+						style={{ ...s.subtleButton, marginTop: 8 }}
 						onClick={() => controller.clearFilters()}
 					>
 						{m.clearFilters}
@@ -478,6 +470,7 @@ function settingsSyncProgressText(
  * inside the shared sync hub (MIK-051).
  */
 function SyncStatusDot({ status }: { status: string }) {
+	const { palette } = useOptionsTheme();
 	return (
 		<span
 			aria-hidden
@@ -485,7 +478,7 @@ function SyncStatusDot({ status }: { status: string }) {
 				width: 8,
 				height: 8,
 				borderRadius: 999,
-				background: statusColor(syncTone(status)),
+				background: statusColor(palette, syncTone(status)),
 			}}
 		/>
 	);
@@ -565,6 +558,7 @@ function SyncHub({
 	onRefresh: () => void;
 	onRefreshSettings?: () => void;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	const sections: SyncHubSectionState[] = [
 		{
 			status: sync.status,
@@ -593,19 +587,19 @@ function SyncHub({
 
 	return (
 		<details style={syncHub} aria-label={m.syncHubAria}>
-			<summary style={syncHubSummary}>
+			<summary style={s.syncHubSummary}>
 				<span
 					aria-hidden
 					style={{
 						width: 8,
 						height: 8,
 						borderRadius: 999,
-						background: statusColor(SYNC_HUB_SUMMARY_TONE[kind]),
+						background: statusColor(palette, SYNC_HUB_SUMMARY_TONE[kind]),
 					}}
 				/>
 				<span>{summaryLabel[kind]}</span>
 			</summary>
-			<div style={syncHubPanel}>
+			<div style={s.syncHubPanel}>
 				<SyncHubSection
 					label={m.driveSync}
 					status={sync.status}
@@ -668,9 +662,10 @@ function SyncHubSection({
 	onAction: () => void;
 	m: OptionsMessages;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<section>
-			<p style={railLabel}>{label}</p>
+			<p style={s.railLabel}>{label}</p>
 			<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
 				<SyncStatusDot status={status} />
 				<span style={{ fontSize: 13 }}>{status}</span>
@@ -702,8 +697,8 @@ function SyncHubSection({
 				type="button"
 				style={
 					inFlight
-						? { ...subtleButton, ...disabledButton, marginTop: 8 }
-						: { ...subtleButton, marginTop: 8 }
+						? { ...s.subtleButton, ...disabledButton, marginTop: 8 }
+						: { ...s.subtleButton, marginTop: 8 }
 				}
 				disabled={inFlight}
 				aria-busy={inFlight || undefined}
@@ -774,6 +769,7 @@ function FacetGroup<T extends string>({
 	/** Whether the group renders expanded on first mount (MIK-035). */
 	defaultOpen?: boolean;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	// Open/expanded are view-only UI state; they never touch the controller.
 	const [open, setOpen] = useState(defaultOpen);
 	const [expanded, setExpanded] = useState(false);
@@ -796,12 +792,12 @@ function FacetGroup<T extends string>({
 				<span aria-hidden style={{ fontSize: 9, color: palette.inkFaint }}>
 					{open ? "▾" : "▸"}
 				</span>
-				<span style={facetHeaderLabel}>{label}</span>
+				<span style={s.facetHeaderLabel}>{label}</span>
 				{!open ? (
 					active !== undefined ? (
-						<span style={facetActiveSummary}>{format(active)}</span>
+						<span style={s.facetActiveSummary}>{format(active)}</span>
 					) : (
-						<span style={facetCollapsedCount}>
+						<span style={s.facetCollapsedCount}>
 							{m.facetCount(values.length)}
 						</span>
 					)
@@ -825,7 +821,7 @@ function FacetGroup<T extends string>({
 							<button
 								key={value}
 								type="button"
-								style={active === value ? chipActive : chip}
+								style={active === value ? s.chipActive : s.chip}
 								onClick={() => onToggle(active === value ? undefined : value)}
 							>
 								{format(value)}
@@ -835,7 +831,7 @@ function FacetGroup<T extends string>({
 					{overflow ? (
 						<button
 							type="button"
-							style={facetOverflowButton}
+							style={s.facetOverflowButton}
 							onClick={() => setExpanded((current) => !current)}
 						>
 							{expanded ? m.showFewer(unit) : m.showAll(values.length, unit)}
@@ -867,12 +863,13 @@ function FilterFacets({
 	m: OptionsMessages;
 	controller: OptionsController;
 }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<section
-			style={{ ...panel, display: "flex", flexDirection: "column", gap: 14 }}
+			style={{ ...s.panel, display: "flex", flexDirection: "column", gap: 14 }}
 			aria-label={m.filtersAria}
 		>
-			<p style={{ ...railLabel, margin: 0 }}>{m.filters}</p>
+			<p style={{ ...s.railLabel, margin: 0 }}>{m.filters}</p>
 			<FacetGroup
 				label={m.domain}
 				values={facets.domains}
@@ -1009,6 +1006,7 @@ function LedgerRow({
 	onSelect: () => void;
 	onDelete: () => void;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<BookmarkSummaryItem
 			url={row.url}
@@ -1031,7 +1029,9 @@ function LedgerRow({
 					<button
 						type="button"
 						style={
-							busy ? { ...rowDeleteButton, ...disabledButton } : rowDeleteButton
+							busy
+								? { ...s.rowDeleteButton, ...disabledButton }
+								: s.rowDeleteButton
 						}
 						disabled={busy}
 						aria-label={m.deleteRowAria(row.title)}
@@ -1051,6 +1051,7 @@ function LedgerRow({
 }
 
 function BookmarkUrlLink({ url }: { url: string }) {
+	const { palette } = useOptionsTheme();
 	return (
 		<a
 			href={url}
@@ -1068,8 +1069,9 @@ function BookmarkUrlLink({ url }: { url: string }) {
 }
 
 function OpenBookmarkLink({ url, label }: { url: string; label: string }) {
+	const { styles: s } = useOptionsTheme();
 	return (
-		<a href={url} target="_blank" rel="noreferrer" style={primaryButton}>
+		<a href={url} target="_blank" rel="noreferrer" style={s.primaryButton}>
 			{label}
 		</a>
 	);
@@ -1106,6 +1108,7 @@ function BookmarkDetailDrawer({
 	controller: OptionsController;
 	onEditCustomProfile?: (id: string) => void;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<Drawer
 			labelledBy="bookmark-detail-title"
@@ -1123,7 +1126,7 @@ function BookmarkDetailDrawer({
 						<StatusPill status={detail.aiStatus} />
 						<button
 							type="button"
-							style={subtleButton}
+							style={s.subtleButton}
 							onClick={() => controller.clearSelection()}
 							aria-label={m.closeDetailsAria}
 						>
@@ -1155,7 +1158,7 @@ function BookmarkDetailDrawer({
 						<button
 							type="button"
 							style={
-								busy ? { ...dangerButton, ...disabledButton } : dangerButton
+								busy ? { ...s.dangerButton, ...disabledButton } : s.dangerButton
 							}
 							disabled={busy}
 							onClick={() =>
@@ -1166,7 +1169,7 @@ function BookmarkDetailDrawer({
 						</button>
 						<button
 							type="button"
-							style={subtleButton}
+							style={s.subtleButton}
 							onClick={() => controller.clearSelection()}
 						>
 							{m.close}
@@ -1205,10 +1208,10 @@ function BookmarkDetailDrawer({
 			{profile ? (
 				profile.kind === "custom" && onEditCustomProfile ? (
 					<div style={{ marginTop: 10 }}>
-						<p style={railLabel}>{m.profileLabel}</p>
+						<p style={s.railLabel}>{m.profileLabel}</p>
 						<button
 							type="button"
-							style={profileEditButton}
+							style={s.profileEditButton}
 							aria-label={m.editProfileAria(profile.name)}
 							onClick={() => onEditCustomProfile(profile.id)}
 						>
@@ -1222,7 +1225,7 @@ function BookmarkDetailDrawer({
 
 			{detail.tags.length > 0 ? (
 				<div style={{ marginTop: 10 }}>
-					<p style={railLabel}>{m.tags}</p>
+					<p style={s.railLabel}>{m.tags}</p>
 					<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
 						{detail.tags.map((t) => (
 							<span key={t} style={{ fontSize: 12, color: palette.inkSoft }}>
@@ -1235,7 +1238,7 @@ function BookmarkDetailDrawer({
 
 			{detail.analysisMarkdown ? (
 				<div style={{ marginTop: 12 }}>
-					<p style={railLabel}>{m.analysisLabel}</p>
+					<p style={s.railLabel}>{m.analysisLabel}</p>
 					<AnalysisMarkdown markdown={detail.analysisMarkdown} />
 				</div>
 			) : null}
@@ -1330,9 +1333,10 @@ function SkillsScreen({
  * permanent explanation-only rail.
  */
 function SkillsHelp({ m }: { m: OptionsMessages }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<>
-			<p style={railLabel}>{m.skillsAbout}</p>
+			<p style={s.railLabel}>{m.skillsAbout}</p>
 			<p style={{ margin: 0 }}>
 				{m.skillsIntro.before}
 				<code>bookmark-ai/settings.json</code>
@@ -1357,6 +1361,7 @@ function SkillsMain({
 	m: OptionsMessages;
 	skillsController: SkillsController;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 			{!view.formOpen && view.actionError ? (
@@ -1366,7 +1371,7 @@ function SkillsMain({
 				<Notice text={m.loadingSkills} />
 			) : (
 				<>
-					<div style={panel}>
+					<div style={s.panel}>
 						<div
 							style={{
 								display: "flex",
@@ -1375,10 +1380,10 @@ function SkillsMain({
 								marginBottom: 8,
 							}}
 						>
-							<p style={{ ...railLabel, margin: 0 }}>{m.custom}</p>
+							<p style={{ ...s.railLabel, margin: 0 }}>{m.custom}</p>
 							<button
 								type="button"
-								style={subtleButton}
+								style={s.subtleButton}
 								onClick={() => skillsController.startCreate()}
 							>
 								{m.addCustom}
@@ -1406,8 +1411,8 @@ function SkillsMain({
 							</ul>
 						)}
 					</div>
-					<div style={panel}>
-						<p style={railLabel}>{m.builtIn}</p>
+					<div style={s.panel}>
+						<p style={s.railLabel}>{m.builtIn}</p>
 						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 							{view.builtIns.map((skill) => (
 								<BuiltInSkillRow key={skill.id} skill={skill} m={m} />
@@ -1476,9 +1481,10 @@ function AskAiScreen({
  * inside the chat viewport.
  */
 function AskAiHelp({ m }: { m: OptionsMessages }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<>
-			<p style={railLabel}>{m.askAiAbout}</p>
+			<p style={s.railLabel}>{m.askAiAbout}</p>
 			<p style={{ margin: 0 }}>{m.askAiScopeNote}</p>
 			<p style={{ margin: "6px 0 0" }}>{m.askAiPrivacyNote}</p>
 		</>
@@ -1495,8 +1501,9 @@ function AskAiHelp({ m }: { m: OptionsMessages }) {
  * action live in the shared app-header sync hub.
  */
 function AskAiChatContext({ m }: { m: OptionsMessages }) {
+	const { styles: s } = useOptionsTheme();
 	return (
-		<section style={askAiChatContext} aria-label={m.askAiAbout}>
+		<section style={s.askAiChatContext} aria-label={m.askAiAbout}>
 			<span>{m.askAiScopeNote}</span>
 			<span>{m.askAiPrivacyNote}</span>
 		</section>
@@ -1581,6 +1588,7 @@ function AskAiMain({
 	controller: AskAiController;
 	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
+	const { styles: s } = useOptionsTheme();
 	const viewportRef = useRef<HTMLDivElement>(null);
 	// A ref, not state: follow changes on every scroll event and must never
 	// re-render the transcript by itself.
@@ -1635,12 +1643,12 @@ function AskAiMain({
 							{view.messages.map((message) =>
 								message.role === "user" ? (
 									<div key={message.id} style={askAiUserTurn}>
-										<p style={askAiTurnLabel}>{m.askAiUserTurnLabel}</p>
-										<p style={askAiUserBubble}>{message.text}</p>
+										<p style={s.askAiTurnLabel}>{m.askAiUserTurnLabel}</p>
+										<p style={s.askAiUserBubble}>{message.text}</p>
 									</div>
 								) : (
 									<div key={message.id} style={askAiAssistantTurn}>
-										<p style={askAiTurnLabel}>{m.askAiAssistantTurnLabel}</p>
+										<p style={s.askAiTurnLabel}>{m.askAiAssistantTurnLabel}</p>
 										<AskAiResult
 											result={message.result}
 											m={m}
@@ -1656,7 +1664,7 @@ function AskAiMain({
 				{showLatest ? (
 					<button
 						type="button"
-						style={askAiLatestButton}
+						style={s.askAiLatestButton}
 						aria-label={m.askAiLatestAria}
 						onClick={handleLatestClick}
 					>
@@ -1682,6 +1690,7 @@ function AskAiWelcome({
 	m: OptionsMessages;
 	controller: AskAiController;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<div style={askAiWelcome}>
 			<p style={{ fontSize: 13, color: palette.inkSoft, margin: 0 }}>
@@ -1699,7 +1708,7 @@ function AskAiWelcome({
 					<button
 						key={example}
 						type="button"
-						style={chip}
+						style={s.chip}
 						onClick={() => controller.setQuestion(example)}
 					>
 						{example}
@@ -1719,6 +1728,7 @@ function AskAiWelcome({
  * accessible signal stays the `role="status"` text.
  */
 function AskAiThinkingIndicator({ m }: { m: OptionsMessages }) {
+	const { palette } = useOptionsTheme();
 	return (
 		<div
 			role="status"
@@ -1763,11 +1773,12 @@ function AskAiComposer({
 	m: OptionsMessages;
 	controller: AskAiController;
 }) {
+	const { styles: s } = useOptionsTheme();
 	const submitDisabled = !view.canSubmit || view.answering;
 	const clearDisabled = !view.canClear;
 	return (
 		<form
-			style={askAiComposer}
+			style={s.askAiComposer}
 			aria-busy={view.answering || undefined}
 			onSubmit={(event) => {
 				event.preventDefault();
@@ -1775,7 +1786,7 @@ function AskAiComposer({
 			}}
 		>
 			<textarea
-				style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
+				style={{ ...s.searchInput, minHeight: 72, resize: "vertical" }}
 				value={view.question}
 				placeholder={m.askAiPlaceholder}
 				aria-label={m.askAiInputAria}
@@ -1801,8 +1812,8 @@ function AskAiComposer({
 					type="submit"
 					style={
 						submitDisabled
-							? { ...primaryButton, ...disabledButton }
-							: primaryButton
+							? { ...s.primaryButton, ...disabledButton }
+							: s.primaryButton
 					}
 					disabled={submitDisabled}
 				>
@@ -1812,8 +1823,8 @@ function AskAiComposer({
 					type="button"
 					style={
 						clearDisabled
-							? { ...subtleButton, ...disabledButton }
-							: subtleButton
+							? { ...s.subtleButton, ...disabledButton }
+							: s.subtleButton
 					}
 					disabled={clearDisabled}
 					onClick={() => controller.clearSession()}
@@ -1840,6 +1851,7 @@ function AskAiResult({
 	m: OptionsMessages;
 	onOpenBookmark: (canonicalUrl: string) => void;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	switch (result.kind) {
 		case "too-short-question":
 			return <Notice text={m.askAiTooShort} />;
@@ -1851,7 +1863,7 @@ function AskAiResult({
 			return <Banner tone="danger" text={m.askAiError} />;
 		case "recommendations":
 			return (
-				<section style={panel} aria-label={m.askAiResultsAria}>
+				<section style={s.panel} aria-label={m.askAiResultsAria}>
 					{result.message && result.message.length > 0 ? (
 						<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
 							{result.message}
@@ -1936,6 +1948,7 @@ function SkillFormDrawer({
 	skillsController: SkillsController;
 	m: OptionsMessages;
 }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<Drawer
 			labelledBy="skill-form-title"
@@ -1954,7 +1967,7 @@ function SkillFormDrawer({
 					</h3>
 					<button
 						type="button"
-						style={subtleButton}
+						style={s.subtleButton}
 						onClick={() => skillsController.cancelEdit()}
 						aria-label={m.closeSkillFormAria}
 					>
@@ -1984,9 +1997,10 @@ function SkillFormDrawer({
  * docs/privacy-policy.md.
  */
 function InstructionGuidance({ m }: { m: OptionsMessages }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
-		<details style={drawerTips} aria-label={m.guidance.aria}>
-			<summary style={drawerTipsSummary}>{m.guidance.title}</summary>
+		<details style={s.drawerTips} aria-label={m.guidance.aria}>
+			<summary style={s.drawerTipsSummary}>{m.guidance.title}</summary>
 			<p style={{ margin: "6px 0 0" }}>{m.guidance.intro}</p>
 			<p style={{ margin: "8px 0 0", fontWeight: 600, color: palette.ink }}>
 				{m.guidance.examplesHeading}
@@ -2023,6 +2037,7 @@ function BuiltInSkillRow({
 	skill: BuiltInSkillView;
 	m: OptionsMessages;
 }) {
+	const { palette } = useOptionsTheme();
 	return (
 		<li
 			style={{
@@ -2055,6 +2070,7 @@ function CustomSkillRow({
 	onDelete: () => void;
 	onToggle: (enabled: boolean) => void;
 }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<li
 			style={{
@@ -2076,7 +2092,9 @@ function CustomSkillRow({
 				<span style={{ display: "flex", gap: 6 }}>
 					<button
 						type="button"
-						style={busy ? { ...subtleButton, ...disabledButton } : subtleButton}
+						style={
+							busy ? { ...s.subtleButton, ...disabledButton } : s.subtleButton
+						}
 						disabled={busy}
 						onClick={() => onToggle(!skill.enabled)}
 					>
@@ -2084,7 +2102,9 @@ function CustomSkillRow({
 					</button>
 					<button
 						type="button"
-						style={busy ? { ...subtleButton, ...disabledButton } : subtleButton}
+						style={
+							busy ? { ...s.subtleButton, ...disabledButton } : s.subtleButton
+						}
 						disabled={busy}
 						onClick={onEdit}
 					>
@@ -2092,7 +2112,9 @@ function CustomSkillRow({
 					</button>
 					<button
 						type="button"
-						style={busy ? { ...dangerButton, ...disabledButton } : dangerButton}
+						style={
+							busy ? { ...s.dangerButton, ...disabledButton } : s.dangerButton
+						}
 						disabled={busy}
 						onClick={onDelete}
 					>
@@ -2118,6 +2140,7 @@ function SkillForm({
 	skillsController: SkillsController;
 	m: OptionsMessages;
 }) {
+	const { styles: s } = useOptionsTheme();
 	function set<K extends keyof SkillFormValues>(field: K) {
 		return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
 			skillsController.setFormField(
@@ -2141,7 +2164,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formName}
 				<input
-					style={searchInput}
+					style={s.searchInput}
 					value={view.form.name}
 					onChange={set("name")}
 					required
@@ -2150,7 +2173,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formPriority}
 				<input
-					style={searchInput}
+					style={s.searchInput}
 					type="number"
 					value={view.form.priority}
 					onChange={set("priority")}
@@ -2159,7 +2182,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formDomains}
 				<input
-					style={searchInput}
+					style={s.searchInput}
 					value={view.form.domains}
 					onChange={set("domains")}
 				/>
@@ -2167,7 +2190,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formUrlPatterns}
 				<input
-					style={searchInput}
+					style={s.searchInput}
 					value={view.form.urlPatterns}
 					onChange={set("urlPatterns")}
 				/>
@@ -2175,7 +2198,7 @@ function SkillForm({
 			<label style={{ fontSize: 12 }}>
 				{m.formInstruction}
 				<textarea
-					style={{ ...searchInput, minHeight: 72, resize: "vertical" }}
+					style={{ ...s.searchInput, minHeight: 72, resize: "vertical" }}
 					value={view.form.instruction}
 					onChange={set("instruction")}
 					required
@@ -2185,7 +2208,9 @@ function SkillForm({
 				<button
 					type="submit"
 					style={
-						view.busy ? { ...primaryButton, ...disabledButton } : primaryButton
+						view.busy
+							? { ...s.primaryButton, ...disabledButton }
+							: s.primaryButton
 					}
 					disabled={view.busy}
 				>
@@ -2193,7 +2218,7 @@ function SkillForm({
 				</button>
 				<button
 					type="button"
-					style={subtleButton}
+					style={s.subtleButton}
 					onClick={() => skillsController.cancelEdit()}
 				>
 					{m.cancel}
@@ -2204,9 +2229,10 @@ function SkillForm({
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
+	const { styles: s } = useOptionsTheme();
 	return (
 		<div style={{ marginTop: 10 }}>
-			<p style={railLabel}>{label}</p>
+			<p style={s.railLabel}>{label}</p>
 			<p style={{ fontSize: 13, margin: 0 }}>{value}</p>
 		</div>
 	);
@@ -2222,10 +2248,11 @@ function TimeRow({ label, value }: { label: string; value: string }) {
 }
 
 function Notice({ text }: { text: string }) {
+	const { styles: s, palette } = useOptionsTheme();
 	return (
 		<div
 			style={{
-				...panel,
+				...s.panel,
 				textAlign: "center",
 				color: palette.inkSoft,
 				fontSize: 13,
@@ -2237,6 +2264,7 @@ function Notice({ text }: { text: string }) {
 }
 
 function Banner({ tone, text }: { tone: "danger" | "warn"; text: string }) {
+	const { palette } = useOptionsTheme();
 	const color = tone === "danger" ? palette.danger : palette.warn;
 	return (
 		<div

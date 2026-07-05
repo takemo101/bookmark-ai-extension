@@ -13,9 +13,9 @@ import type { CSSProperties } from "react";
 import { useState } from "react";
 
 import { faviconView } from "../lib/favicon/index";
-import { palette } from "./styles";
+import { type ThemePalette, useTheme } from "../lib/theme/index";
 
-function tileStyle(size: number): CSSProperties {
+function tileStyle(size: number, palette: ThemePalette): CSSProperties {
 	return {
 		boxSizing: "border-box",
 		width: size,
@@ -49,11 +49,12 @@ function imageStyle(size: number): CSSProperties {
  * never leaves the next site stuck on the fallback.
  */
 export function Favicon({ pageUrl, size }: { pageUrl: string; size: number }) {
+	const { palette } = useTheme();
 	const [failed, setFailed] = useState(false);
 	const view = faviconView(pageUrl, { size });
 	if (!view.src || failed) {
 		return (
-			<span aria-hidden style={tileStyle(size)}>
+			<span aria-hidden style={tileStyle(size, palette)}>
 				{view.fallback}
 			</span>
 		);

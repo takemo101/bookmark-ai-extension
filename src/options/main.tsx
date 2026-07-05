@@ -1,6 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
+import {
+	ThemeProvider,
+	createMatchMediaSystemDark,
+	createThemePreferenceStorage,
+	createThemeStore,
+} from "../lib/theme/index";
 import { createAskAiController } from "./ask-ai-view-model";
 import { Options } from "./Options";
 import { applyOptionsPageReset } from "./page-reset";
@@ -20,8 +26,17 @@ if (!container) {
 
 // Chrome keeps the browser default body margin for extension pages; the Options
 // shell owns its spacing explicitly, so reset the outer page chrome before
-// mounting React.
+// mounting React. The reset paints the light default; the mounted page
+// repaints once the persisted theme preference resolves.
 applyOptionsPageReset(document.body);
+
+// Theme store: the local-only light/dark/system preference from
+// `chrome.storage.local` plus the system color scheme; the app-header
+// ThemeSelect writes through it.
+const themeStore = createThemeStore({
+	storage: createThemePreferenceStorage(),
+	systemDark: createMatchMediaSystemDark(window),
+});
 
 // Composition root: build the real use cases, wrap them in the controller, and
 // inject it. The component itself stays free of Chrome/Drive/AI wiring.
@@ -41,10 +56,12 @@ void syncRequests.consumePending();
 
 createRoot(container).render(
 	<React.StrictMode>
-		<Options
-			controller={controller}
-			skillsController={skillsController}
-			askAiController={askAiController}
-		/>
+		<ThemeProvider store={themeStore}>
+			<Options
+				controller={controller}
+				skillsController={skillsController}
+				askAiController={askAiController}
+			/>
+		</ThemeProvider>
 	</React.StrictMode>,
 );
