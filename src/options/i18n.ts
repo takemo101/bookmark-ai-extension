@@ -42,14 +42,13 @@ export type OptionsMessages = {
 	readonly lastSynced: (time: string) => string;
 	readonly syncButton: string;
 	readonly syncAria: string;
-	/** Visible label next to the app-header theme selector. */
-	readonly themeLabel: string;
-	/** Accessible name of the theme preference selector. */
-	readonly themeSelectAria: string;
-	/** The three theme preference option labels. */
+	/** Accessible label for the round app-header theme toggle. */
+	readonly themeToggleAria: (current: string, next: string) => string;
+	/** The three theme preference labels. */
 	readonly themeSystem: string;
 	readonly themeLight: string;
 	readonly themeDark: string;
+	readonly themePreference: (preference: "system" | "light" | "dark") => string;
 	/** Accessible label of the shared app-header sync hub (MIK-051). */
 	readonly syncHubAria: string;
 	/** Glance summary texts of the sync hub pill (MIK-051). */
@@ -199,11 +198,16 @@ const EN: OptionsMessages = {
 	lastSynced: (time) => `Last synced ${time}`,
 	syncButton: "Sync Drive",
 	syncAria: "Sync with Google Drive",
-	themeLabel: "Theme",
-	themeSelectAria: "Color theme",
+	themeToggleAria: (current, next) => `Theme: ${current}. Switch to ${next}.`,
 	themeSystem: "System",
 	themeLight: "Light",
 	themeDark: "Dark",
+	themePreference: (preference) =>
+		preference === "system"
+			? EN.themeSystem
+			: preference === "light"
+				? EN.themeLight
+				: EN.themeDark,
 	syncHubAria: "Sync status",
 	syncHubSynced: "Synced",
 	syncHubSyncing: "Syncing…",
@@ -367,11 +371,17 @@ const JA: OptionsMessages = {
 	lastSynced: (time) => `最終同期 ${time}`,
 	syncButton: "Driveと同期",
 	syncAria: "Google Driveと同期",
-	themeLabel: "テーマ",
-	themeSelectAria: "配色テーマ",
+	themeToggleAria: (current, next) =>
+		`テーマ: ${current}。次は${next}に切り替え。`,
 	themeSystem: "システム",
 	themeLight: "ライト",
 	themeDark: "ダーク",
+	themePreference: (preference) =>
+		preference === "system"
+			? JA.themeSystem
+			: preference === "light"
+				? JA.themeLight
+				: JA.themeDark,
 	syncHubAria: "同期状態",
 	syncHubSynced: "同期済み",
 	syncHubSyncing: "同期中…",

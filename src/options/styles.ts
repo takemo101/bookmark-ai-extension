@@ -340,8 +340,8 @@ export type OptionsStyles = {
 	readonly syncHubSummary: CSSProperties;
 	/** The opened sync hub panel (MIK-051). */
 	readonly syncHubPanel: CSSProperties;
-	/** The app-header theme preference selector. */
-	readonly themeSelect: CSSProperties;
+	/** The round app-header theme preference toggle. */
+	readonly themeToggleButton: CSSProperties;
 	/** The small `?` trigger button beside the screen title (ScreenHelp). */
 	readonly screenHelpTrigger: CSSProperties;
 	/** The ScreenHelp popover panel (MIK-053). */
@@ -526,10 +526,16 @@ export function createOptionsStyles(palette: ThemePalette): OptionsStyles {
 			boxShadow: `0 10px 28px ${palette.shadow}`,
 			textAlign: "left",
 		},
-		themeSelect: {
-			padding: "5px 10px",
+		themeToggleButton: {
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			width: 32,
+			height: 32,
+			padding: 0,
 			fontFamily: fontStack,
-			fontSize: 12,
+			fontSize: 16,
+			lineHeight: 1,
 			color: palette.inkSoft,
 			background: palette.paperRaised,
 			border: `1px solid ${palette.border}`,
