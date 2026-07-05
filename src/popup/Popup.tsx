@@ -9,9 +9,14 @@
  * client, JSONL parser, or merge internals appear here (AGENTS.md "Architecture
  * boundaries"). All wiring is injected via the `controller` prop, so the
  * component is trivially renderable with a fake in tests.
+ *
+ * Colors come from the active theme (light Warm Library / dark Deep Ledger)
+ * through {@link usePopupTheme}; the popup reflects the saved preference but
+ * exposes no selector — that lives in the Options app header.
  */
 import { useEffect, useSyncExternalStore } from "react";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
+import { statusColor } from "../lib/theme/index";
 // UI-only dependencies (MIK-028, MIK-032): the safe Markdown renderer and the
 // decorative favicon tile, no Options controller state — the sanctioned reuse
 // of the no-raw-HTML rendering posture (docs/ai-analysis-v2.md "UI behavior").
@@ -19,17 +24,8 @@ import { Favicon } from "../options/favicon";
 import { AnalysisMarkdown } from "../options/markdown";
 import { type PopupMessages, popupMessages } from "./i18n";
 import { openOptionsPage } from "./open-options";
-import {
-	card,
-	detailOverlay,
-	palette,
-	primaryButton,
-	primaryButtonDisabled,
-	recentRowButton,
-	statusColor,
-	subtleButton,
-	surface,
-} from "./styles";
+import { paintPopupPageBackground } from "./page-reset";
+import { usePopupTheme } from "./theme";
 import type { ConnectionStatus, PromptApiStatus } from "./use-cases";
 import type {
 	AiPreview,
@@ -63,13 +59,22 @@ export function Popup({
 		controller.getView,
 	);
 	const m = popupMessages(language ?? detectUiLanguage());
+	const { palette, styles } = usePopupTheme();
 
 	useEffect(() => {
 		void controller.init();
 	}, [controller]);
 
+	// Keep the document body on the active theme's paper: the pre-mount reset
+	// painted the light default before the stored preference resolved.
+	useEffect(() => {
+		if (typeof document !== "undefined") {
+			paintPopupPageBackground(document.body, palette.paper);
+		}
+	}, [palette]);
+
 	return (
-		<main style={surface}>
+		<main style={styles.surface}>
 			<Header m={m} />
 			<TabReceipt
 				view={view}
@@ -99,6 +104,7 @@ export function Popup({
 }
 
 function Header({ m }: { m: PopupMessages }) {
+	const { palette } = usePopupTheme();
 	return (
 		<header style={{ marginBottom: 8 }}>
 			<h1 style={{ fontSize: 16, margin: 0, letterSpacing: 0.2 }}>
@@ -120,11 +126,12 @@ function TabReceipt({
 	m: PopupMessages;
 	onDelete: () => void;
 }) {
+	const { palette, styles } = usePopupTheme();
 	const title =
 		view.tab?.title ?? (view.loading ? m.readingTab : m.noActiveTab);
 	const url = view.tab?.url ?? "";
 	return (
-		<section style={{ ...card, marginBottom: 6 }}>
+		<section style={{ ...styles.card, marginBottom: 6 }}>
 			<div
 				style={{
 					fontSize: 10,
@@ -173,6 +180,7 @@ function CurrentBookmark({
 	m: PopupMessages;
 	onDelete: () => void;
 }) {
+	const { palette, styles } = usePopupTheme();
 	const bookmark = view.currentBookmark;
 	if (!bookmark) {
 		return null;
@@ -199,8 +207,8 @@ function CurrentBookmark({
 					type="button"
 					style={
 						busy
-							? { ...subtleButton, cursor: "default", opacity: 0.6 }
-							: subtleButton
+							? { ...styles.subtleButton, cursor: "default", opacity: 0.6 }
+							: styles.subtleButton
 					}
 					disabled={busy}
 					onClick={onDelete}
@@ -256,6 +264,7 @@ function Badge({
 	text: string;
 	tone: "ok" | "warn" | "danger" | "neutral";
 }) {
+	const { palette } = usePopupTheme();
 	return (
 		<span
 			style={{
@@ -276,7 +285,7 @@ function Badge({
 					width: 7,
 					height: 7,
 					borderRadius: 999,
-					background: statusColor(tone),
+					background: statusColor(palette, tone),
 				}}
 			/>
 			<span style={{ color: palette.inkFaint }}>{label}:</span>
@@ -294,6 +303,7 @@ function SaveAction({
 	m: PopupMessages;
 	onSave: () => void;
 }) {
+	const { styles } = usePopupTheme();
 	const saving = view.flow.kind === "running";
 	const disabled = !view.canSave || saving;
 	return (
@@ -301,7 +311,7 @@ function SaveAction({
 			type="button"
 			onClick={onSave}
 			disabled={disabled}
-			style={disabled ? primaryButtonDisabled : primaryButton}
+			style={disabled ? styles.primaryButtonDisabled : styles.primaryButton}
 		>
 			{saving ? m.saving : m.save}
 		</button>
@@ -309,11 +319,12 @@ function SaveAction({
 }
 
 function Flow({ flow, m }: { flow: FlowView; m: PopupMessages }) {
+	const { palette, styles } = usePopupTheme();
 	if (flow.kind === "idle") {
 		return null;
 	}
 	return (
-		<section style={{ ...card, marginTop: 8 }}>
+		<section style={{ ...styles.card, marginTop: 8 }}>
 			<Trail trail={flow.trail} m={m} />
 			{flow.kind === "running" ? (
 				<p
@@ -344,6 +355,7 @@ function Trail({
 	trail: readonly TrailStage[];
 	m: PopupMessages;
 }) {
+	const { palette } = usePopupTheme();
 	return (
 		<ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
 			{trail.map((stage) => (
@@ -377,6 +389,7 @@ function Receipt({
 	receipt: Extract<FlowView, { kind: "done" }>["receipt"];
 	m: PopupMessages;
 }) {
+	const { palette } = usePopupTheme();
 	return (
 		<div style={{ marginTop: 8 }}>
 			<div
@@ -415,6 +428,7 @@ function Receipt({
 }
 
 function Preview({ preview }: { preview: AiPreview }) {
+	const { palette } = usePopupTheme();
 	return (
 		<div>
 			{preview.description ? (
@@ -474,6 +488,7 @@ function Recent({
 	onReAnalyze: (canonicalUrl: string) => void;
 	onSelect: (canonicalUrl: string) => void;
 }) {
+	const { palette, styles } = usePopupTheme();
 	if (items.length === 0) {
 		return null;
 	}
@@ -508,7 +523,7 @@ function Recent({
 						<button
 							type="button"
 							title={item.description ?? item.url}
-							style={recentRowButton}
+							style={styles.recentRowButton}
 							aria-haspopup="dialog"
 							onClick={() => onSelect(item.canonicalUrl)}
 						>
@@ -520,8 +535,12 @@ function Recent({
 								type="button"
 								style={
 									busy
-										? { ...subtleButton, cursor: "default", opacity: 0.6 }
-										: subtleButton
+										? {
+												...styles.subtleButton,
+												cursor: "default",
+												opacity: 0.6,
+											}
+										: styles.subtleButton
 								}
 								disabled={busy}
 								onClick={(event) => {
@@ -556,18 +575,19 @@ function RecentDetail({
 	m: PopupMessages;
 	onClose: () => void;
 }) {
+	const { palette, styles } = usePopupTheme();
 	return (
 		<section
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="recent-detail-title"
-			style={detailOverlay}
+			style={styles.detailOverlay}
 		>
 			<header>
 				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
 					<button
 						type="button"
-						style={subtleButton}
+						style={styles.subtleButton}
 						onClick={onClose}
 						// Best-effort focus management: land keyboard focus inside the
 						// dialog when it opens.
@@ -579,7 +599,7 @@ function RecentDetail({
 					<StatusPill status={detail.aiStatus} />
 					<button
 						type="button"
-						style={subtleButton}
+						style={styles.subtleButton}
 						onClick={onClose}
 						aria-label={m.closeDetails}
 					>
@@ -697,6 +717,7 @@ function formatDate(iso: string): string {
 }
 
 function Footer({ m }: { m: PopupMessages }) {
+	const { palette, styles } = usePopupTheme();
 	return (
 		<footer
 			style={{
@@ -709,7 +730,7 @@ function Footer({ m }: { m: PopupMessages }) {
 		>
 			<button
 				type="button"
-				style={subtleButton}
+				style={styles.subtleButton}
 				// `globalThis.chrome` is absent outside the extension (and in tests);
 				// `openOptionsPage` reads it safely so the popup never throws when
 				// opened standalone (a bare `chrome` reference would `ReferenceError`).
@@ -722,13 +743,14 @@ function Footer({ m }: { m: PopupMessages }) {
 }
 
 function StatusPill({ status }: { status: AiStatus }) {
+	const { palette } = usePopupTheme();
 	return (
 		<span
 			style={{
 				fontSize: 10,
 				textTransform: "uppercase",
 				letterSpacing: 0.5,
-				color: statusColor(aiStatusTone(status)),
+				color: statusColor(palette, aiStatusTone(status)),
 				border: `1px solid ${palette.border}`,
 				borderRadius: 6,
 				padding: "1px 6px",

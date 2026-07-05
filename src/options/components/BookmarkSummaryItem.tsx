@@ -19,17 +19,10 @@
  */
 import type { ReactNode } from "react";
 
+import { statusColor } from "../../lib/theme/index";
 import { Favicon } from "../favicon";
-import {
-	aiStatusTone,
-	palette,
-	row as rowStyle,
-	rowOpenButton,
-	rowSelected,
-	statusColor,
-	summaryClamp,
-	truncate,
-} from "../styles";
+import { aiStatusTone, summaryClamp, truncate } from "../styles";
+import { useOptionsTheme } from "../theme";
 import type { AiStatus } from "../view-types";
 
 /** How many tags a summary row/card shows at most. */
@@ -37,13 +30,14 @@ const SUMMARY_TAG_CAP = 4;
 
 /** The small uppercase AI-status pill shared by rows, cards, and drawers. */
 export function StatusPill({ status }: { status: AiStatus }) {
+	const { palette } = useOptionsTheme();
 	return (
 		<span
 			style={{
 				fontSize: 10,
 				textTransform: "uppercase",
 				letterSpacing: 0.5,
-				color: statusColor(aiStatusTone(status)),
+				color: statusColor(palette, aiStatusTone(status)),
 				border: `1px solid ${palette.border}`,
 				borderRadius: 6,
 				padding: "1px 6px",
@@ -94,6 +88,7 @@ export function BookmarkSummaryItem({
 	/** Trailing column extras rendered under the status pill (Library). */
 	trailing?: ReactNode;
 }) {
+	const { palette, styles } = useOptionsTheme();
 	const hasMetadata =
 		domain !== undefined ||
 		genre !== undefined ||
@@ -101,7 +96,10 @@ export function BookmarkSummaryItem({
 		metaSuffix !== undefined;
 
 	return (
-		<div data-bookmark-summary style={selected ? rowSelected : rowStyle}>
+		<div
+			data-bookmark-summary
+			style={selected ? styles.rowSelected : styles.row}
+		>
 			{/* Decorative site icon (MIK-032); the accessible text is the main
 			    button next to it. marginTop aligns it with the first title line
 			    in this flex-start row. */}
@@ -110,7 +108,7 @@ export function BookmarkSummaryItem({
 			</span>
 			<button
 				type="button"
-				style={rowOpenButton}
+				style={styles.rowOpenButton}
 				aria-label={openAriaLabel}
 				aria-expanded={expanded}
 				onClick={onOpen}

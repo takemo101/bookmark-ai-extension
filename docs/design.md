@@ -95,6 +95,7 @@ The exact paths can change during implementation, but keep these boundaries:
 | `extraction/*` | Current page extraction and excerpt construction. |
 | `ai/*` | Prompt API availability and English/Japanese AI output generation. |
 | `storage/*` | `chrome.storage.local` cache of bookmarks and Drive metadata. |
+| `lib/theme/*` | Light/dark/system color theme: palettes, preference parsing/resolution, local-only preference storage, runtime store, shared React provider. |
 | `popup/*` | Save current tab flow and status display. |
 | `options/*` | List/search/filter/delete/re-analyze management UI. |
 
@@ -420,6 +421,33 @@ Design deck selections from 2026-06-24:
 - Visual identity: **Warm Library**.
 
 The product should feel like a warm personal knowledge shelf rather than a generic AI dashboard. Prefer paper, ledger, and library cues: warm off-white backgrounds, muted ink colors, gentle borders, readable hierarchy, and restrained accent colors. Avoid overusing neon gradients or generic AI-purple branding.
+
+### Theme (light / dark / system)
+
+Both the Popup and the Options page support a color theme:
+
+- Preferences: `light`, `dark`, or `system` (the default). `system` resolves
+  against `prefers-color-scheme` at runtime and follows OS changes while a
+  page is open; a missing `matchMedia` resolves light.
+- Dark direction: **Deep Ledger** — the Warm Library identity on dark
+  ledger/database-like paper: crisp warm ink on deep warm-graphite surfaces,
+  warm/graphite hairline borders, the same restrained accent family
+  (warm brass instead of warm brown). Still no neon gradients or AI-purple.
+- Selector placement: the Options app header only (`ThemeSelect`, a native
+  labelled `<select>`). The Popup reflects the saved/resolved theme but has
+  no selector.
+- Persistence: device-local only, in `chrome.storage.local` under
+  `bookmark-ai:theme-preference`. The preference is never written to Google
+  Drive or `bookmark-ai/settings.json`, never sent to the Prompt API, and an
+  invalid/missing stored value falls back to `system`.
+- Implementation: the semantic palettes, preference parsing/resolution, the
+  storage adapter, the runtime store, and the shared React provider/hook live
+  in `lib/theme/`. Popup and Options each keep their layout tokens and build
+  their themed style objects from the active palette in their own
+  `styles.ts` (`createPopupStyles` / `createOptionsStyles`), consumed through
+  layer-local hooks (`popup/theme.ts`, `options/theme.ts`). Each page's
+  `page-reset` paints the document body with the active theme's paper and
+  repaints when the theme changes.
 
 ### UI language (MIK-029)
 

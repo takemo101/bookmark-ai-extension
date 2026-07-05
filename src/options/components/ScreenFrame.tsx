@@ -23,18 +23,17 @@
 import type { CSSProperties, ReactNode } from "react";
 
 import {
-	askAiPage,
 	askAiScreenShell,
 	chatBody,
 	chatColumn,
 	noRailColumn,
-	page,
+	type OptionsStyles,
 	screenShell,
-	screenSubtitle,
 	screenTitle,
 	screenTitleRow,
 	workspaceBody,
 } from "../styles";
+import { useOptionsTheme } from "../theme";
 import { ScreenHelp } from "./ScreenHelp";
 
 export type ScreenFrameVariant = "library" | "noRail" | "chat";
@@ -42,11 +41,14 @@ export type ScreenFrameVariant = "library" | "noRail" | "chat";
 /**
  * The app-page style for the active screen's frame variant: the `chat`
  * variant locks the outer document so its viewport is the only scroller.
+ * Takes the active themed styles because the page frame carries the theme's
+ * paper background and ink color.
  */
 export function screenFramePageStyle(
+	styles: OptionsStyles,
 	variant: ScreenFrameVariant,
 ): CSSProperties {
-	return variant === "chat" ? askAiPage : page;
+	return variant === "chat" ? styles.askAiPage : styles.page;
 }
 
 /**
@@ -67,6 +69,7 @@ function ScreenHeader({
 	/** Explanatory guidance disclosed by the title-adjacent help. */
 	help?: ReactNode;
 }) {
+	const { styles } = useOptionsTheme();
 	return (
 		<header>
 			<div style={screenTitleRow}>
@@ -75,7 +78,7 @@ function ScreenHeader({
 					<ScreenHelp label={helpLabel}>{help}</ScreenHelp>
 				) : null}
 			</div>
-			<p style={screenSubtitle}>{subtitle}</p>
+			<p style={styles.screenSubtitle}>{subtitle}</p>
 		</header>
 	);
 }
