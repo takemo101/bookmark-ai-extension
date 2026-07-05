@@ -14,6 +14,7 @@ import {
 	askAiShouldAutoFollow,
 	lockScroll,
 	Options,
+	syncHubSummaryKind,
 	visibleFacetValues,
 } from "./Options";
 import type { SkillsController, SkillsView } from "./skills-view-model";
@@ -33,10 +34,11 @@ import type {
  * the sheet carries dialog semantics without a Re-analyze action, rows carry
  * a quick delete button, growable facets cap their expanded chip lists, facet
  * groups collapse behind aria-expanded headers with active-filter summaries
- * (MIK-035), Drive sync floats instead of sitting in the rail, and the
- * Analysis skills settings screen renders separately from the ledger with a
- * modal skill form and the same rail/main workspace body plus floating
- * settings sync action as the Library (MIK-038). Screen
+ * (MIK-035), bookmark Drive sync and analysis settings sync live in one shared
+ * app-header sync hub instead of per-screen rail panels and floating buttons
+ * (MIK-051), and the Analysis skills settings screen renders separately from
+ * the ledger with a modal skill form and the same rail/main workspace body as
+ * the Library (MIK-038). Screen
  * switching is exercised through the `initialScreen` prop because static
  * rendering cannot dispatch clicks. The scroll-lock and tag-cap logic are
  * unit-tested via their exported helpers because tests run in node, not
@@ -623,26 +625,75 @@ describe("Options left rail filters (MIK-028)", () => {
 	});
 });
 
-describe("Options Drive sync affordance (MIK-024)", () => {
-	it("renders a floating sync button and no rail Sync now button", () => {
+describe("Options shared sync hub (MIK-051)", () => {
+	const populatedView = viewOf({
+		rows: [rowOf()],
+		totalCount: 1,
+		filteredCount: 1,
+		empty: false,
+	});
+
+	it("renders the bookmark sync status and action inside an app-header hub", () => {
+		const html = render(populatedView);
+
+		// A native disclosure in the app header: summary pill plus detail panel.
+		expect(html).toContain("<details");
+		expect(html).toContain('aria-label="Sync status"');
+		expect(html).toContain(">Synced<");
+		expect(html).toContain("Drive sync");
+		expect(html).toContain(">synced<");
+		expect(html).toContain(">Sync Drive<");
+		expect(html).toContain('aria-label="Sync with Google Drive"');
+		// The hub sits in the app header, before any screen content.
+		expect(html.indexOf("<details")).toBeLessThan(html.indexOf("<h2"));
+	});
+
+	it("no longer renders the old rail Drive sync panel or floating sync button", () => {
+		const html = render(populatedView);
+
+		// One Drive sync readout — the hub's — instead of the old rail panel.
+		expect(html.match(/Drive sync/g)).toHaveLength(1);
+		expect(html).not.toContain("position:fixed;right:24px;bottom:24px");
+		expect(html).not.toContain("Sync now");
+	});
+
+	it("shows the settings sync section and action when a skills controller exists", () => {
+		const html = renderWithSkills(populatedView, skillsViewOf());
+
+		expect(html).toContain("Settings sync");
+		expect(html).toContain(">Sync settings<");
+		expect(html).toContain('aria-label="Sync analysis skill settings"');
+		// Both readouts live inside the one header hub.
+		const details = html.indexOf("<details");
+		expect(details).toBeGreaterThanOrEqual(0);
+		expect(html.indexOf("Settings sync")).toBeGreaterThan(details);
+		expect(html.indexOf("Settings sync")).toBeLessThan(html.indexOf("<h2"));
+	});
+
+	it("omits the settings sync section without a skills controller", () => {
+		const html = render(populatedView);
+
+		expect(html).not.toContain("Settings sync");
+		expect(html).not.toContain(">Sync settings<");
+	});
+
+	it("summarizes pending local changes in the hub pill and detail", () => {
 		const html = render(
 			viewOf({
-				rows: [rowOf()],
-				totalCount: 1,
-				filteredCount: 1,
-				empty: false,
+				sync: {
+					status: "synced",
+					pendingLocalChanges: true,
+					syncing: false,
+					writing: false,
+				},
 			}),
 		);
 
-		expect(html).toContain('aria-label="Sync with Google Drive"');
-		expect(html).toContain("Sync Drive");
-		expect(html).not.toContain("Sync now");
-		// The rail keeps the status readout.
-		expect(html).toContain("Drive sync");
-		expect(html).toContain("synced");
+		expect(html).toContain(">Pending<");
+		expect(html).toContain("Local changes pending — will retry on next sync");
 	});
 
-	it("keeps sync errors and pending-change info visible in the rail", () => {
+	it("keeps sync errors and pending info visible in the hub detail", () => {
 		const html = render(
 			viewOf({
 				sync: {
@@ -655,23 +706,102 @@ describe("Options Drive sync affordance (MIK-024)", () => {
 			}),
 		);
 
+		expect(html).toContain(">Sync error<");
 		expect(html).toContain("Drive sync failed");
 		expect(html).toContain("Local changes pending — will retry on next sync");
-		expect(html).toContain('aria-label="Sync with Google Drive"');
-		// A failed sync leaves the button clickable so the user can retry.
+		// A failed sync leaves the action clickable so the user can retry.
 		expect(html).not.toContain('aria-busy="true"');
+		expect(html).not.toContain("disabled");
+	});
+
+	it("keeps the bookmark last-synced time discoverable in the hub", () => {
+		const html = render(
+			viewOf({
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: false,
+					writing: false,
+					lastSyncedAt: "2026-01-06T12:34:56.000Z",
+				},
+			}),
+		);
+
+		expect(html).toContain("Last synced");
+		expect(html).toContain("2026");
+	});
+
+	it("disables only the settings action while settings sync is running", () => {
+		const html = renderWithSkills(
+			viewOf(),
+			skillsViewOf({
+				sync: {
+					status: "synced",
+					pendingLocalChanges: false,
+					syncing: true,
+					writing: false,
+				},
+			}),
+		);
+
+		expect(html).toContain(">Syncing…<");
+		expect(html).toContain("Syncing settings with Google Drive…");
+		// Only the settings action is disabled; bookmark sync stays available.
+		expect(html.match(/disabled/g)).toHaveLength(1);
+	});
+
+	it("localizes the hub for the ja language", () => {
+		const html = renderWithSkills(
+			populatedView,
+			skillsViewOf(),
+			"library",
+			"ja",
+		);
+
+		expect(html).toContain(">同期済み<");
+		expect(html).toContain(">Driveと同期<");
+		expect(html).toContain(">設定を同期<");
+		expect(html).toContain("設定の同期");
+	});
+
+	it("derives the summary kind from the worst section state", () => {
+		const idle = {
+			status: "synced",
+			pendingLocalChanges: false,
+			syncing: false,
+			writing: false,
+			loading: false,
+		};
+
+		expect(syncHubSummaryKind([idle])).toBe("synced");
+		expect(syncHubSummaryKind([idle, { ...idle, loading: true }])).toBe(
+			"syncing",
+		);
+		expect(syncHubSummaryKind([idle, { ...idle, writing: true }])).toBe(
+			"syncing",
+		);
+		expect(
+			syncHubSummaryKind([{ ...idle, pendingLocalChanges: true }, idle]),
+		).toBe("pending");
+		// An error outranks in-flight progress and pending changes.
+		expect(
+			syncHubSummaryKind([
+				{ ...idle, status: "error" },
+				{ ...idle, syncing: true, pendingLocalChanges: true },
+			]),
+		).toBe("error");
 	});
 });
 
 describe("Options Drive sync progress feedback (MIK-026)", () => {
-	it("shows cached-loading progress and disables the floating sync button", () => {
+	it("shows cached-loading progress and disables the hub sync action", () => {
 		const html = render(viewOf({ loading: true }));
 
 		expect(html).toContain("Loading cached bookmarks…");
 		expect(html).toContain("Loading your library…");
+		expect(html).toContain(">Syncing…<");
 		expect(html).toContain('aria-busy="true"');
 		expect(html).toContain("disabled");
-		expect(html).toContain("loading…");
 	});
 
 	it("shows Drive-syncing progress and blocks duplicate sync clicks", () => {
@@ -691,8 +821,9 @@ describe("Options Drive sync progress feedback (MIK-026)", () => {
 		);
 
 		expect(html).toContain("Syncing with Google Drive…");
+		expect(html).toContain(">Syncing…<");
 		expect(html).toContain('aria-busy="true"');
-		expect(html).toContain("syncing…");
+		expect(html).toContain("disabled");
 		expect(html).not.toContain("Writing changes to Google Drive…");
 	});
 
@@ -714,8 +845,8 @@ describe("Options Drive sync progress feedback (MIK-026)", () => {
 		);
 
 		expect(html).toContain("Writing changes to Google Drive…");
+		expect(html).toContain(">Syncing…<");
 		expect(html).toContain('aria-busy="true"');
-		expect(html).toContain("writing…");
 		expect(html).not.toContain("Syncing with Google Drive…");
 	});
 
@@ -862,7 +993,8 @@ describe("Options top-level navigation (MIK-025)", () => {
 		expect(html).toContain("Built-in (read-only)");
 		expect(html).toContain("Custom (Drive-synced)");
 		expect(html).not.toContain('aria-label="Search bookmarks"');
-		expect(html).not.toContain('aria-label="Sync with Google Drive"');
+		// The shared header hub keeps bookmark sync reachable on every screen.
+		expect(html).toContain('aria-label="Sync with Google Drive"');
 		expect(html).not.toContain("Selected bookmark");
 	});
 
@@ -1023,7 +1155,7 @@ describe("Analysis skills settings screen (MIK-025)", () => {
 		expect(html.match(/>Delete</g)).toHaveLength(1);
 	});
 
-	it("shows the settings sync readout with pending info and a floating refresh", () => {
+	it("shows the settings sync readout with pending info in the header hub", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				sync: {
@@ -1074,14 +1206,14 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		}
 	});
 
-	it("moves the sync readout into the rail ahead of the skill cards", () => {
+	it("keeps the rail to settings-file guidance only (MIK-051)", () => {
 		const html = renderSkills(skillsViewOf());
 
-		// Rail content (sync readout, settings-file guidance) renders before the
-		// main cards; there is no top-level sync card with an inline refresh
-		// button in the main flow anymore.
+		// The settings sync readout lives only in the header hub now; the rail
+		// keeps the settings-file guidance ahead of the main cards.
+		expect(html.match(/Settings sync/g)).toHaveLength(1);
+		expect(html.indexOf("Settings sync")).toBeLessThan(html.indexOf("<aside"));
 		const order = [
-			"Settings sync",
 			"bookmark-ai/settings.json",
 			"Custom (Drive-synced)",
 			"Built-in (read-only)",
@@ -1099,7 +1231,7 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html.match(/bookmark-ai\/settings\.json/g)).toHaveLength(1);
 	});
 
-	it("offers refresh via an enabled floating settings sync action when idle", () => {
+	it("offers refresh via an enabled hub settings sync action when idle", () => {
 		const html = renderSkills(skillsViewOf());
 
 		expect(html).toContain('aria-label="Sync analysis skill settings"');
@@ -1108,7 +1240,7 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).not.toContain('aria-busy="true"');
 	});
 
-	it("disables the floating settings sync action while an action is busy", () => {
+	it("disables the hub settings sync action while an action is busy", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				busy: true,
@@ -1124,11 +1256,10 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).toContain('aria-label="Sync analysis skill settings"');
 		expect(html).toContain("disabled");
 		expect(html).toContain('aria-busy="true"');
-		expect(html).toContain("writing…");
 		expect(html).toContain("Writing settings changes to Google Drive…");
 	});
 
-	it("shows syncing detail and rail progress while settings sync is running", () => {
+	it("shows settings syncing progress in the hub while a pull is running", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				sync: {
@@ -1143,11 +1274,10 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).toContain('aria-label="Sync analysis skill settings"');
 		expect(html).toContain("disabled");
 		expect(html).toContain('aria-busy="true"');
-		expect(html).toContain("syncing…");
 		expect(html).toContain("Syncing settings with Google Drive…");
 	});
 
-	it("shows the settings last synced timestamp in the rail", () => {
+	it("shows the settings last synced timestamp in the hub", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				sync: {
@@ -1164,7 +1294,7 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).toContain("2026");
 	});
 
-	it("keeps the sync status visible in the rail while loading", () => {
+	it("keeps the settings sync status visible in the hub while loading", () => {
 		const html = renderSkills(
 			skillsViewOf({
 				loading: true,
@@ -1180,7 +1310,6 @@ describe("Analysis skills workspace layout (MIK-038)", () => {
 		expect(html).toContain("Settings sync");
 		expect(html).toContain(">idle<");
 		expect(html).toContain("Loading analysis skills…");
-		expect(html).toContain("loading…");
 		expect(html).toContain("disabled");
 	});
 });
@@ -1299,9 +1428,10 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).not.toContain("grid-template-columns:240px");
 		expect(html).not.toContain("<aside");
 		expect(html.match(/Bookmark AI/g)).toHaveLength(1);
-		// Neither the ledger nor the skills content leaks onto this screen.
+		// Neither the ledger nor the skills content leaks onto this screen; the
+		// bookmark sync action stays reachable through the shared header hub.
 		expect(html).not.toContain('aria-label="Search bookmarks"');
-		expect(html).not.toContain('aria-label="Sync with Google Drive"');
+		expect(html).toContain('aria-label="Sync with Google Drive"');
 		expect(html).not.toContain("Built-in (read-only)");
 	});
 
@@ -1336,13 +1466,20 @@ describe("Ask AI screen shell (MIK-045)", () => {
 		expect(html).not.toContain("max-width:1600px");
 	});
 
-	it("shows the bookmark sync status and last synced time at the top of the chat", () => {
+	it("keeps sync status and timestamp out of the Ask AI chat context (MIK-051)", () => {
 		const html = renderWithAskAi(syncedView, askAiViewOf(), "ask-ai");
 
-		expect(html).toContain("Drive sync");
-		expect(html).toContain(">synced<");
-		expect(html).toContain("Last synced");
-		expect(html).toContain("2026");
+		const context = html.indexOf('aria-label="About Ask AI"');
+		expect(context).toBeGreaterThanOrEqual(0);
+		// Last synced belongs in the header hub only, not in the chat context.
+		expect(html.match(/Last synced/g)).toHaveLength(1);
+		expect(html.indexOf("Last synced")).toBeLessThan(context);
+		// The sync status readout itself also lives only in the header hub: every
+		// status occurrence (bookmarks + settings) precedes the chat context.
+		expect(html.match(/Drive sync/g)).toHaveLength(1);
+		expect(html.match(/>synced</g)).toHaveLength(2);
+		expect(html.lastIndexOf(">synced<")).toBeLessThan(context);
+		expect(html.indexOf("Drive sync")).toBeLessThan(context);
 	});
 
 	it("renders the sync/scope/privacy context as the first item inside the chat viewport", () => {
@@ -1388,6 +1525,8 @@ describe("Ask AI screen shell (MIK-045)", () => {
 			"Ask AI searches all your saved bookmarks in the local cache",
 		);
 		expect(html).toContain("it does not search the open web");
+		// The refresh guidance points at the header hub, not the Library screen.
+		expect(html).toContain("Use Sync Drive in the app header");
 		expect(html).toContain("Only short saved-bookmark info");
 		expect(html).toContain("this chat is never saved");
 	});

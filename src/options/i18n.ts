@@ -32,11 +32,13 @@ export type OptionsMessages = {
 	readonly lastSynced: (time: string) => string;
 	readonly syncButton: string;
 	readonly syncAria: string;
-	readonly syncDetail: {
-		readonly loading: string;
-		readonly syncing: string;
-		readonly writing: string;
-	};
+	/** Accessible label of the shared app-header sync hub (MIK-051). */
+	readonly syncHubAria: string;
+	/** Glance summary texts of the sync hub pill (MIK-051). */
+	readonly syncHubSynced: string;
+	readonly syncHubSyncing: string;
+	readonly syncHubPending: string;
+	readonly syncHubError: string;
 	readonly filters: string;
 	readonly filtersAria: string;
 	readonly domain: string;
@@ -167,11 +169,11 @@ const EN: OptionsMessages = {
 	lastSynced: (time) => `Last synced ${time}`,
 	syncButton: "Sync Drive",
 	syncAria: "Sync with Google Drive",
-	syncDetail: {
-		loading: "loading…",
-		syncing: "syncing…",
-		writing: "writing…",
-	},
+	syncHubAria: "Sync status",
+	syncHubSynced: "Synced",
+	syncHubSyncing: "Syncing…",
+	syncHubPending: "Pending",
+	syncHubError: "Sync error",
 	filters: "Filters",
 	filtersAria: "Bookmark filters",
 	domain: "Domain",
@@ -206,7 +208,7 @@ const EN: OptionsMessages = {
 		"Ask in your own words and get recommendations from your saved bookmarks",
 	askAiAbout: "About Ask AI",
 	askAiScopeNote:
-		"Ask AI searches all your saved bookmarks in the local cache — it does not search the open web. Sync Drive from the Library to refresh the cache.",
+		"Ask AI searches all your saved bookmarks in the local cache — it does not search the open web. Use Sync Drive in the app header to refresh the cache.",
 	askAiPrivacyNote:
 		"Only short saved-bookmark info (title, domain, description, genre, tags) is used, and this chat is never saved.",
 	askAiEmptyIntro:
@@ -320,11 +322,11 @@ const JA: OptionsMessages = {
 	lastSynced: (time) => `最終同期 ${time}`,
 	syncButton: "Driveと同期",
 	syncAria: "Google Driveと同期",
-	syncDetail: {
-		loading: "読み込み中…",
-		syncing: "同期中…",
-		writing: "書き込み中…",
-	},
+	syncHubAria: "同期状態",
+	syncHubSynced: "同期済み",
+	syncHubSyncing: "同期中…",
+	syncHubPending: "未同期あり",
+	syncHubError: "同期エラー",
 	filters: "フィルタ",
 	filtersAria: "ブックマークフィルタ",
 	domain: "ドメイン",
@@ -359,7 +361,7 @@ const JA: OptionsMessages = {
 		"自然な言葉で質問して、保存済みブックマークからおすすめを受け取ります",
 	askAiAbout: "AIに聞くについて",
 	askAiScopeNote:
-		"AIに聞くは、ローカルキャッシュ内のすべての保存済みブックマークを検索します。ウェブ全体は検索しません。キャッシュを最新にするにはライブラリでDriveと同期してください。",
+		"AIに聞くは、ローカルキャッシュ内のすべての保存済みブックマークを検索します。ウェブ全体は検索しません。キャッシュを最新にするにはヘッダーの「Driveと同期」を実行してください。",
 	askAiPrivacyNote:
 		"使うのは保存済みブックマークの短い情報（タイトル・ドメイン・説明・ジャンル・タグ）だけで、このチャットは保存されません。",
 	askAiEmptyIntro:

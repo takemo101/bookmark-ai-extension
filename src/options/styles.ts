@@ -85,6 +85,66 @@ export const brandTitle: CSSProperties = {
 };
 
 /**
+ * Right-hand cluster of the app header (MIK-051): the shared sync hub next to
+ * the screen navigation, so sync status/actions travel with every screen.
+ */
+export const appHeaderActions: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	gap: 12,
+};
+
+/**
+ * Shared app-header sync hub (MIK-051): a native `<details>` disclosure whose
+ * summary is the glance pill and whose panel drops below the header. The
+ * anchor is relative so the panel can overlay the screen content.
+ */
+export const syncHub: CSSProperties = {
+	position: "relative",
+};
+
+/** The always-visible glance pill of the sync hub (MIK-051). */
+export const syncHubSummary: CSSProperties = {
+	display: "inline-flex",
+	alignItems: "center",
+	gap: 6,
+	padding: "5px 12px",
+	fontFamily: fontStack,
+	fontSize: 12,
+	color: palette.inkSoft,
+	background: palette.paperRaised,
+	border: `1px solid ${palette.border}`,
+	borderRadius: 999,
+	cursor: "pointer",
+	listStyle: "none",
+	whiteSpace: "nowrap",
+};
+
+/**
+ * The opened sync hub panel (MIK-051): bookmark Drive sync and analysis
+ * settings sync sections with their manual actions. Overlays the screen
+ * content below the header pill; sits under the detail sheet/modal backdrops
+ * (zIndex 20/30) so those still cover it.
+ */
+export const syncHubPanel: CSSProperties = {
+	position: "absolute",
+	right: 0,
+	top: "calc(100% + 8px)",
+	zIndex: 15,
+	width: 280,
+	boxSizing: "border-box",
+	display: "flex",
+	flexDirection: "column",
+	gap: 12,
+	padding: "12px 14px",
+	background: palette.paperRaised,
+	border: `1px solid ${palette.borderStrong}`,
+	borderRadius: 8,
+	boxShadow: "0 10px 28px rgba(58, 52, 43, 0.22)",
+	textAlign: "left",
+};
+
+/**
  * Shared screen frame (MIK-036): both the Library ledger and the Analysis
  * skills screen render inside this centered column, opening with a
  * {@link screenTitle}/{@link screenSubtitle} header so the two screens share
@@ -133,7 +193,7 @@ export const navTabActive: CSSProperties = {
 
 /**
  * Centered modal dialog for the custom skill create/edit form (MIK-025). Sits
- * above the floating sync button and the detail sheet backdrop.
+ * above the header sync hub panel and the detail sheet backdrop.
  */
 export const modalBackdrop: CSSProperties = {
 	position: "fixed",
@@ -358,31 +418,6 @@ export const facetCollapsedCount: CSSProperties = {
 	marginLeft: "auto",
 	fontSize: 11,
 	color: palette.inkFaint,
-};
-
-/**
- * Floating Drive sync action (MIK-024): fixed bottom-right so sync is always
- * reachable without occupying rail space. Sits below the detail sheet backdrop
- * (zIndex 20) so the modal sheet still covers it.
- */
-export const floatingSyncButton: CSSProperties = {
-	position: "fixed",
-	right: 24,
-	bottom: 24,
-	zIndex: 10,
-	display: "flex",
-	alignItems: "center",
-	gap: 8,
-	padding: "10px 16px",
-	fontFamily: fontStack,
-	fontSize: 13,
-	fontWeight: 600,
-	color: palette.accent,
-	background: palette.paperRaised,
-	border: `1px solid ${palette.borderStrong}`,
-	borderRadius: 999,
-	boxShadow: "0 6px 18px rgba(58, 52, 43, 0.22)",
-	cursor: "pointer",
 };
 
 /**
@@ -615,10 +650,11 @@ export const askAiComposer: CSSProperties = {
 };
 
 /**
- * Compact sync/scope/privacy context at the top of the Ask AI chat viewport
- * (MIK-050): the old rail's cues as small inline items rendered as the first
- * scrollable item inside the chat frame, ahead of the welcome state or the
- * transcript, so they never compete with the chat for space.
+ * Compact cache/scope/privacy context at the top of the Ask AI chat viewport
+ * (MIK-050, slimmed by MIK-051): cache freshness plus the scope and privacy
+ * notes as small inline items rendered as the first scrollable item inside
+ * the chat frame — informational only; sync status and actions live in the
+ * shared app-header sync hub.
  */
 export const askAiChatContext: CSSProperties = {
 	...panel,
