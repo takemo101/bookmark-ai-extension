@@ -1,44 +1,50 @@
 /**
- * App-header theme preference selector: the one place the user picks
- * `light | dark | system` (default `system`). A native `<select>` — no
- * dependency, keyboard/screen-reader accessible via its visible label — that
- * writes through the shared theme context's `setPreference`, which persists
- * to `chrome.storage.local` only (never Google Drive or
- * `bookmark-ai/settings.json`). The Popup reflects the saved preference but
- * intentionally has no selector of its own.
+ * App-header theme preference control: the one place the user picks
+ * `light | dark | system` (default `system`). A compact round native button —
+ * no dependency, keyboard/screen-reader accessible through icon-hidden text —
+ * cycles through the three valid preferences and writes through the shared
+ * theme context's `setPreference`, which persists to `chrome.storage.local`
+ * only (never Google Drive or `bookmark-ai/settings.json`). The Popup reflects
+ * the saved preference but intentionally has no selector of its own.
  */
-import { useId } from "react";
-
-import { parseThemePreference } from "../../lib/theme/index";
+import type { ThemePreference } from "../../lib/theme/index";
 import type { OptionsMessages } from "../i18n";
 import { useOptionsTheme } from "../theme";
 
+const THEME_ICON: Record<ThemePreference, string> = {
+	system: "◐",
+	light: "☀",
+	dark: "☾",
+};
+
+export function nextThemePreference(
+	preference: ThemePreference,
+): ThemePreference {
+	if (preference === "system") {
+		return "light";
+	}
+	if (preference === "light") {
+		return "dark";
+	}
+	return "system";
+}
+
 export function ThemeSelect({ m }: { m: OptionsMessages }) {
-	const { preference, palette, styles, setPreference } = useOptionsTheme();
-	const selectId = useId();
+	const { preference, styles, setPreference } = useOptionsTheme();
+	const next = nextThemePreference(preference);
+	const label = m.themeToggleAria(
+		m.themePreference(preference),
+		m.themePreference(next),
+	);
 	return (
-		<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-			<label
-				htmlFor={selectId}
-				style={{ fontSize: 12, color: palette.inkSoft }}
-			>
-				{m.themeLabel}
-			</label>
-			<select
-				id={selectId}
-				value={preference}
-				aria-label={m.themeSelectAria}
-				style={styles.themeSelect}
-				onChange={(event) =>
-					// Parse at the boundary even for our own <option> values so the
-					// stored preference is always valid.
-					setPreference(parseThemePreference(event.target.value))
-				}
-			>
-				<option value="system">{m.themeSystem}</option>
-				<option value="light">{m.themeLight}</option>
-				<option value="dark">{m.themeDark}</option>
-			</select>
-		</span>
+		<button
+			type="button"
+			aria-label={label}
+			title={label}
+			style={styles.themeToggleButton}
+			onClick={() => setPreference(next)}
+		>
+			<span aria-hidden="true">{THEME_ICON[preference]}</span>
+		</button>
 	);
 }

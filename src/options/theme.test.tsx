@@ -9,7 +9,7 @@ import {
 	createThemeStore,
 	type ThemeStore,
 } from "../lib/theme/index";
-import { ThemeSelect } from "./components/ThemeSelect";
+import { ThemeSelect, nextThemePreference } from "./components/ThemeSelect";
 import { optionsMessages } from "./i18n";
 import { Options } from "./Options";
 import type { OptionsController, OptionsView, RowView } from "./view-model";
@@ -113,41 +113,46 @@ function render(view: OptionsView, store?: ThemeStore): string {
 	);
 }
 
-describe("Options app-header theme selector", () => {
-	it("renders the labelled selector with the three preferences, defaulting to system", () => {
+describe("Options app-header theme icon", () => {
+	it("renders a round icon button for the current preference instead of a select", () => {
 		const html = render(viewOf());
 
-		expect(html).toContain('aria-label="Color theme"');
-		expect(html).toContain(">Theme</label>");
-		expect(html).toContain(
-			'<option value="system" selected="">System</option>',
-		);
-		expect(html).toContain('<option value="light">Light</option>');
-		expect(html).toContain('<option value="dark">Dark</option>');
+		expect(html).toContain('aria-label="Theme: System. Switch to Light."');
+		expect(html).toContain('title="Theme: System. Switch to Light."');
+		expect(html).toContain('<span aria-hidden="true">◐</span>');
+		expect(html).not.toContain("<select");
+		expect(html).not.toContain("<option");
 	});
 
-	it("localizes the selector labels in Japanese", () => {
+	it("localizes the icon button accessible label in Japanese", () => {
 		const html = renderToStaticMarkup(
 			<Options controller={controllerOf(viewOf())} language="ja" />,
 		);
 
-		const m = optionsMessages("ja");
-		expect(html).toContain(`aria-label="${m.themeSelectAria}"`);
-		expect(html).toContain(`>${m.themeDark}</option>`);
+		expect(html).toContain(
+			'aria-label="テーマ: システム。次はライトに切り替え。"',
+		);
 	});
 
-	it("reflects and persists a preference change through the theme store", async () => {
+	it("cycles preferences in system → light → dark → system order", () => {
+		expect(nextThemePreference("system")).toBe("light");
+		expect(nextThemePreference("light")).toBe("dark");
+		expect(nextThemePreference("dark")).toBe("system");
+	});
+
+	it("reflects and persists the next preference through the theme store", async () => {
 		const { store, saved } = await storeOf("system");
 
-		await store.setPreference("dark");
+		await store.setPreference(nextThemePreference(store.getState().preference));
 
-		expect(saved).toEqual(["dark"]);
+		expect(saved).toEqual(["light"]);
 		const html = renderToStaticMarkup(
 			<ThemeProvider store={store}>
 				<ThemeSelect m={optionsMessages("en")} />
 			</ThemeProvider>,
 		);
-		expect(html).toContain('<option value="dark" selected="">Dark</option>');
+		expect(html).toContain('<span aria-hidden="true">☀</span>');
+		expect(html).toContain('aria-label="Theme: Light. Switch to Dark."');
 	});
 });
 
