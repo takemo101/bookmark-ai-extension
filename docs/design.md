@@ -623,6 +623,19 @@ The options page has top-level navigation for three screens:
   only. Recommendation cards reuse the shared bookmark summary item and show
   the same favicon/fallback icon treatment as Library rows.
 
+  Follow-up context (MIK-055): the controller keeps the previous
+  recommendation context in memory — the candidates behind the cards shown
+  last (or, when no card maps back, the whole turn's candidate set). A
+  refinement-like follow-up (detected by a local substring heuristic —
+  Japanese hints such as `絞`, `その中`, `この中`, `上記`, `さっき`,
+  `もう少し`, `具体`; English word-boundary hints such as `narrow`, `refine`,
+  `from those`, `among them`, `these`, `those`, `previous`, `more specific`)
+  whose narrowed match is weak or empty stays inside that previous context
+  and never broadens to all bookmarks; a new-topic question still falls back
+  to the whole cache. The context is memory-only, generation-fenced with the
+  rest of the chat state, reset by Clear chat, and never changes the compact
+  URL-free recommendation prompt payload.
+
 Switching screens closes the detail drawer; it never resets search/filter
 state or the skill form draft.
 

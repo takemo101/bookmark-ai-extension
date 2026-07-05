@@ -1045,6 +1045,170 @@ describe("Ask AI hybrid follow-up retrieval (MIK-048)", () => {
 	});
 });
 
+describe("Ask AI refinement follow-ups keep prior context (MIK-055)", () => {
+	// "narrow those down" strongly matches bm-narrow across the whole cache, so
+	// broadening (the pre-MIK-055 bug) is observable in the candidate payload.
+	const records = [
+		record({
+			id: "bm-ts-test",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "typescript testing handbook",
+		}),
+		record({
+			id: "bm-ts-recipes",
+			canonicalUrl: "https://ts.test/recipes",
+			url: "https://ts.test/recipes",
+			title: "typescript recipes",
+		}),
+		record({
+			id: "bm-chrome",
+			canonicalUrl: "https://chrome.test/guide",
+			url: "https://chrome.test/guide",
+			title: "testing chrome extensions guide",
+		}),
+		record({
+			id: "bm-narrow",
+			canonicalUrl: "https://narrow.test/guide",
+			url: "https://narrow.test/guide",
+			title: "how to narrow down anything",
+		}),
+	];
+
+	function payloadIds(call: AskAiRecommendationPrompt): string[] {
+		return call.candidatePayload.map((candidate) => candidate.id);
+	}
+
+	const bothTsRecommended = aiOutput([
+		{ id: "bm-ts-test", reason: "Match." },
+		{ id: "bm-ts-recipes", reason: "Match." },
+	]);
+
+	it("keeps a Japanese refinement such as 絞って inside the previous recommendation context", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				bothTsRecommended,
+				aiOutput([{ id: "bm-ts-test", reason: "こちらに絞りました。" }]),
+			],
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		// 絞って matches no bookmark text at all, but it must still refine the
+		// previous recommendations instead of landing as a clarifying weak turn.
+		await ask(controller, "絞って");
+
+		expect(promptCalls).toHaveLength(2);
+		expect(payloadIds(promptCalls[1]).sort()).toEqual([
+			"bm-ts-recipes",
+			"bm-ts-test",
+		]);
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+	});
+
+	it("keeps an English refinement such as narrow those down inside the previous context instead of broadening", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				bothTsRecommended,
+				aiOutput([{ id: "bm-ts-test", reason: "Narrowed." }]),
+			],
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		await ask(controller, "narrow those down");
+
+		expect(promptCalls).toHaveLength(2);
+		expect(payloadIds(promptCalls[1]).sort()).toEqual([
+			"bm-ts-recipes",
+			"bm-ts-test",
+		]);
+	});
+
+	it("prefers the recommendation cards actually shown as the refinement context", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				// The first turn scored both typescript records, but the model
+				// recommended only one card — the user's refinement means THAT one.
+				aiOutput([{ id: "bm-ts-test", reason: "Best match." }]),
+				aiOutput([{ id: "bm-ts-test", reason: "Still it." }]),
+			],
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		await ask(controller, "もう少し具体的に");
+
+		expect(promptCalls).toHaveLength(2);
+		expect(payloadIds(promptCalls[1])).toEqual(["bm-ts-test"]);
+	});
+
+	it("still broadens a clear new-topic question to all cached bookmarks", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				bothTsRecommended,
+				aiOutput([{ id: "bm-chrome", reason: "New topic." }]),
+			],
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		await ask(controller, "chrome extensions");
+
+		expect(payloadIds(promptCalls[1])).toEqual(["bm-chrome"]);
+	});
+
+	it("clearSession resets the follow-up context so a refinement no longer finds prior recommendations", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [bothTsRecommended],
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		controller.clearSession();
+
+		// With the context gone there is nothing to refine: the question scores
+		// over the whole cache and lands as a clarifying weak turn, not a
+		// recommendation over stale context.
+		await ask(controller, "絞って");
+
+		expect(promptCalls).toHaveLength(1);
+		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
+	});
+
+	it("keeps the refinement prompt payload compact and URL-free", async () => {
+		const { deps, promptCalls } = fakeDeps({
+			records,
+			outputs: [
+				bothTsRecommended,
+				aiOutput([{ id: "bm-ts-test", reason: "Narrowed." }]),
+			],
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+		await ask(controller, "narrow those down");
+
+		expect(promptCalls).toHaveLength(2);
+		const sent = JSON.stringify(promptCalls[1]);
+		expect(sent).not.toContain("https://");
+		expect(sent).not.toContain("canonicalUrl");
+		expect(sent).not.toContain("analysisMarkdown");
+		expect(promptCalls[1].prompt).toContain("bm-ts-test");
+	});
+});
+
 describe("Ask AI chat state is memory-only (MIK-048)", () => {
 	afterEach(() => {
 		delete (globalThis as { chrome?: unknown }).chrome;
