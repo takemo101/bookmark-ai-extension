@@ -55,9 +55,11 @@ import {
 	aiStatusTone,
 	appHeader,
 	askAiAssistantTurn,
+	askAiChatContext,
 	askAiChatShell,
 	askAiComposer,
 	askAiLatestButton,
+	askAiScreenShell,
 	askAiTurnLabel,
 	askAiUserBubble,
 	askAiUserTurn,
@@ -1463,13 +1465,13 @@ function FloatingSettingsSyncButton({
 }
 
 /**
- * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session): the
- * chat-style saved-bookmark recommendation surface, rendered with the same
- * screen shell and rail/main workspace as the Library and Analysis skills.
- * The rail shows the bookmark cache freshness (reusing the Library's
- * {@link SyncPanel} against the same `OptionsView.sync`) plus the
- * scope/privacy notes; the main area holds the chat transcript and composer.
- * The conversation state — transcript, Prompt API session, narrowed candidate
+ * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session; MIK-050
+ * chat-only layout): the chat-style saved-bookmark recommendation surface.
+ * Unlike the Library and Analysis skills, this screen has no left rail and no
+ * shared workspace grid — the chat is the primary content inside the wider
+ * {@link askAiScreenShell}, and the old rail's sync/scope/privacy cues render
+ * as {@link AskAiChatContext} at the top of the chat viewport. The
+ * conversation state — transcript, Prompt API session, narrowed candidate
  * context — lives only inside the injected {@link AskAiController} and is
  * never persisted.
  */
@@ -1494,29 +1496,32 @@ function AskAiScreen({
 	);
 
 	return (
-		<section style={screenShell} aria-label={m.askAiScreenAria}>
+		<section style={askAiScreenShell} aria-label={m.askAiScreenAria}>
 			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
-			<div style={workspaceBody}>
-				<AskAiRail sync={sync} loading={loading} m={m} />
-				<AskAiMain
-					view={view}
-					m={m}
-					controller={controller}
-					onOpenBookmark={onOpenBookmark}
-				/>
-			</div>
+			<AskAiMain
+				view={view}
+				sync={sync}
+				loading={loading}
+				m={m}
+				controller={controller}
+				onOpenBookmark={onOpenBookmark}
+			/>
 		</section>
 	);
 }
 
 /**
- * Ask AI left rail (MIK-045): the Library's bookmark Drive-sync readout —
- * status, progress, and last synced time, so the user can judge cache
- * freshness — followed by the scope note (all saved bookmarks from the local
- * cache, never the open web) and the privacy note (short saved-bookmark info
- * only; the chat itself is never saved).
+ * Compact Ask AI chat context (MIK-050): the informational cues that lived in
+ * the MIK-045 left rail — bookmark Drive-sync status, in-flight progress,
+ * pending local changes, last synced time and safe sync errors (cache
+ * freshness), plus the scope note (all saved bookmarks from the local cache,
+ * never the open web) and the privacy note (short saved-bookmark info only;
+ * the chat itself is never saved) — as one wrapping inline panel rendered as
+ * the first item inside the chat's scrollable viewport, ahead of the welcome
+ * state or the transcript. Informational only: the sync action stays on the
+ * Library screen.
  */
-function AskAiRail({
+function AskAiChatContext({
 	sync,
 	loading,
 	m,
@@ -1525,19 +1530,29 @@ function AskAiRail({
 	loading: boolean;
 	m: OptionsMessages;
 }) {
+	const progress = syncProgressText(sync, loading, m);
 	return (
-		<aside style={rail}>
-			<SyncPanel sync={sync} loading={loading} m={m} />
-			<section style={panel}>
-				<p style={railLabel}>{m.askAiAbout}</p>
-				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-					{m.askAiScopeNote}
-				</p>
-				<p style={{ fontSize: 12, color: palette.inkSoft, margin: "8px 0 0" }}>
-					{m.askAiPrivacyNote}
-				</p>
-			</section>
-		</aside>
+		<section style={askAiChatContext} aria-label={m.askAiAbout}>
+			<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+				<SyncStatusDot status={sync.status} />
+				<span>{m.driveSync}</span>
+				<span style={{ color: palette.ink }}>{sync.status}</span>
+			</span>
+			{progress ? <span role="status">{progress}</span> : null}
+			{sync.pendingLocalChanges ? (
+				<span style={{ color: palette.warn }}>{m.pendingLocal}</span>
+			) : null}
+			{sync.lastSyncedAt ? (
+				<span style={{ color: palette.inkFaint }}>
+					{m.lastSynced(formatTime(sync.lastSyncedAt))}
+				</span>
+			) : null}
+			{sync.error ? (
+				<span style={{ color: palette.danger }}>{sync.error}</span>
+			) : null}
+			<span>{m.askAiScopeNote}</span>
+			<span>{m.askAiPrivacyNote}</span>
+		</section>
 	);
 }
 
@@ -1589,7 +1604,10 @@ export function askAiLatestButtonVisible(
  * Ask AI main area (MIK-045, MIK-046, MIK-048; MIK-049 chat layout): the
  * sitesurf-aligned chat surface. The shell is a fixed-height flex column —
  * only the transcript viewport scrolls while the composer stays pinned at the
- * bottom. Before the first user message the viewport centers the welcome
+ * bottom. The viewport opens with the compact {@link AskAiChatContext}
+ * sync/scope/privacy cues (MIK-050), scrolling away with the conversation
+ * like any other content. Before the first user message the viewport centers
+ * the welcome
  * state with localized clickable example prompts; afterwards it renders the
  * full transcript — user turns as right-aligned labeled bubbles, assistant
  * turns through {@link AskAiResult} — plus a chat-like thinking indicator
@@ -1607,11 +1625,15 @@ export function askAiLatestButtonVisible(
  */
 function AskAiMain({
 	view,
+	sync,
+	loading,
 	m,
 	controller,
 	onOpenBookmark,
 }: {
 	view: AskAiView;
+	sync: SyncView;
+	loading: boolean;
 	m: OptionsMessages;
 	controller: AskAiController;
 	onOpenBookmark: (canonicalUrl: string) => void;
@@ -1658,6 +1680,7 @@ function AskAiMain({
 		<section style={askAiChatShell}>
 			<div style={askAiViewportShell}>
 				<div ref={viewportRef} onScroll={handleScroll} style={askAiViewport}>
+					<AskAiChatContext sync={sync} loading={loading} m={m} />
 					{view.messages.length === 0 ? (
 						<AskAiWelcome m={m} controller={controller} />
 					) : (

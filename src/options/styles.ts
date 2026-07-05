@@ -614,6 +614,36 @@ export const askAiComposer: CSSProperties = {
 	flexShrink: 0,
 };
 
+/**
+ * Chat-only Ask AI screen frame (MIK-050): unlike the Library and Analysis
+ * skills, Ask AI skips the shared {@link workspaceBody} rail/main grid and
+ * widens the shared 1200px {@link screenShell} cap — the chat is the primary
+ * content and gets more of the available horizontal space.
+ */
+export const askAiScreenShell: CSSProperties = {
+	...screenShell,
+	maxWidth: 1600,
+};
+
+/**
+ * Compact sync/scope/privacy context at the top of the Ask AI chat viewport
+ * (MIK-050): the old rail's cues as small inline items rendered as the first
+ * scrollable item inside the chat frame, ahead of the welcome state or the
+ * transcript, so they never compete with the chat for space.
+ */
+export const askAiChatContext: CSSProperties = {
+	...panel,
+	flexShrink: 0,
+	padding: "8px 12px",
+	display: "flex",
+	flexWrap: "wrap",
+	alignItems: "center",
+	columnGap: 14,
+	rowGap: 4,
+	fontSize: 12,
+	color: palette.inkSoft,
+};
+
 /** A status dot/badge color for the AI status and sync badges. */
 export function statusColor(
 	tone: "ok" | "warn" | "danger" | "neutral",
