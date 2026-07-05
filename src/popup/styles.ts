@@ -34,7 +34,7 @@ export const fontStack = 'ui-serif, Georgia, "Times New Roman", serif';
 export const surface: CSSProperties = {
 	width: 340,
 	boxSizing: "border-box",
-	padding: "16px 18px 18px",
+	padding: "12px 14px 14px",
 	fontFamily: fontStack,
 	color: palette.ink,
 	background: palette.paper,
@@ -45,12 +45,12 @@ export const card: CSSProperties = {
 	background: palette.paperRaised,
 	border: `1px solid ${palette.border}`,
 	borderRadius: 8,
-	padding: "10px 12px",
+	padding: "8px 10px",
 };
 
 export const primaryButton: CSSProperties = {
 	width: "100%",
-	padding: "10px 12px",
+	padding: "8px 10px",
 	fontFamily: fontStack,
 	fontSize: 14,
 	fontWeight: 600,
@@ -111,7 +111,7 @@ export const detailOverlay: CSSProperties = {
 	position: "fixed",
 	inset: 0,
 	boxSizing: "border-box",
-	padding: "14px 18px 18px",
+	padding: "10px 14px 14px",
 	fontFamily: fontStack,
 	color: palette.ink,
 	background: palette.paper,

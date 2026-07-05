@@ -336,6 +336,40 @@ describe("Popup", () => {
 		});
 	});
 
+	describe("compact Warm Library layout (MIK-056)", () => {
+		it("renders the main surface with the paper background and compact padding", () => {
+			const html = render(viewOf());
+
+			expect(html).toContain("background:#faf6ee");
+			expect(html).toContain("padding:12px 14px 14px");
+			expect(html).not.toContain("padding:16px 18px 18px");
+		});
+
+		it("renders compact cards and a compact primary action", () => {
+			const html = render(
+				viewOf({ flow: { kind: "running", trail: runningTrail() } }),
+			);
+
+			// Card and primary button share the tightened 8px/10px density; the
+			// old roomier 10px/12px padding must not come back.
+			expect(html).toContain("padding:8px 10px");
+			expect(html).not.toContain("padding:10px 12px");
+		});
+
+		it("renders the recent detail overlay on the same paper with compact padding", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: detailOf() }),
+			);
+
+			expect(html).toContain("padding:10px 14px 14px");
+			expect(html).not.toContain("padding:14px 18px 18px");
+			// Surface and overlay both sit on Warm Library paper — no mismatch.
+			expect(html.match(/background:#faf6ee/g)?.length).toBeGreaterThanOrEqual(
+				2,
+			);
+		});
+	});
+
 	describe("bookmark favicons (MIK-032)", () => {
 		afterEach(() => {
 			delete (globalThis as { chrome?: unknown }).chrome;

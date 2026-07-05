@@ -462,6 +462,15 @@ Popup responsibilities:
   so the options page pulls Drive instead of showing stale cache. A missing or
   failing storage API never blocks opening the options page.
 
+The popup is a compact receipt (MIK-056): its runtime resets the document
+body margin to `0` and paints the body and main surface with the same Warm
+Library paper color (`#faf6ee`) so no outer gutter or background mismatch
+appears around the receipt; the transparent root sits on that paper. The
+recent-bookmark detail overlay sits
+on the same paper. Surface, card, primary button, and section spacing use
+tightened density tokens (`popup/styles.ts`) while keeping the single
+primary action dominant and all status text readable.
+
 The popup should behave like a save receipt:
 
 1. Show the current tab title and URL.
