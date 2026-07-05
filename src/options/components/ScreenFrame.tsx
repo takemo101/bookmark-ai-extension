@@ -11,9 +11,9 @@
  *   the same centered 880px column so the title never sits wider than the
  *   content below it.
  * - `chat` — the outer page is locked (`height: 100vh`, `overflow: hidden`);
- *   the header and the chat body share the centered 960px chat column and the
- *   body fills the remaining viewport height so the chat viewport stays the
- *   only scroller and the composer stays pinned.
+ *   the header and the chat body share the same centered 880px no-rail width
+ *   (MIK-054) and the body fills the remaining viewport height so the chat
+ *   viewport stays the only scroller and the composer stays pinned.
  *
  * Every screen opens with the same title/subtitle rhythm (MIK-036) and every
  * screen carries title-adjacent `?` help (MIK-052/MIK-053) through

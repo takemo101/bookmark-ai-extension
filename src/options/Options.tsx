@@ -92,6 +92,8 @@ import {
 	facetCollapsedCount,
 	facetHeaderButton,
 	facetHeaderLabel,
+	facetListCapped,
+	facetOverflowButton,
 	navTab,
 	navTabActive,
 	palette,
@@ -721,8 +723,8 @@ const FACET_CAP = 12;
  * The facet values to render given the expansion state (MIK-024): collapsed
  * shows the first {@link FACET_CAP} chips, but the active filter value always
  * stays visible so a filter picked while expanded never disappears on
- * collapse. Shared by the Tags and Domain facets (MIK-028). Exported for
- * tests only — view logic, no controller state.
+ * collapse. Shared by the Domain, Genre, and Tags facets (MIK-028, MIK-054).
+ * Exported for tests only — view logic, no controller state.
  */
 export function visibleFacetValues<T extends string>(
 	values: readonly T[],
@@ -734,7 +736,7 @@ export function visibleFacetValues<T extends string>(
 	}
 	const capped = values.slice(0, FACET_CAP);
 	if (active !== undefined && !capped.includes(active)) {
-		capped.push(active);
+		return [active, ...capped];
 	}
 	return capped;
 }
@@ -808,16 +810,16 @@ function FacetGroup<T extends string>({
 			{open ? (
 				<>
 					<div
-						style={
-							expanded
-								? {
-										display: "flex",
-										flexWrap: "wrap",
-										gap: 6,
-										...tagListExpanded,
-									}
-								: { display: "flex", flexWrap: "wrap", gap: 6 }
-						}
+						style={{
+							display: "flex",
+							flexWrap: "wrap",
+							gap: 6,
+							...(overflow
+								? expanded
+									? tagListExpanded
+									: facetListCapped
+								: {}),
+						}}
 					>
 						{visible.map((value) => (
 							<button
@@ -833,7 +835,7 @@ function FacetGroup<T extends string>({
 					{overflow ? (
 						<button
 							type="button"
-							style={{ ...subtleButton, marginTop: 8 }}
+							style={facetOverflowButton}
 							onClick={() => setExpanded((current) => !current)}
 						>
 							{expanded ? m.showFewer(unit) : m.showAll(values.length, unit)}
@@ -847,11 +849,12 @@ function FacetGroup<T extends string>({
 
 /**
  * The single Filters panel (MIK-028): Domain, Genre, Tags, and AI status as
- * uniform collapsible subsections in one card. Domain and Tags can grow
- * without bound, so their expanded bodies collapse behind the shared facet
- * cap. Domain and Genre start open as the common entry points; Tags and AI
- * status start collapsed to keep the rail short (MIK-035) — an active filter
- * stays visible through the collapsed header summary.
+ * uniform collapsible subsections in one card. Domain, Genre, and Tags can
+ * grow without bound, so their expanded bodies collapse behind the shared
+ * facet cap (MIK-054). Domain and Genre start open as the common entry
+ * points; Tags and AI status start collapsed to keep the rail short
+ * (MIK-035) — an active filter stays visible through the collapsed header
+ * summary.
  */
 function FilterFacets({
 	facets,
@@ -886,6 +889,8 @@ function FilterFacets({
 				active={filters.genre}
 				m={m}
 				onToggle={(genre) => controller.setGenre(genre)}
+				unit="genres"
+				cappable
 				defaultOpen
 			/>
 			<FacetGroup

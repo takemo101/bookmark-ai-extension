@@ -12,7 +12,7 @@
 import type { SupportedLanguage } from "../lib/i18n/index";
 
 /** The growable facets whose Show all/fewer copy needs a plural noun. */
-export type FacetUnit = "domains" | "tags";
+export type FacetUnit = "domains" | "genres" | "tags";
 
 export type OptionsMessages = {
 	readonly researchLedger: string;
