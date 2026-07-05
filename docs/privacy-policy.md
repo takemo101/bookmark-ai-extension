@@ -90,6 +90,22 @@ The MVP uses Chrome Built-in AI / Prompt API when available.
 - The MVP does not include external Gemini API, OpenAI API, or other API-key fallback.
 - If Chrome Built-in AI is unavailable, the extension can still save the bookmark without AI-generated fields.
 
+## Ask AI Chat
+
+The options page includes an "Ask AI" chat screen for asking about your saved
+bookmarks.
+
+- Ask AI searches only the locally cached bookmark list; it does not search
+  the open web.
+- Recommendation prompts sent to Chrome's built-in AI include only compact
+  bookmark fields (an internal candidate ID, title, site domain, genre, capped
+  tags, and a capped short description) — never full URLs, long-form analysis
+  text, raw page excerpts, or Drive metadata.
+- Chat questions, answers, and follow-up context are kept in memory only.
+  They are never written to Google Drive, `chrome.storage.local`, or any
+  external service, and are discarded when the chat is cleared or the page
+  closes.
+
 ## Google Drive Access
 
 The extension uses Google OAuth through Chrome's identity API.
@@ -166,3 +182,5 @@ Before publication, replace this section with:
 - 2026-06-24: Initial MVP draft.
 - 2026-07-04: Added the Site Favicons section (Chrome-resolved, display-only,
   never persisted).
+- 2026-07-05: Added the Ask AI Chat section (local-cache-only retrieval,
+  full-URL-free compact prompt payload, memory-only chat state).

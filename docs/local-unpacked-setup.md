@@ -229,8 +229,9 @@ At minimum, test these local-use flows:
 - search/filter bookmarks in options;
 - delete a bookmark and confirm it does not reappear after sync;
 - save while Prompt API is unavailable and confirm `aiStatus: "unavailable"`;
-- if Prompt API is available, confirm Japanese `description`, `genre`, and
-  `tags` are written with `aiStatus: "ready"`.
+- if Prompt API is available, confirm `description`, `genre`, and `tags` are
+  written in the browser UI language (Japanese or English, auto-selected;
+  MIK-033) with `aiStatus: "ready"`.
 
 For the formal pre-release run, use the full
 [`smoke-checklist.md`](./smoke-checklist.md) checklist and record each section in
@@ -242,8 +243,9 @@ Re-analysis intentionally follows the MVP permission model:
 
 - the extension uses `activeTab` + `scripting`;
 - it can only extract the page that is currently active and user-granted;
-- options-page re-analyze for a saved record requires that record's page to be
-  the active tab in the current window;
+- re-analysis is offered from the popup's recent-bookmark list (the Options UI
+  has no re-analyze action, MIK-024) and requires that record's page to be the
+  active tab in the current window;
 - from an unrelated active tab, the extension should show a safe "open the page
   in the active tab" error and leave the bookmark unchanged.
 
@@ -288,8 +290,8 @@ want to verify the AI-ready path.
 ### Local changes are pending
 
 If Drive is offline or token access fails, local mutations can be marked pending.
-Restore Drive connectivity and click **Sync now** or perform another save to push
-the cached local state.
+Restore Drive connectivity and click **Sync Drive** in the app-header sync hub
+(or perform another save) to push the cached local state.
 
 ## Web Store submission is separate
 

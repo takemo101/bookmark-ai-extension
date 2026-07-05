@@ -28,10 +28,11 @@ Keep the design boundaries from `docs/design.md` and treat them as change bounda
 - `bookmarks/*` owns bookmark records, schema parsing, URL canonicalization, upsert, merge, search/filter logic, and collection invariants.
 - `drive/*` owns Google auth token use, Drive folder/file bootstrap, metadata/revision reads, download, and upload.
 - `extraction/*` owns current-page extraction and structured excerpt building.
-- `ai/*` owns Prompt API availability, prompting, response parsing, and Japanese AI output.
+- `ai/*` owns Prompt API availability, prompting, response parsing, and Japanese/English AI output.
 - `storage/*` owns `chrome.storage.local` cache and cache metadata.
 - `popup/*` owns save-current-tab UX orchestration.
-- `options/*` owns library/search/filter/delete/re-analyze UX.
+- `options/*` owns library/search/filter/delete UX (the Options UI offers no
+  re-analyze action, MIK-024; re-analysis runs from the popup flow).
 
 Rules:
 

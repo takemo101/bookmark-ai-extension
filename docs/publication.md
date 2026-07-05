@@ -99,6 +99,9 @@ Keep the extension's permissions aligned with the actual MVP:
 - `storage`: local cache.
 - `activeTab`: user-initiated current tab access.
 - `scripting`: inject extractor only after Save click.
+- `favicon`: Chrome's extension-local `_favicon` endpoint for site icons in
+  bookmark lists (resolved at render time, never persisted, no external
+  favicon service).
 - `https://www.googleapis.com/*`: Drive API calls.
 
 Avoid broad host permissions in MVP.
