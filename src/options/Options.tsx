@@ -5,8 +5,9 @@
  * screens behind a small nav (MIK-025): the Library — the two-zone ledger
  * (left rail with search and genre/tag/status filters; center bookmark rows
  * with per-row quick delete) plus a detail side sheet overlay (MIK-022,
- * MIK-024) — and the Analysis skills settings screen, which follows the same
- * rail/main workspace body (MIK-038) and opens the custom skill create/edit
+ * MIK-024) — and the Analysis skills settings screen, whose content centers
+ * in a no-rail column with its guidance behind the title-adjacent header
+ * help (MIK-052) and opens the custom skill create/edit
  * form as a modal with authoring guidance. Bookmark Drive sync and analysis
  * settings sync status/actions live in one shared app-header sync hub
  * (MIK-051) instead of per-screen rail panels and floating buttons. It
@@ -61,6 +62,8 @@ import {
 	askAiChatContext,
 	askAiChatShell,
 	askAiComposer,
+	askAiPage,
+	askAiScreenShell,
 	askAiLatestButton,
 	askAiTurnLabel,
 	askAiUserBubble,
@@ -69,6 +72,7 @@ import {
 	askAiViewportShell,
 	askAiWelcome,
 	brandTitle,
+	chatColumn,
 	chip,
 	chipActive,
 	dangerButton,
@@ -84,6 +88,7 @@ import {
 	modalHeader,
 	navTab,
 	navTabActive,
+	noRailContent,
 	page,
 	palette,
 	panel,
@@ -95,9 +100,13 @@ import {
 	rowDeleteButton,
 	rowOpenButton,
 	rowSelected,
+	screenHelp,
+	screenHelpPanel,
+	screenHelpSummary,
 	screenShell,
 	screenSubtitle,
 	screenTitle,
+	screenTitleRow,
 	searchInput,
 	sheet,
 	sheetBackdrop,
@@ -214,7 +223,7 @@ export function Options({
 	const showLibrary = activeScreen === "library";
 
 	return (
-		<main style={page}>
+		<main style={activeScreen === "ask-ai" ? askAiPage : page}>
 			{/* Shared app header (MIK-036): the product brand lives here on every
 			    screen; the sync hub (MIK-051) travels with it, and the nav renders
 			    only when another screen exists. */}
@@ -307,18 +316,40 @@ export function Options({
  * Shared screen header (MIK-036): every top-level screen opens with the same
  * title/subtitle rhythm inside the {@link screenShell} frame, so Library and
  * Analysis skills read as two screens of one app. The subtitle accepts nodes
- * because the skills intro embeds the Drive settings filename as `<code>`.
+ * because help content may embed the Drive settings filename as `<code>`.
+ *
+ * A screen may attach title-adjacent help (MIK-052): a small `?` disclosure
+ * beside the title carrying the explanatory guidance that used to occupy
+ * explanation-only rails. A native `<details>` like the sync hub — click and
+ * keyboard accessible (never hover-only), with no persisted open state — and
+ * the content stays in the static markup, so tests can pin it.
  */
 function ScreenHeader({
 	title,
 	subtitle,
+	helpLabel,
+	helpContent,
 }: {
 	title: string;
 	subtitle: ReactNode;
+	/** Accessible name of the `?` help toggle; required with helpContent. */
+	helpLabel?: string;
+	/** Explanatory guidance disclosed by the title-adjacent help. */
+	helpContent?: ReactNode;
 }) {
 	return (
 		<header>
-			<h2 style={screenTitle}>{title}</h2>
+			<div style={screenTitleRow}>
+				<h2 style={screenTitle}>{title}</h2>
+				{helpContent && helpLabel ? (
+					<details style={screenHelp}>
+						<summary style={screenHelpSummary} aria-label={helpLabel}>
+							?
+						</summary>
+						<div style={screenHelpPanel}>{helpContent}</div>
+					</details>
+				) : null}
+			</div>
 			<p style={screenSubtitle}>{subtitle}</p>
 		</header>
 	);
@@ -1375,13 +1406,14 @@ function DetailSheet({
  * "Analysis skills" settings screen (MIK-018, MIK-025,
  * docs/ai-analysis-v2.md "Settings file"): a pure projection of
  * {@link SkillsController.getView}, rendered as its own top-level screen
- * instead of a panel below the ledger. It follows the same workspace body as
- * the Library (MIK-038): the left rail holds the settings-file guidance and
- * the main area holds the Drive-synced custom skills (full CRUD) and the
- * fixed built-in profiles read-only. Settings sync status and refresh live in
- * the shared app-header sync hub (MIK-051). The create/edit form opens as a
- * modal. Never computes matching/priority itself — that stays inside
- * `ai/profile.ts`'s `selectAnalysisProfile`.
+ * instead of a panel below the ledger. Since MIK-052 it has no left rail —
+ * the settings-file guidance moved into the title-adjacent header help and
+ * the main content (Drive-synced custom skills with full CRUD, then the
+ * fixed built-in profiles read-only) is centered in a no-rail column.
+ * Settings sync status and refresh live in the shared app-header sync hub
+ * (MIK-051). The create/edit form opens as a modal. Never computes
+ * matching/priority itself — that stays inside `ai/profile.ts`'s
+ * `selectAnalysisProfile`.
  */
 function SkillsScreen({
 	skillsController,
@@ -1404,9 +1436,13 @@ function SkillsScreen({
 	return (
 		<>
 			<section style={screenShell} aria-label={m.skillsScreenAria}>
-				<ScreenHeader title={m.analysisSkills} subtitle={m.skillsSubtitle} />
-				<div style={workspaceBody}>
-					<SkillsRail m={m} />
+				<ScreenHeader
+					title={m.analysisSkills}
+					subtitle={m.skillsSubtitle}
+					helpLabel={m.skillsHelpAria}
+					helpContent={<SkillsHelp m={m} />}
+				/>
+				<div style={noRailContent}>
 					<SkillsMain view={view} m={m} skillsController={skillsController} />
 				</div>
 			</section>
@@ -1418,23 +1454,21 @@ function SkillsScreen({
 }
 
 /**
- * Analysis skills left rail (MIK-038, slimmed by MIK-051): only the
- * `bookmark-ai/settings.json` context copy that used to live in the screen
- * subtitle — the settings sync readout and action moved to the shared
- * app-header sync hub.
+ * Analysis skills header-help guidance (MIK-052; formerly the MIK-038 rail):
+ * the custom-skills explanation and the `bookmark-ai/settings.json` storage
+ * location, disclosed by the title-adjacent `?` instead of occupying a
+ * permanent explanation-only rail.
  */
-function SkillsRail({ m }: { m: OptionsMessages }) {
+function SkillsHelp({ m }: { m: OptionsMessages }) {
 	return (
-		<aside style={rail}>
-			<section style={panel}>
-				<p style={railLabel}>{m.skillsAbout}</p>
-				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-					{m.skillsIntro.before}
-					<code>bookmark-ai/settings.json</code>
-					{m.skillsIntro.after}
-				</p>
-			</section>
-		</aside>
+		<>
+			<p style={railLabel}>{m.skillsAbout}</p>
+			<p style={{ margin: 0 }}>
+				{m.skillsIntro.before}
+				<code>bookmark-ai/settings.json</code>
+				{m.skillsIntro.after}
+			</p>
+		</>
 	);
 }
 
@@ -1519,10 +1553,11 @@ function SkillsMain({
 /**
  * "Ask AI" / "AIに聞く" screen shell (MIK-045; MIK-048 chat session; MIK-050
  * chat-only layout): the chat-style saved-bookmark recommendation surface.
- * Unlike the Library and Analysis skills, this screen has no left rail and no
- * shared workspace grid — the chat is the primary content, and the compact
- * scope/privacy cues render as {@link AskAiChatContext} at the top of the
- * chat viewport. The
+ * This screen has no left rail and no shared workspace grid — the chat is the
+ * primary content, centered in a comfortable no-rail chat column (MIK-052).
+ * The scope/privacy guidance is exposed through the title-adjacent header
+ * help, while the compact {@link AskAiChatContext} keeps the same critical
+ * copy at the top of the chat viewport. The
  * conversation state — transcript, Prompt API session, narrowed candidate
  * context — lives only inside the injected {@link AskAiController} and is
  * never persisted.
@@ -1544,15 +1579,38 @@ function AskAiScreen({
 	);
 
 	return (
-		<section style={screenShell} aria-label={m.askAiScreenAria}>
-			<ScreenHeader title={m.askAi} subtitle={m.askAiSubtitle} />
-			<AskAiMain
-				view={view}
-				m={m}
-				controller={controller}
-				onOpenBookmark={onOpenBookmark}
+		<section style={askAiScreenShell} aria-label={m.askAiScreenAria}>
+			<ScreenHeader
+				title={m.askAi}
+				subtitle={m.askAiSubtitle}
+				helpLabel={m.askAiHelpAria}
+				helpContent={<AskAiHelp m={m} />}
 			/>
+			<div style={chatColumn}>
+				<AskAiMain
+					view={view}
+					m={m}
+					controller={controller}
+					onOpenBookmark={onOpenBookmark}
+				/>
+			</div>
 		</section>
+	);
+}
+
+/**
+ * Ask AI header-help guidance (MIK-052): the local-cache scope (never the
+ * open web) and non-persistence/privacy notes, discoverable from the screen
+ * title. The compact {@link AskAiChatContext} keeps the same critical copy
+ * inside the chat viewport.
+ */
+function AskAiHelp({ m }: { m: OptionsMessages }) {
+	return (
+		<>
+			<p style={railLabel}>{m.askAiAbout}</p>
+			<p style={{ margin: 0 }}>{m.askAiScopeNote}</p>
+			<p style={{ margin: "6px 0 0" }}>{m.askAiPrivacyNote}</p>
+		</>
 	);
 }
 

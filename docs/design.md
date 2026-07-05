@@ -513,7 +513,11 @@ app header carries the product title (`Bookmark AI`), the shared sync hub
 (MIK-051), and the top-level screen navigation on every screen, and each
 screen opens with the same screen-header rhythm — a screen title plus a
 one-line user-facing subtitle (`Library` / `Research Ledger` and
-`Analysis skills` / a plain-language tuning line).
+`Analysis skills` / a plain-language tuning line). A screen may attach a
+title-adjacent help control (MIK-052): a small `?` disclosure beside the
+title (a native `<details>`, click/focus accessible, no persisted open
+state) carrying explanatory screen guidance, so explanations never occupy
+permanent side-panel space.
 
 The app-header sync hub (MIK-051) is the single place for sync status and
 manual sync actions on every screen: a compact glance pill whose tone/text
@@ -526,21 +530,23 @@ paths unchanged and are disabled while their sync is loading/syncing/writing;
 the settings section renders only when the skills controller is present.
 Screen bodies no longer carry sync rail panels or floating sync buttons.
 
-Below the header, both screens share the same workspace body (MIK-038): a
-left rail for screen-specific controls and guidance and a main area for the
-primary content — so the two screens read as one app. The Library left rail
-hosts only controls (search, filters), never app branding; the Analysis
-skills rail hosts only the `bookmark-ai/settings.json` guidance copy.
+Below the header, side rails exist only for active controls (MIK-052). The
+Library keeps the two-zone workspace body (MIK-038) because its left rail
+hosts the search and filter controls (never app branding). Screens without
+active rail controls render no rail: their main content centers in a
+readable no-rail column, and their explanatory guidance lives in the
+title-adjacent header help instead.
 
 The options page has a top-level navigation with two screens (MIK-025):
 
 - **Library** (default): the two-zone ledger and detail side sheet described
   below.
 - **Analysis skills**: the settings screen for analysis skills, no longer a
-  panel below the bookmark list. It uses the shared rail/main workspace body
-  (MIK-038): the left rail shows the settings-file context (custom skills are
-  stored only in `bookmark-ai/settings.json` on Drive); the main area shows
-  custom skills with create/edit/delete/enable-disable (and the `Add custom
+  panel below the bookmark list. It renders without a left rail (MIK-052):
+  the settings-file context (custom skills are stored only in
+  `bookmark-ai/settings.json` on Drive) is disclosed by the title-adjacent
+  header help, and the centered no-rail column shows custom skills with
+  create/edit/delete/enable-disable (and the `Add custom
   skill` action) followed by built-in profiles read-only. Settings sync
   status and the `Sync settings` refresh live in the shared app-header sync
   hub (MIK-051) — the hub dispatches the existing refresh path and disables
