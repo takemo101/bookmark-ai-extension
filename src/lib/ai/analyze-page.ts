@@ -8,9 +8,15 @@
  * docs/design.md "Save Flow".
  *
  * Status mapping:
- *   - API not `available`            → `unavailable` (bookmark preserved).
+ *   - API `unavailable`               → `unavailable` (bookmark preserved).
+ *   - API `downloadable`/`downloading` → proceed: `client.prompt` triggers the
+ *       model download via `create({ monitor })` (user-initiated foreground
+ *       flow), reporting transient setup/download detail via `onModelSetup`.
  *   - API present but `prompt` throws
  *       {@link PromptApiUnavailableError} → `unavailable`.
+ *   - session creation/download fails
+ *       ({@link PromptSessionCreateError}) → `failed` (client error), logged
+ *       distinctly with safe fields only.
  *   - any other `prompt` throw        → `failed` (client error).
  *   - malformed output                → `failed` (recoverable parse error).
  *   - valid output                    → `ready` with the parsed analysis.
@@ -33,7 +39,12 @@ import { parseAnalysis } from "./parse";
 import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 import type { AnalysisProfile } from "./profile";
 import { buildAnalysisPrompt } from "./prompt";
-import { type PromptClient, PromptApiUnavailableError } from "./prompt-api";
+import {
+	type PromptClient,
+	type PromptLifecycleEvent,
+	PromptApiUnavailableError,
+	PromptSessionCreateError,
+} from "./prompt-api";
 import type { AnalysisInput, AnalysisOutcome } from "./types";
 
 function describeError(error: unknown): string {
@@ -43,8 +54,21 @@ function describeError(error: unknown): string {
 	return String(error);
 }
 
+/**
+ * Transient, safe model-setup detail reported while an analysis runs: the
+ * model needs preparing (download required or already in flight), download
+ * progress, and the moment the session is ready. Foreground-UI display only —
+ * never persisted, never part of the durable bookmark `AiStatus`.
+ */
+export type AnalysisModelSetup =
+	| { readonly kind: "model-preparing" }
+	| { readonly kind: "model-downloading"; readonly ratio?: number }
+	| { readonly kind: "model-ready" };
+
 export interface AnalyzePageOptions {
 	logger?: Logger;
+	/** Best-effort model setup/download reporter; must never affect the result. */
+	onModelSetup?: (event: AnalysisModelSetup) => void;
 }
 
 /**
@@ -89,12 +113,24 @@ export async function analyzePage(
 		});
 		return { status: "unavailable", reason: describeError(error) };
 	}
-	if (availability !== "available") {
+	if (availability === "unavailable") {
 		logger.log("warn", "ai.analysis.unavailable", {
 			availability,
 			language,
 		});
 		return { status: "unavailable", reason: `Prompt API ${availability}` };
+	}
+
+	// `downloadable` / `downloading` are no longer terminal: proceeding into
+	// `client.prompt(...)` lets the adapter's `create({ monitor })` start (or
+	// join) Chrome's model download in this user-initiated foreground flow.
+	const needsDownload = availability !== "available";
+	if (needsDownload) {
+		logger.log("info", "ai.analysis.model-download-required", {
+			availability,
+			language,
+		});
+		options.onModelSetup?.({ kind: "model-preparing" });
 	}
 
 	const profiles =
@@ -103,11 +139,43 @@ export async function analyzePage(
 			: BUILT_IN_PROFILES;
 	const profile = selectAnalysisProfile(input.url, profiles);
 
+	const onLifecycleEvent = (event: PromptLifecycleEvent): void => {
+		if (event.kind === "download-required") {
+			options.onModelSetup?.({ kind: "model-preparing" });
+			return;
+		}
+		if (event.kind === "download-progress") {
+			// Safe numbers only (loaded/total/ratio) — never content.
+			logger.log("debug", "ai.analysis.model-download-progress", {
+				loaded: event.loaded,
+				total: event.total,
+				ratio: event.ratio,
+				language,
+				profileId: profile.id,
+			});
+			options.onModelSetup?.({
+				kind: "model-downloading",
+				ratio: event.ratio,
+			});
+			return;
+		}
+		// session-created: the model finished downloading (or was already local).
+		if (needsDownload) {
+			logger.log("info", "ai.analysis.model-session-created", {
+				availability,
+				language,
+				profileId: profile.id,
+			});
+		}
+		options.onModelSetup?.({ kind: "model-ready" });
+	};
+
 	let raw: string;
 	try {
 		raw = await client.prompt(
 			buildAnalysisPrompt(input, profile, language),
 			language,
+			onLifecycleEvent,
 		);
 	} catch (error) {
 		if (error instanceof PromptApiUnavailableError) {
@@ -117,6 +185,22 @@ export async function analyzePage(
 				profileId: profile.id,
 			});
 			return { status: "unavailable", reason: error.message };
+		}
+		if (error instanceof PromptSessionCreateError) {
+			// Session creation (which includes the model download) failed — log it
+			// distinctly from a prompt failure; the error's message/causeName carry
+			// only error names, never browser-provided text.
+			logger.log("error", "ai.analysis.session-create-failed", {
+				...errorLogFields(error),
+				causeName: error.causeName,
+				availability,
+				language,
+				profileId: profile.id,
+			});
+			return {
+				status: "failed",
+				error: { kind: "client-error", message: error.message },
+			};
 		}
 		logger.log("error", "ai.analysis.prompt-failed", {
 			...errorLogFields(error),

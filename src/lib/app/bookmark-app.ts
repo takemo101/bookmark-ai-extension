@@ -227,6 +227,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				fallbackLanguage: deps.fallbackLanguage,
 			},
 			customProfiles,
+			{
+				// Transient model setup/download detail rides the `analyzing` stage
+				// of the existing progress trail; it never touches the durable
+				// bookmark `AiStatus`.
+				onModelSetup: onProgress
+					? (event) => onProgress("analyzing", event)
+					: undefined,
+			},
 		);
 
 		if (outcome.status === "ready") {

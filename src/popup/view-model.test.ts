@@ -15,10 +15,15 @@ import type {
 	ProgressObserver,
 	Result,
 	SaveOutcome,
+	SaveProgress,
 	SaveStage,
 	TabInfo,
 } from "./use-cases";
-import { createPopupController, type FlowView } from "./view-model";
+import {
+	createPopupController,
+	type FlowView,
+	type ModelSetupView,
+} from "./view-model";
 
 /**
  * The controller is exercised entirely through a fake {@link PopupUseCases} — no
@@ -96,11 +101,11 @@ class FakeUseCases implements PopupUseCases {
 	};
 	reAnalyzeResult: Result<SaveOutcome, AppError> | null = null;
 	syncResult: Result<CacheState, AppError> | null = null;
-	progressStages: SaveStage[] = [
-		"saving",
-		"extracting",
-		"analyzing",
-		"syncing",
+	progressEvents: SaveProgress[] = [
+		{ stage: "saving" },
+		{ stage: "extracting" },
+		{ stage: "analyzing" },
+		{ stage: "syncing" },
 	];
 	saveCalls = 0;
 	reAnalyzeArgs: CanonicalUrl[] = [];
@@ -121,8 +126,8 @@ class FakeUseCases implements PopupUseCases {
 	}
 	async saveCurrentTab(onProgress?: ProgressObserver) {
 		this.saveCalls += 1;
-		for (const stage of this.progressStages) {
-			onProgress?.({ stage });
+		for (const event of this.progressEvents) {
+			onProgress?.(event);
 		}
 		return this.saveResult;
 	}
@@ -131,8 +136,8 @@ class FakeUseCases implements PopupUseCases {
 		onProgress?: ProgressObserver,
 	) {
 		this.reAnalyzeArgs.push(canonicalUrl);
-		for (const stage of this.progressStages) {
-			onProgress?.({ stage });
+		for (const event of this.progressEvents) {
+			onProgress?.(event);
 		}
 		return this.reAnalyzeResult ?? this.saveResult;
 	}
@@ -249,6 +254,55 @@ describe("createPopupController", () => {
 					"syncing",
 				]),
 			);
+		});
+
+		it("surfaces transient model setup/download detail during analyzing, then clears it", async () => {
+			const fake = new FakeUseCases();
+			fake.progressEvents = [
+				{ stage: "saving" },
+				{ stage: "extracting" },
+				{ stage: "analyzing" },
+				{ stage: "analyzing", detail: { kind: "model-preparing" } },
+				{
+					stage: "analyzing",
+					detail: { kind: "model-downloading", ratio: 0 },
+				},
+				{
+					stage: "analyzing",
+					detail: { kind: "model-downloading", ratio: 0.42 },
+				},
+				{ stage: "analyzing", detail: { kind: "model-downloading" } },
+				{ stage: "analyzing", detail: { kind: "model-ready" } },
+				{ stage: "syncing" },
+			];
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const setups: Array<ModelSetupView | undefined> = [];
+			controller.subscribe(() => {
+				const flow = controller.getView().flow;
+				if (flow.kind === "running") {
+					setups.push(flow.modelSetup);
+				}
+			});
+
+			await controller.save();
+
+			expect(setups).toEqual([
+				undefined, // flow start (trail at saving)
+				undefined, // saving
+				undefined, // extracting
+				undefined, // analyzing began
+				{ downloading: false }, // model-preparing
+				{ downloading: true, percent: undefined }, // 0% stays percent-less
+				{ downloading: true, percent: 42 }, // progress with ratio
+				{ downloading: true, percent: undefined }, // progress without ratio
+				undefined, // model-ready clears the line
+				undefined, // syncing
+			]);
+			// The flow still finishes normally; the detail never leaks into the
+			// durable receipt.
+			expect(controller.getView().flow.kind).toBe("done");
 		});
 
 		it("keeps a visible saved bookmark when the Prompt API is unavailable", async () => {

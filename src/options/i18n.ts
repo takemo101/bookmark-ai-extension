@@ -116,6 +116,10 @@ export type OptionsMessages = {
 	readonly askAiLatestAria: string;
 	/** Non-streaming in-flight placeholder line while an answer is running. */
 	readonly askAiAnswering: string;
+	readonly askAiSetupTitle: string;
+	readonly askAiSetupPreparing: string;
+	readonly askAiSetupDownloading: (percent?: number) => string;
+	readonly askAiSetupHint: string;
 	/** Safe status copy for the MIK-046 non-answer results. */
 	readonly askAiTooShort: string;
 	readonly askAiEmptyLibrary: string;
@@ -269,6 +273,14 @@ const EN: OptionsMessages = {
 	askAiLatest: "Latest",
 	askAiLatestAria: "Jump to latest",
 	askAiAnswering: "Looking through your saved bookmarks…",
+	askAiSetupTitle: "Assistant setup",
+	askAiSetupPreparing: "Preparing AI model…",
+	askAiSetupDownloading: (percent) =>
+		percent !== undefined && percent > 0
+			? `Downloading AI model… ${percent}%`
+			: "Downloading AI model…",
+	askAiSetupHint:
+		"Keep this tab open while Chrome prepares the on-device model. You can still fall back to local bookmark matches if setup fails.",
 	askAiTooShort: "Please ask a slightly longer question.",
 	askAiEmptyLibrary:
 		"You have no saved bookmarks yet — save a page from the popup first.",
@@ -447,6 +459,14 @@ const JA: OptionsMessages = {
 	askAiLatest: "最新へ",
 	askAiLatestAria: "最新のメッセージへ移動",
 	askAiAnswering: "保存済みブックマークを確認中…",
+	askAiSetupTitle: "アシスタントの準備",
+	askAiSetupPreparing: "AIモデルを準備中…",
+	askAiSetupDownloading: (percent) =>
+		percent !== undefined && percent > 0
+			? `AIモデルをダウンロード中… ${percent}%`
+			: "AIモデルをダウンロード中…",
+	askAiSetupHint:
+		"Chromeがオンデバイスモデルを準備している間、このタブを開いたままにしてください。準備に失敗してもローカルのブックマーク一致に戻れます。",
 	askAiTooShort: "もう少し長い質問を入力してください。",
 	askAiEmptyLibrary:
 		"保存済みブックマークがまだありません。まずポップアップからページを保存してください。",

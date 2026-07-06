@@ -1659,7 +1659,11 @@ function AskAiMain({
 							)}
 						</div>
 					)}
-					{view.answering ? <AskAiThinkingIndicator m={m} /> : null}
+					{view.modelSetup ? (
+						<AskAiSetupCard setup={view.modelSetup} m={m} />
+					) : view.answering ? (
+						<AskAiThinkingIndicator m={m} />
+					) : null}
 				</div>
 				{showLatest ? (
 					<button
@@ -1727,6 +1731,94 @@ function AskAiWelcome({
  * the project has no CSS tooling — and the dots are decorative; the
  * accessible signal stays the `role="status"` text.
  */
+function AskAiSetupCard({
+	setup,
+	m,
+}: {
+	setup: NonNullable<AskAiView["modelSetup"]>;
+	m: OptionsMessages;
+}) {
+	const { styles: s, palette } = useOptionsTheme();
+	const percent = setup.downloading ? setup.percent : undefined;
+	const knownPercent = percent !== undefined && percent > 0;
+	const label = setup.downloading
+		? m.askAiSetupDownloading(percent)
+		: m.askAiSetupPreparing;
+	return (
+		<section
+			role="status"
+			style={{
+				...s.panel,
+				display: "flex",
+				flexDirection: "column",
+				gap: 10,
+			}}
+		>
+			<style>
+				{
+					"@keyframes askai-setup-spin{to{transform:rotate(360deg)}}@keyframes askai-setup-indeterminate{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}@media (prefers-reduced-motion:reduce){.askai-setup-motion{animation:none!important}}"
+				}
+			</style>
+			<div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+				<span
+					className="askai-setup-motion"
+					aria-hidden
+					style={{
+						width: 18,
+						height: 18,
+						borderRadius: 999,
+						border: `2px solid ${palette.borderStrong}`,
+						borderTopColor: palette.accent,
+						animation: "askai-setup-spin .9s linear infinite",
+						flexShrink: 0,
+						marginTop: 2,
+					}}
+				/>
+				<div style={{ minWidth: 0 }}>
+					<p style={{ ...s.railLabel, margin: "0 0 2px" }}>
+						{m.askAiSetupTitle}
+					</p>
+					<p style={{ margin: 0, fontSize: 13, color: palette.ink }}>{label}</p>
+					<p
+						style={{ margin: "4px 0 0", fontSize: 12, color: palette.inkSoft }}
+					>
+						{m.askAiSetupHint}
+					</p>
+				</div>
+			</div>
+			{setup.downloading ? (
+				<div
+					role="progressbar"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={knownPercent ? percent : undefined}
+					aria-label={label}
+					style={{
+						height: 6,
+						borderRadius: 999,
+						background: palette.paperInset,
+						overflow: "hidden",
+						border: `1px solid ${palette.border}`,
+					}}
+				>
+					<div
+						className={knownPercent ? undefined : "askai-setup-motion"}
+						style={{
+							height: "100%",
+							width: knownPercent ? `${percent}%` : "36%",
+							background: palette.accent,
+							borderRadius: 999,
+							animation: knownPercent
+								? undefined
+								: "askai-setup-indeterminate 1.4s ease-in-out infinite",
+						}}
+					/>
+				</div>
+			) : null}
+		</section>
+	);
+}
+
 function AskAiThinkingIndicator({ m }: { m: OptionsMessages }) {
 	const { palette } = useOptionsTheme();
 	return (

@@ -25,6 +25,7 @@ import type {
 import type { RepositorySnapshot } from "../drive/repository";
 import type {
 	AnalysisInput,
+	AnalysisModelSetup,
 	AnalysisOutcome,
 	AnalysisProfile,
 } from "../ai/index";
@@ -62,8 +63,14 @@ export interface AnalyzerPort {
 	analyze(
 		input: AnalysisInput,
 		customProfiles?: readonly AnalysisProfile[],
+		options?: AnalyzeCallOptions,
 	): Promise<AnalysisOutcome>;
 }
+
+/** Per-call analyzer options: a best-effort model setup/download reporter. */
+export type AnalyzeCallOptions = {
+	readonly onModelSetup?: (event: AnalysisModelSetup) => void;
+};
 
 /**
  * Supplies the currently-enabled custom analysis skills, already converted to
@@ -118,11 +125,20 @@ export interface TabProviderPort {
 export type SaveStage = "saving" | "extracting" | "analyzing" | "syncing";
 
 /**
+ * Transient, safe extra detail for one progress event. Currently only the
+ * `analyzing` stage carries it: model setup/download state (MIK preparatory
+ * download flow). Display-only — never persisted, never part of the durable
+ * bookmark `AiStatus`.
+ */
+export type SaveStageDetail = AnalysisModelSetup;
+
+/**
  * Optional progress reporter for the save/re-analyze flow. The popup passes one
  * to drive its trail; the options page omits it. Reporting is best-effort and
- * must never affect the flow's result.
+ * must never affect the flow's result. `detail`, when present, is transient
+ * stage detail (model setup/download during `analyzing`).
  */
-export type SaveProgress = (stage: SaveStage) => void;
+export type SaveProgress = (stage: SaveStage, detail?: SaveStageDetail) => void;
 
 /** A clock, so use cases never read `Date` directly and stay deterministic. */
 export interface Clock {

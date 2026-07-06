@@ -112,9 +112,11 @@ export function createRuntimeUseCases(): OptionsUseCases {
  */
 export function createRuntimeAskAiDeps(): AskAiDeps {
 	const cache = createChromeLocalCache();
-	const run = createChromeAskAiRecommendationRunner();
-	const createSession = createChromeAskAiPromptSessionFactory();
 	const logger = createConsoleLogger();
+	const run = createChromeAskAiRecommendationRunner(undefined, { logger });
+	const createSession = createChromeAskAiPromptSessionFactory(undefined, {
+		logger,
+	});
 	// The browser UI language decides both prompt and expected output language,
 	// matching the analyzer's language posture (MIK-029).
 	const language = detectUiLanguage();
@@ -122,14 +124,14 @@ export function createRuntimeAskAiDeps(): AskAiDeps {
 		async loadBookmarks() {
 			return (await cache.load()).bookmarks.toArray();
 		},
-		runKeywordExtractionPrompt(request) {
-			return run(request, language);
+		runKeywordExtractionPrompt(request, observer) {
+			return run(request, language, observer);
 		},
-		runRecommendationPrompt(request) {
-			return run(request, language);
+		runRecommendationPrompt(request, observer) {
+			return run(request, language, observer);
 		},
-		createRecommendationSession(systemInstruction) {
-			return createSession(systemInstruction, language);
+		createRecommendationSession(systemInstruction, observer) {
+			return createSession(systemInstruction, language, observer);
 		},
 		logger,
 		language,

@@ -1,11 +1,43 @@
 import { describe, expect, it } from "vitest";
 
+import { createMemoryLogger } from "../logging/index";
 import {
 	PromptApiUnavailableError,
+	PromptSessionCreateError,
+	type PromptLifecycleEvent,
 	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
 } from "./prompt-api";
+
+/**
+ * A fake `create()` whose options invoke the adapter's `monitor` callback and
+ * then fire the given `downloadprogress` events — the shape Chrome uses when
+ * `availability` is downloadable/downloading.
+ */
+function createWithDownload(
+	events: readonly unknown[],
+	session: { prompt(input: string): Promise<string>; destroy?(): void } = {
+		prompt: async () => "model output",
+	},
+) {
+	let sawMonitor = false;
+	const create = async (options?: unknown) => {
+		const monitor = (options as { monitor?: (m: unknown) => void }).monitor;
+		sawMonitor = typeof monitor === "function";
+		const listeners: Array<(event: unknown) => void> = [];
+		monitor?.({
+			addEventListener(type: string, listener: (event: unknown) => void) {
+				if (type === "downloadprogress") listeners.push(listener);
+			},
+		});
+		for (const event of events) {
+			for (const listener of listeners) listener(event);
+		}
+		return session;
+	};
+	return { create, sawMonitor: () => sawMonitor };
+}
 
 /**
  * These tests inject a fake language-model namespace rather than touching a real
@@ -152,6 +184,87 @@ describe("createChromePromptClient", () => {
 		await expect(client.prompt("question")).rejects.toThrow("prompt failed");
 		expect(destroyed).toBe(true);
 	});
+
+	it("passes a monitor to create and forwards normalized downloadprogress events", async () => {
+		const fake = createWithDownload([
+			{ loaded: 0.5 }, // fraction shape (no total)
+			{ loaded: 5, total: 10 }, // byte-count shape
+			{ loaded: "bogus" }, // malformed → ignored
+			null, // malformed → ignored
+			{ loaded: -1 }, // malformed → ignored
+		]);
+		const events: PromptLifecycleEvent[] = [];
+		const client = createChromePromptClient({
+			availability: async () => "downloadable",
+			create: fake.create,
+		});
+
+		const out = await client.prompt("secret question text", "ja", (event) =>
+			events.push(event),
+		);
+
+		expect(out).toBe("model output");
+		expect(fake.sawMonitor()).toBe(true);
+		expect(events).toEqual([
+			{ kind: "download-progress", loaded: 0.5, total: undefined, ratio: 0.5 },
+			{ kind: "download-progress", loaded: 5, total: 10, ratio: 0.5 },
+			{ kind: "session-created" },
+		]);
+		// Lifecycle events carry safe numbers only — never prompt/page content.
+		expect(JSON.stringify(events)).not.toContain("secret question text");
+	});
+
+	it("still passes a monitor and completes when no observer is given", async () => {
+		const fake = createWithDownload([{ loaded: 0.25 }]);
+		const client = createChromePromptClient({
+			availability: async () => "downloading",
+			create: fake.create,
+		});
+
+		expect(await client.prompt("question")).toBe("model output");
+		expect(fake.sawMonitor()).toBe(true);
+	});
+
+	it("tolerates a throwing observer without affecting the prompt", async () => {
+		const fake = createWithDownload([{ loaded: 0.5 }]);
+		const client = createChromePromptClient({
+			availability: async () => "downloadable",
+			create: fake.create,
+		});
+
+		const out = await client.prompt("question", "ja", () => {
+			throw new Error("observer blew up");
+		});
+
+		expect(out).toBe("model output");
+	});
+
+	it("wraps a rejecting create (download/session failure) in PromptSessionCreateError", async () => {
+		const events: PromptLifecycleEvent[] = [];
+		const client = createChromePromptClient({
+			availability: async () => "downloadable",
+			create: async () => {
+				const error = new Error("out of disk while downloading the model");
+				error.name = "QuotaExceededError";
+				throw error;
+			},
+		});
+
+		const rejection = await client
+			.prompt("question", "ja", (event) => events.push(event))
+			.then(
+				() => null,
+				(error: unknown) => error,
+			);
+
+		expect(rejection).toBeInstanceOf(PromptSessionCreateError);
+		const wrapped = rejection as PromptSessionCreateError;
+		expect(wrapped.causeName).toBe("QuotaExceededError");
+		// The wrapped message carries only the cause's *name*, never its message.
+		expect(wrapped.message).not.toContain("out of disk");
+		// No session was created, so no session-created event fired.
+		expect(events).toEqual([]);
+	});
 });
 
 /**
@@ -173,15 +286,83 @@ describe("createChromeAskAiRecommendationRunner", () => {
 		);
 	});
 
-	it("throws PromptApiUnavailableError when the model is not available yet", async () => {
-		for (const state of ["unavailable", "downloadable", "downloading"]) {
-			const run = createChromeAskAiRecommendationRunner({
-				availability: async () => state,
-				create: async () => ({ prompt: async () => "" }),
-			});
-			await expect(run(request)).rejects.toBeInstanceOf(
-				PromptApiUnavailableError,
+	it("throws PromptApiUnavailableError when the model is unavailable", async () => {
+		const run = createChromeAskAiRecommendationRunner({
+			availability: async () => "unavailable",
+			create: async () => ({ prompt: async () => "" }),
+		});
+
+		await expect(run(request)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("starts model download for downloadable / downloading states and reports safe progress", async () => {
+		for (const state of ["downloadable", "downloading"] as const) {
+			const logger = createMemoryLogger();
+			const fake = createWithDownload([
+				{ loaded: 0 },
+				{ loaded: 4, total: 10 },
+			]);
+			const events: PromptLifecycleEvent[] = [];
+			const run = createChromeAskAiRecommendationRunner(
+				{
+					availability: async () => state,
+					create: fake.create,
+				},
+				{ logger },
 			);
+
+			expect(await run(request, "en", (event) => events.push(event))).toBe(
+				"model output",
+			);
+
+			expect(fake.sawMonitor()).toBe(true);
+			expect(events).toEqual([
+				{ kind: "download-required" },
+				{ kind: "download-progress", loaded: 0, total: undefined, ratio: 0 },
+				{ kind: "download-progress", loaded: 4, total: 10, ratio: 0.4 },
+				{ kind: "session-created" },
+			]);
+			expect(logger.entries).toEqual([
+				{
+					level: "info",
+					event: "ai.ask-ai.model-download-required",
+					fields: {
+						availability: state,
+						language: "en",
+						context: "recommendation",
+					},
+				},
+				{
+					level: "debug",
+					event: "ai.ask-ai.model-download-progress",
+					fields: {
+						loaded: 0,
+						ratio: 0,
+						language: "en",
+						context: "recommendation",
+					},
+				},
+				{
+					level: "debug",
+					event: "ai.ask-ai.model-download-progress",
+					fields: {
+						loaded: 4,
+						total: 10,
+						ratio: 0.4,
+						language: "en",
+						context: "recommendation",
+					},
+				},
+				{
+					level: "info",
+					event: "ai.ask-ai.session-created",
+					fields: { language: "en", context: "recommendation" },
+				},
+			]);
+			expect(JSON.stringify(logger.entries)).not.toContain("typescript notes");
+			expect(JSON.stringify(events)).not.toContain("typescript notes");
 		}
 	});
 
@@ -195,6 +376,56 @@ describe("createChromeAskAiRecommendationRunner", () => {
 		await expect(run(request)).rejects.toBeInstanceOf(
 			PromptApiUnavailableError,
 		);
+	});
+
+	it("logs a safe event when the availability probe throws", async () => {
+		const logger = createMemoryLogger();
+		const run = createChromeAskAiRecommendationRunner(
+			{
+				availability: async () => {
+					throw new TypeError("probe blew up");
+				},
+				create: async () => ({ prompt: async () => "" }),
+			},
+			{ logger },
+		);
+
+		await expect(run(request)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+
+		expect(logger.entries).toEqual([
+			{
+				level: "warn",
+				event: "ai.ask-ai.availability-threw",
+				fields: {
+					errorName: "TypeError",
+					language: "ja",
+					context: "recommendation",
+				},
+			},
+		]);
+	});
+
+	it("logs session creation without prompt content when the model is available", async () => {
+		const logger = createMemoryLogger();
+		const run = createChromeAskAiRecommendationRunner(
+			{
+				availability: async () => "available",
+				create: async () => ({ prompt: async () => "ok" }),
+			},
+			{ logger },
+		);
+
+		expect(await run(request)).toBe("ok");
+		expect(logger.entries).toEqual([
+			{
+				level: "info",
+				event: "ai.ask-ai.session-created",
+				fields: { language: "ja", context: "recommendation" },
+			},
+		]);
+		expect(JSON.stringify(logger.entries)).not.toContain("typescript notes");
 	});
 
 	it("runs the recommendation prompt with its own system instruction and destroys the session", async () => {
@@ -282,15 +513,56 @@ describe("createChromeAskAiPromptSessionFactory", () => {
 		);
 	});
 
-	it("throws PromptApiUnavailableError when the model is not available yet", async () => {
-		for (const state of ["unavailable", "downloadable", "downloading"]) {
-			const createSession = createChromeAskAiPromptSessionFactory({
-				availability: async () => state,
-				create: async () => ({ prompt: async () => "" }),
-			});
-			await expect(createSession(systemInstruction)).rejects.toBeInstanceOf(
-				PromptApiUnavailableError,
+	it("throws PromptApiUnavailableError when the model is unavailable", async () => {
+		const createSession = createChromeAskAiPromptSessionFactory({
+			availability: async () => "unavailable",
+			create: async () => ({ prompt: async () => "" }),
+		});
+
+		await expect(createSession(systemInstruction)).rejects.toBeInstanceOf(
+			PromptApiUnavailableError,
+		);
+	});
+
+	it("starts model download for downloadable / downloading chat-session states", async () => {
+		for (const state of ["downloadable", "downloading"] as const) {
+			const logger = createMemoryLogger();
+			const fake = createWithDownload([{ loaded: 0.25 }]);
+			const events: PromptLifecycleEvent[] = [];
+			const createSession = createChromeAskAiPromptSessionFactory(
+				{
+					availability: async () => state,
+					create: fake.create,
+				},
+				{ logger },
 			);
+
+			const session = await createSession(systemInstruction, "ja", (event) =>
+				events.push(event),
+			);
+
+			expect(fake.sawMonitor()).toBe(true);
+			expect(await session.prompt("question")).toBe("model output");
+			expect(events).toEqual([
+				{ kind: "download-required" },
+				{
+					kind: "download-progress",
+					loaded: 0.25,
+					total: undefined,
+					ratio: 0.25,
+				},
+				{ kind: "session-created" },
+			]);
+			expect(logger.entries[0]).toEqual({
+				level: "info",
+				event: "ai.ask-ai.model-download-required",
+				fields: {
+					availability: state,
+					language: "ja",
+					context: "chat-session",
+				},
+			});
+			expect(JSON.stringify(logger.entries)).not.toContain(systemInstruction);
 		}
 	});
 

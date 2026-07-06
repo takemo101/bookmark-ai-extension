@@ -22,6 +22,7 @@ import type {
 	BookmarkApp,
 	Result,
 	SaveOutcome,
+	SaveStageDetail,
 } from "../lib/app/index";
 import type { CanonicalUrl } from "../lib/bookmarks/index";
 import type { CacheState } from "../lib/storage/index";
@@ -71,8 +72,16 @@ export type PopupEnvironment = {
  */
 export type SaveStage = "saving" | "extracting" | "analyzing" | "syncing";
 
+// Transient stage detail (model setup/download during `analyzing`), relayed
+// verbatim from the app boundary. Display-only; never persisted.
+export type { SaveStageDetail } from "../lib/app/index";
+
 /** A coarse progress event emitted while a save/re-analyze flow runs. */
-export type SaveProgress = { readonly stage: SaveStage };
+export type SaveProgress = {
+	readonly stage: SaveStage;
+	/** Transient model setup/download detail for the `analyzing` stage. */
+	readonly detail?: SaveStageDetail;
+};
 
 /** Observer the controller passes so the trail can advance as stages start. */
 export type ProgressObserver = (progress: SaveProgress) => void;
@@ -135,11 +144,11 @@ export function createPopupUseCases(
 ): PopupUseCases {
 	function relay(
 		onProgress: ProgressObserver | undefined,
-	): ((stage: SaveStage) => void) | undefined {
+	): Parameters<BookmarkApp["saveCurrentTab"]>[0] {
 		if (!onProgress) {
 			return undefined;
 		}
-		return (stage) => onProgress({ stage });
+		return (stage, detail) => onProgress({ stage, detail });
 	}
 
 	return {

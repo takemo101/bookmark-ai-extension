@@ -51,9 +51,12 @@ export type {
 	AskAiRecommendationRunner,
 	PromptApiAvailability,
 	PromptClient,
+	PromptLifecycleEvent,
+	PromptLifecycleObserver,
 } from "./prompt-api";
 export {
 	PromptApiUnavailableError,
+	PromptSessionCreateError,
 	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
@@ -121,4 +124,5 @@ export {
 
 export { toAnalysisProfile } from "./custom-profile";
 
+export type { AnalysisModelSetup, AnalyzePageOptions } from "./analyze-page";
 export { analyzePage } from "./analyze-page";

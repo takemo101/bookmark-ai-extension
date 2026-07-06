@@ -244,6 +244,11 @@
 							or to any developer server — analysis goes through Chrome's
 							built-in AI capability only.
 						</li>
+						<li>
+							On first use, Chrome may need to download its on-device AI
+							model. Bookmark AI shows setup/download progress in the popup
+							or Ask AI screen while Chrome prepares it.
+						</li>
 					</ul>
 				</div>
 			</section>
@@ -351,6 +356,16 @@
 							bring-your-own-key fallback, and the extension does not send
 							page content to any external AI provider or developer
 							server.
+						</p>
+					</details>
+					<details>
+						<summary>Why can the first AI use take a while?</summary>
+						<p>
+							Chrome may need to download its on-device Built-in AI model
+							before Prompt API analysis or Ask AI can run. Bookmark AI
+							shows setup/download progress in the popup or Ask AI screen;
+							keep that UI open until setup finishes. If progress appears
+							stuck for a long time, fully restart Chrome and try again.
 						</p>
 					</details>
 					<details>
