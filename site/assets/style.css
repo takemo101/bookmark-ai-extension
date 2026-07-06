@@ -141,6 +141,11 @@ code {
 	text-decoration: underline;
 }
 
+.site-nav .nav-install {
+	color: var(--accent);
+	font-weight: 700;
+}
+
 /* Sections */
 
 section {
@@ -234,6 +239,51 @@ section + section {
 	margin: 14px 0 0;
 	font-size: 0.88rem;
 	color: var(--ink-faint);
+}
+
+/* Install callout */
+
+.install-section {
+	padding-top: 0;
+}
+
+.install-panel {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 18px 28px;
+	align-items: center;
+	background: var(--surface);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	box-shadow: 0 8px 22px rgba(58, 52, 43, 0.08);
+	padding: 22px 24px;
+}
+
+.install-panel .eyebrow {
+	grid-column: 1 / -1;
+	margin: 0;
+	color: var(--green);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.install-panel h2 {
+	margin-bottom: 6px;
+}
+
+.install-panel p:not(.eyebrow) {
+	margin: 0;
+	color: var(--ink-muted);
+	max-width: 620px;
+}
+
+.install-actions {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
 }
 
 /* Mock popup (decorative) */
@@ -600,8 +650,13 @@ section + section {
 /* Responsive */
 
 @media (max-width: 800px) {
-	.hero .wrap {
+	.hero .wrap,
+	.install-panel {
 		grid-template-columns: 1fr;
+	}
+
+	.install-actions {
+		justify-content: flex-start;
 	}
 
 	.mock-popup {
