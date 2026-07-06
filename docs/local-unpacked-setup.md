@@ -23,6 +23,19 @@ After setup, the extension will:
 The extension does **not** store raw page excerpts and does **not** use external
 AI APIs in the MVP.
 
+## Chrome Built-in AI model download
+
+Bookmark AI uses Chrome Built-in AI / Prompt API for page analysis and Ask AI.
+If Chrome reports that its on-device AI model is `downloadable` or already
+`downloading`, the extension can ask Chrome to start or join that model setup
+flow from the popup or Ask AI screen.
+
+During first use, keep the popup or options page open while Chrome downloads the
+model. Progress is shown in the UI when Chrome reports it; if progress appears
+stuck for a long time, fully restart Chrome and try again. This model setup does
+not mean Bookmark AI is sending page excerpts, prompts, bookmark content, raw AI
+output, OAuth tokens, or Drive data to an external AI provider.
+
 ## Prerequisites
 
 Install or prepare:
@@ -229,6 +242,9 @@ At minimum, test these local-use flows:
 - search/filter bookmarks in options;
 - delete a bookmark and confirm it does not reappear after sync;
 - save while Prompt API is unavailable and confirm `aiStatus: "unavailable"`;
+- if Prompt API is available but the model is not downloaded yet, confirm the
+  popup or Ask AI screen shows model setup/download progress and eventually
+  proceeds after Chrome finishes setup;
 - if Prompt API is available, confirm `description`, `genre`, and `tags` are
   written in the browser UI language (Japanese or English, auto-selected;
   MIK-033) with `aiStatus: "ready"`.

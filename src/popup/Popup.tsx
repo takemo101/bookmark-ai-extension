@@ -14,6 +14,7 @@
  * through {@link usePopupTheme}; the popup reflects the saved preference but
  * exposes no selector — that lives in the Options app header.
  */
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useSyncExternalStore } from "react";
 import { type SupportedLanguage, detectUiLanguage } from "../lib/i18n/index";
 import { statusColor } from "../lib/theme/index";
@@ -325,7 +326,11 @@ function Flow({ flow, m }: { flow: FlowView; m: PopupMessages }) {
 	}
 	return (
 		<section style={{ ...styles.card, marginTop: 8 }}>
-			<Trail trail={flow.trail} m={m} />
+			<Trail
+				trail={flow.trail}
+				m={m}
+				modelSetup={flow.kind === "running" ? flow.modelSetup : undefined}
+			/>
 			{flow.kind === "running" ? (
 				<p
 					style={{
@@ -351,36 +356,160 @@ function Flow({ flow, m }: { flow: FlowView; m: PopupMessages }) {
 function Trail({
 	trail,
 	m,
+	modelSetup,
 }: {
 	trail: readonly TrailStage[];
 	m: PopupMessages;
+	modelSetup?: Extract<FlowView, { kind: "running" }>["modelSetup"];
 }) {
 	const { palette } = usePopupTheme();
-	return (
-		<ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
-			{trail.map((stage) => (
-				<li
-					key={stage.key}
+	function item(
+		stage: { readonly key: string; readonly status: TrailStageStatus },
+		label: string,
+	) {
+		return (
+			<li
+				key={stage.key}
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					fontSize: 12,
+					color:
+						stage.status === "pending" ? palette.inkFaint : palette.inkSoft,
+					padding: "1px 0",
+				}}
+			>
+				<span aria-hidden>{stageGlyph(stage.status)}</span>
+				<span>{label}</span>
+			</li>
+		);
+	}
+	function modelSetupItem(stage: TrailStage) {
+		const label = modelSetup?.downloading
+			? m.modelDownloading(modelSetup.percent)
+			: m.modelPreparing;
+		return (
+			<li
+				key={stage.key}
+				aria-live="polite"
+				style={{
+					display: "grid",
+					gridTemplateColumns: "20px 1fr",
+					gap: 8,
+					alignItems: "start",
+					padding: 10,
+					margin: "3px 0",
+					border: `1px solid ${palette.borderStrong}`,
+					background: palette.selected,
+					borderRadius: 12,
+					boxShadow: `0 4px 14px ${palette.shadow}`,
+				}}
+			>
+				<span
+					aria-hidden
 					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: 8,
-						fontSize: 12,
-						color:
-							stage.status === "pending" ? palette.inkFaint : palette.inkSoft,
-						padding: "1px 0",
+						width: 15,
+						height: 15,
+						marginTop: 1,
+						border: `2px solid ${palette.borderStrong}`,
+						borderTopColor: palette.accent,
+						borderRadius: "50%",
+						animation: "bookmark-ai-model-spin 0.8s linear infinite",
 					}}
-				>
-					<span aria-hidden>{stageGlyph(stage.status)}</span>
-					{/* Stage labels resolve from the dictionary by key so the trail
-					    follows the UI language (MIK-029); `stage.label` stays as the
-					    controller's language-neutral fallback. */}
-					<span>{m.trail[stage.key] ?? stage.label}</span>
-				</li>
-			))}
-		</ol>
+				/>
+				<div>
+					<div
+						style={{
+							fontSize: 13,
+							fontWeight: 800,
+							color: palette.ink,
+							lineHeight: 1.25,
+						}}
+					>
+						{label}
+					</div>
+					{modelSetup?.downloading ? (
+						<ModelSetupProgress percent={modelSetup.percent} />
+					) : null}
+					<div
+						style={{
+							fontSize: 10.5,
+							color: palette.inkSoft,
+							marginTop: 6,
+							lineHeight: 1.35,
+						}}
+					>
+						{m.modelSetupHint}
+					</div>
+				</div>
+			</li>
+		);
+	}
+	function ModelSetupProgress({ percent }: { percent?: number }) {
+		const trackStyle: CSSProperties = {
+			height: 6,
+			background: palette.paperInset,
+			borderRadius: 999,
+			overflow: "hidden",
+			marginTop: 7,
+		};
+		const fillStyle: CSSProperties = {
+			height: "100%",
+			width: percent !== undefined ? `${percent}%` : "38%",
+			borderRadius: 999,
+			background: palette.accent,
+			animation:
+				percent !== undefined
+					? "bookmark-ai-model-shimmer 1.5s linear infinite"
+					: "bookmark-ai-model-indeterminate 1.15s ease-in-out infinite",
+		};
+		const fill = <div aria-hidden style={fillStyle} />;
+		if (percent === undefined) {
+			return <div style={trackStyle}>{fill}</div>;
+		}
+		return (
+			<div
+				role="progressbar"
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-valuenow={percent}
+				style={trackStyle}
+			>
+				{fill}
+			</div>
+		);
+	}
+	return (
+		<>
+			<style>{MODEL_SETUP_TRAIL_CSS}</style>
+			<ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+				{trail.map((stage) => {
+					if (stage.key === "analyzing" && modelSetup) {
+						return modelSetupItem(stage);
+					}
+					return item(stage, m.trail[stage.key] ?? stage.label);
+				})}
+			</ol>
+		</>
 	);
 }
+
+const MODEL_SETUP_TRAIL_CSS = `
+@keyframes bookmark-ai-model-spin { to { transform: rotate(360deg); } }
+@keyframes bookmark-ai-model-shimmer {
+	0% { filter: brightness(0.92); }
+	50% { filter: brightness(1.18); }
+	100% { filter: brightness(0.92); }
+}
+@keyframes bookmark-ai-model-indeterminate {
+	0% { transform: translateX(-110%); }
+	100% { transform: translateX(270%); }
+}
+@media (prefers-reduced-motion: reduce) {
+	* { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+`;
 
 function Receipt({
 	receipt,
@@ -585,14 +714,7 @@ function RecentDetail({
 		>
 			<header>
 				<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-					<button
-						type="button"
-						style={styles.subtleButton}
-						onClick={onClose}
-						// Best-effort focus management: land keyboard focus inside the
-						// dialog when it opens.
-						autoFocus
-					>
+					<button type="button" style={styles.subtleButton} onClick={onClose}>
 						{m.back}
 					</button>
 					<span style={{ flex: 1 }} />
@@ -621,10 +743,8 @@ function RecentDetail({
 						{detail.title}
 					</h2>
 				</div>
-				<a
+				<ExternalLink
 					href={detail.url}
-					target="_blank"
-					rel="noreferrer"
 					style={{
 						fontSize: 11,
 						color: palette.accent,
@@ -632,7 +752,7 @@ function RecentDetail({
 					}}
 				>
 					{detail.url}
-				</a>
+				</ExternalLink>
 			</header>
 
 			{detail.description ? (
@@ -714,6 +834,22 @@ function formatDate(iso: string): string {
 		month: "short",
 		day: "numeric",
 	});
+}
+
+function ExternalLink({
+	href,
+	style,
+	children,
+}: {
+	href: string;
+	style?: CSSProperties;
+	children: ReactNode;
+}) {
+	return (
+		<a href={href} target="_blank" rel="noreferrer" style={style}>
+			{children}
+		</a>
+	);
 }
 
 function Footer({ m }: { m: PopupMessages }) {

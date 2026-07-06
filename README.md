@@ -96,6 +96,19 @@ The dummy-env build above is also the quick way to confirm the bundle compiles
 and `dist/manifest.json` keeps only the MVP permissions and the `drive.file`
 scope, without needing a real OAuth client.
 
+### Chrome Built-in AI model setup
+
+Bookmark AI uses Chrome Built-in AI / Prompt API for analysis and Ask AI. On
+first use, Chrome may need to download its on-device AI model before the
+extension can generate AI results. The popup and Ask AI screen show model setup
+or download progress while this happens.
+
+Keep the popup or options page open until setup finishes. If progress appears
+stuck for a long time, fully restart Chrome and try again. Page excerpts,
+bookmark content, prompts, and model output are not sent to an external AI
+service by Bookmark AI; the model setup is Chrome preparing its local built-in
+AI capability.
+
 ### Manual smoke test
 
 After loading the unpacked build with a real dev client ID, run the

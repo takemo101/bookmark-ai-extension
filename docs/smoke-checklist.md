@@ -23,6 +23,13 @@ background and [`design.md`](design.md) "Save Flow" for the intended behavior.
 4. A Chrome channel where the Prompt API can be enabled (for the AI-available
    path). The AI-unavailable path is checkable on any channel.
 
+> Note: the first AI run may require Chrome to download its on-device Built-in
+> AI / Prompt API model. Keep the popup or options page open while setup runs.
+> If download progress appears stuck for a long time, fully restart Chrome and
+> try again. This is Chrome preparing its local model; Bookmark AI does not send
+> page excerpts, prompts, bookmark data, raw AI output, OAuth tokens, or Drive
+> payloads to an external AI provider.
+
 ## Obtaining the local unpacked extension ID
 
 The dev OAuth client is bound to the extension ID, so this is a chicken-and-egg
@@ -68,6 +75,9 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
 
 - [ ] With the Prompt API available, saving a page walks the receipt trail:
       **saving → extracting → analyzing → syncing** (genuine per-stage progress).
+- [ ] If Chrome reports the local model as `downloadable` or `downloading`, the
+      popup shows model setup/download progress, then continues analysis once
+      Chrome finishes preparing the model.
 - [ ] The receipt shows a `description`, a `genre`, and `tags` in the browser
       UI language (Japanese or English, auto-selected; MIK-033), and the
       record's `aiStatus` is `ready`.
@@ -95,6 +105,10 @@ VITE_GOOGLE_OAUTH_CLIENT_ID=dummy.apps.googleusercontent.com bun run build
       record. From an unrelated active tab it returns a safe "open the page in
       the active tab" error rather than reaching for a tab the extension was
       not granted.
+- [ ] In **Ask AI**, if Chrome reports the model as `downloadable` or
+      `downloading`, the chat shows an assistant setup card with spinner and
+      progress; once setup completes, Ask AI can produce AI-ranked answers while
+      preserving local fallback behavior if setup fails.
 
 ### 6. Unsynced local mutations survive Drive failure (MIK-014)
 

@@ -19,6 +19,7 @@ import type {
 import { ok as driveOk, err as driveErr } from "../drive/index";
 import type {
 	AnalysisInput,
+	AnalysisModelSetup,
 	AnalysisOutcome,
 	AnalysisProfile,
 } from "../ai/index";
@@ -32,11 +33,14 @@ import type { CacheState, LocalCache } from "../storage/index";
 import { createBookmarkApp } from "./bookmark-app";
 import type {
 	ActiveTab,
+	AnalyzeCallOptions,
 	AnalyzerPort,
 	BookmarkRepositoryPort,
 	Clock,
 	IdGenerator,
 	PageExtractorPort,
+	SaveStage,
+	SaveStageDetail,
 	TabProviderPort,
 } from "./ports";
 import type { AppError } from "./errors";
@@ -106,6 +110,8 @@ class FakeRepository implements BookmarkRepositoryPort {
 class FakeAnalyzer implements AnalyzerPort {
 	calls: AnalysisInput[] = [];
 	customProfileCalls: (readonly AnalysisProfile[] | undefined)[] = [];
+	/** Model setup events to emit through the per-call `onModelSetup` reporter. */
+	modelSetupEvents: readonly AnalysisModelSetup[] = [];
 	constructor(private outcome: AnalysisOutcome) {}
 	setOutcome(outcome: AnalysisOutcome) {
 		this.outcome = outcome;
@@ -113,9 +119,13 @@ class FakeAnalyzer implements AnalyzerPort {
 	async analyze(
 		input: AnalysisInput,
 		customProfiles?: readonly AnalysisProfile[],
+		options?: AnalyzeCallOptions,
 	): Promise<AnalysisOutcome> {
 		this.calls.push(input);
 		this.customProfileCalls.push(customProfiles);
+		for (const event of this.modelSetupEvents) {
+			options?.onModelSetup?.(event);
+		}
 		return this.outcome;
 	}
 }
@@ -323,6 +333,37 @@ describe("createBookmarkApp", () => {
 			if (!result.ok) return;
 			expect(result.value.aiStatus).toBe("ready");
 			expect(result.value.driveSynced).toBe(true);
+		});
+
+		it("forwards transient model setup detail on the analyzing stage", async () => {
+			const { app, analyzer } = makeHarness();
+			analyzer.modelSetupEvents = [
+				{ kind: "model-preparing" },
+				{ kind: "model-downloading", ratio: 0.5 },
+				{ kind: "model-ready" },
+			];
+
+			const events: Array<{ stage: SaveStage; detail?: SaveStageDetail }> = [];
+			const saved = await app.saveCurrentTab((stage, detail) => {
+				events.push({ stage, detail });
+			});
+
+			expect(saved.ok).toBe(true);
+			// Model setup detail rides extra `analyzing` progress events between the
+			// stage's start and the final `syncing` event; the durable outcome is
+			// untouched by it.
+			expect(events).toEqual([
+				{ stage: "saving", detail: undefined },
+				{ stage: "extracting", detail: undefined },
+				{ stage: "analyzing", detail: undefined },
+				{ stage: "analyzing", detail: { kind: "model-preparing" } },
+				{
+					stage: "analyzing",
+					detail: { kind: "model-downloading", ratio: 0.5 },
+				},
+				{ stage: "analyzing", detail: { kind: "model-ready" } },
+				{ stage: "syncing", detail: undefined },
+			]);
 		});
 
 		it("resolves with the final ready record after foreground analysis", async () => {

@@ -2138,6 +2138,81 @@ describe("Ask AI chat layout polish (MIK-049)", () => {
 		expect(html).toContain("askai-thinking");
 	});
 
+	it("renders the Assistant Setup Card while the local model is preparing", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: [{ id: "m-user", role: "user", text: "typescript testing" }],
+				answering: true,
+				canClear: true,
+				modelSetup: { downloading: false },
+			}),
+			"ask-ai",
+		);
+
+		expect(html).toContain("Assistant setup");
+		expect(html).toContain("Preparing AI model…");
+		expect(html).toContain("Keep this tab open");
+		expect(html).toContain("askai-setup-spin");
+		expect(html).toContain("prefers-reduced-motion:reduce");
+	});
+
+	it("renders known and unknown download progress without showing 0%", () => {
+		const known = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: [{ id: "m-user", role: "user", text: "typescript testing" }],
+				answering: true,
+				modelSetup: { downloading: true, percent: 42 },
+			}),
+			"ask-ai",
+		);
+		expect(known).toContain("Downloading AI model… 42%");
+		expect(known).toContain('role="progressbar"');
+		expect(known).toContain('aria-valuenow="42"');
+
+		const zero = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: [{ id: "m-user", role: "user", text: "typescript testing" }],
+				answering: true,
+				modelSetup: { downloading: true, percent: 0 },
+			}),
+			"ask-ai",
+		);
+		expect(zero).toContain("Downloading AI model…");
+		expect(zero).not.toContain("Downloading AI model… 0%");
+
+		const unknown = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				messages: [{ id: "m-user", role: "user", text: "typescript testing" }],
+				answering: true,
+				modelSetup: { downloading: true },
+			}),
+			"ask-ai",
+		);
+		expect(unknown).toContain("Downloading AI model…");
+		expect(unknown).toContain("askai-setup-indeterminate");
+		expect(unknown).not.toContain("aria-valuenow");
+	});
+
+	it("localizes the Assistant Setup Card for the ja language", () => {
+		const html = renderWithAskAi(
+			syncedView,
+			askAiViewOf({
+				answering: true,
+				modelSetup: { downloading: true, percent: 8 },
+			}),
+			"ask-ai",
+			"ja",
+		);
+
+		expect(html).toContain("アシスタントの準備");
+		expect(html).toContain("AIモデルをダウンロード中… 8%");
+		expect(html).toContain("このタブを開いたまま");
+	});
+
 	it("hides the jump-to-latest button until the user scrolls away", () => {
 		const html = renderWithAskAi(
 			syncedView,

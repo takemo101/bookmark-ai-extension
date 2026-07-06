@@ -264,6 +264,100 @@ describe("Ask AI safe statuses without AI calls (MIK-046)", () => {
 	});
 });
 
+describe("Ask AI model setup progress", () => {
+	const records = [
+		record({
+			id: "bm-ts",
+			canonicalUrl: "https://ts.test/handbook",
+			url: "https://ts.test/handbook",
+			title: "TypeScript testing handbook",
+			tags: ["typescript"],
+		}),
+	];
+
+	it("reports transient model setup progress from Prompt API lifecycle events and clears it after the answer", async () => {
+		let releaseExtraction: (value: string) => void = () => {};
+		const pendingExtraction = new Promise<string>((resolve) => {
+			releaseExtraction = resolve;
+		});
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			runKeywordExtractionPrompt(_request, observer) {
+				observer?.({ kind: "download-required" });
+				observer?.({ kind: "download-progress", loaded: 0, ratio: 0 });
+				observer?.({
+					kind: "download-progress",
+					loaded: 42,
+					total: 100,
+					ratio: 0.42,
+				});
+				return pendingExtraction;
+			},
+			async runRecommendationPrompt() {
+				return aiOutput([{ id: "bm-ts", reason: "Covers this." }]);
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+
+		controller.setQuestion("typescript testing");
+		const submitted = controller.submit();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(controller.getView().answering).toBe(true);
+		expect(controller.getView().modelSetup).toEqual({
+			downloading: true,
+			percent: 42,
+		});
+
+		releaseExtraction("");
+		await submitted;
+
+		expect(controller.getView().answering).toBe(false);
+		expect(controller.getView().modelSetup).toBeUndefined();
+	});
+
+	it("keeps setup progress indeterminate when the download ratio is unknown or zero", async () => {
+		for (const progress of [
+			{ loaded: 200 },
+			{ loaded: 0, ratio: 0 },
+		] as const) {
+			let releaseExtraction: (value: string) => void = () => {};
+			const pendingExtraction = new Promise<string>((resolve) => {
+				releaseExtraction = resolve;
+			});
+			const deps: AskAiDeps = {
+				async loadBookmarks() {
+					return records;
+				},
+				runKeywordExtractionPrompt(_request, observer) {
+					observer?.({ kind: "download-required" });
+					observer?.({ kind: "download-progress", ...progress });
+					return pendingExtraction;
+				},
+				async runRecommendationPrompt() {
+					return aiOutput([{ id: "bm-ts", reason: "Covers this." }]);
+				},
+				language: "en",
+			};
+			const controller = createAskAiController(deps);
+
+			controller.setQuestion("typescript testing");
+			const submitted = controller.submit();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			expect(controller.getView().modelSetup).toEqual({ downloading: true });
+
+			releaseExtraction("");
+			await submitted;
+		}
+	});
+});
+
 describe("Ask AI recommendation success (MIK-046)", () => {
 	const records = [
 		record({

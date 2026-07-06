@@ -24,6 +24,7 @@
  * {@link PromptClient}. The namespace can also be injected for tests.
  */
 import type { SupportedLanguage } from "../i18n/index";
+import { errorLogFields, noopLogger, type Logger } from "../logging/index";
 import { analysisSystemPrompt } from "./prompt";
 
 /** Normalized availability reported by the adapter. */
@@ -32,6 +33,28 @@ export type PromptApiAvailability =
 	| "downloadable"
 	| "downloading"
 	| "unavailable";
+
+/**
+ * Safe, metadata-only lifecycle events the adapter emits while running one
+ * prompt: model download progress (numbers only, never content) and the moment
+ * the session exists. `create({ monitor })` starts or joins the built-in model
+ * download when availability is `downloadable`/`downloading`, so these events
+ * are what a foreground UI needs to show "downloading the model" honestly.
+ */
+export type PromptLifecycleEvent =
+	| { readonly kind: "download-required" }
+	| {
+			readonly kind: "download-progress";
+			/** Raw `loaded` from the browser event (a 0..1 fraction or a byte count). */
+			readonly loaded: number;
+			readonly total?: number;
+			/** Normalized 0..1 completion when derivable from `loaded`/`total`. */
+			readonly ratio?: number;
+	  }
+	| { readonly kind: "session-created" };
+
+/** Best-effort lifecycle observer; a throwing observer never breaks the flow. */
+export type PromptLifecycleObserver = (event: PromptLifecycleEvent) => void;
 
 /**
  * The port the analyzer talks to. A fake implementing this interface is all a
@@ -46,8 +69,14 @@ export interface PromptClient {
 	/**
 	 * Run one prompt and return the raw model text. `language`, when given, is
 	 * the output language requested from the session (default Japanese).
+	 * `observer`, when given, receives safe {@link PromptLifecycleEvent}s (model
+	 * download progress, session creation) while the call runs.
 	 */
-	prompt(input: string, language?: SupportedLanguage): Promise<string>;
+	prompt(
+		input: string,
+		language?: SupportedLanguage,
+		observer?: PromptLifecycleObserver,
+	): Promise<string>;
 }
 
 /**
@@ -59,6 +88,26 @@ export class PromptApiUnavailableError extends Error {
 	constructor(message = "Chrome Built-in AI / Prompt API is unavailable") {
 		super(message);
 		this.name = "PromptApiUnavailableError";
+	}
+}
+
+/**
+ * Thrown by the adapter's {@link PromptClient.prompt} when `create()` — the
+ * call that also performs the model download — rejects. The message carries
+ * only the cause's error *name*, never its message, so downstream `aiError`
+ * text and logs stay free of anything the browser might have embedded.
+ */
+export class PromptSessionCreateError extends Error {
+	/** The rejecting error's name (e.g. `"NotSupportedError"`), for safe logs. */
+	readonly causeName: string;
+	constructor(cause: unknown) {
+		const causeName =
+			cause instanceof Error && cause.name.length > 0
+				? cause.name
+				: typeof cause;
+		super(`Prompt API model session creation failed (${causeName})`);
+		this.name = "PromptSessionCreateError";
+		this.causeName = causeName;
 	}
 }
 
@@ -83,6 +132,105 @@ export interface PromptModelNamespace {
 /** `expectedOutputs` for one target language (MIK-029). */
 function expectedTextOutputs(language: SupportedLanguage) {
 	return [{ type: "text", languages: [language] }] as const;
+}
+
+/** The structural slice of the `create({ monitor })` callback argument we use. */
+type PromptCreateMonitorTarget = {
+	addEventListener?(type: string, listener: (event: unknown) => void): void;
+};
+
+function finiteNumber(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value)
+		? value
+		: undefined;
+}
+
+function clamp01(value: number): number {
+	return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Normalize one `downloadprogress` event to safe numbers, or `null` when the
+ * event is malformed (design: malformed progress is ignored, the create/prompt
+ * flow continues). Chrome has shipped both `loaded` as a 0..1 fraction and as
+ * a byte count paired with `total`, so the ratio is derived defensively.
+ */
+function normalizeDownloadProgress(
+	event: unknown,
+): Extract<PromptLifecycleEvent, { kind: "download-progress" }> | null {
+	if (typeof event !== "object" || event === null) {
+		return null;
+	}
+	const raw = event as { loaded?: unknown; total?: unknown };
+	const loaded = finiteNumber(raw.loaded);
+	if (loaded === undefined || loaded < 0) {
+		return null;
+	}
+	const total = finiteNumber(raw.total);
+	const ratio =
+		total !== undefined && total > 0
+			? clamp01(loaded / total)
+			: loaded <= 1
+				? loaded
+				: undefined;
+	return { kind: "download-progress", loaded, total, ratio };
+}
+
+/** Invoke the observer defensively: reporting must never affect the flow. */
+function notify(
+	observer: PromptLifecycleObserver | undefined,
+	event: PromptLifecycleEvent,
+): void {
+	if (!observer) {
+		return;
+	}
+	try {
+		observer(event);
+	} catch {
+		// Best-effort reporting only.
+	}
+}
+
+/**
+ * The `monitor` callback passed to `create()`: forwards normalized
+ * `downloadprogress` events to the observer. Passed unconditionally — it is
+ * inert when the model is already available or the browser never calls it.
+ */
+function downloadMonitor(observer: PromptLifecycleObserver | undefined) {
+	return (target: PromptCreateMonitorTarget) => {
+		if (typeof target?.addEventListener !== "function") {
+			return;
+		}
+		target.addEventListener("downloadprogress", (event) => {
+			const progress = normalizeDownloadProgress(event);
+			if (progress) {
+				notify(observer, progress);
+			}
+		});
+	};
+}
+
+/**
+ * Create a session, wrapping a rejecting `create()` (which includes model
+ * download failures) in {@link PromptSessionCreateError} so callers can log
+ * and map it distinctly from a later prompt failure.
+ */
+async function createSession(
+	namespace: PromptModelNamespace,
+	options: Record<string, unknown>,
+	observer?: PromptLifecycleObserver,
+): Promise<PromptSession> {
+	let session: PromptSession;
+	try {
+		session = await namespace.create({
+			...options,
+			monitor: downloadMonitor(observer),
+		});
+	} catch (cause) {
+		throw new PromptSessionCreateError(cause);
+	}
+	notify(observer, { kind: "session-created" });
+	return session;
 }
 
 /** Locate the language-model namespace, tolerating both known global shapes. */
@@ -154,16 +302,24 @@ export function createChromePromptClient(
 		async prompt(
 			input: string,
 			language: SupportedLanguage = "ja",
+			observer?: PromptLifecycleObserver,
 		): Promise<string> {
 			if (!namespace) {
 				throw new PromptApiUnavailableError();
 			}
-			const session = await namespace.create({
-				initialPrompts: [
-					{ role: "system", content: analysisSystemPrompt(language) },
-				],
-				expectedOutputs: expectedTextOutputs(language),
-			});
+			// `create({ monitor })` starts (or joins) the built-in model download
+			// when availability is downloadable/downloading; the monitor relays
+			// safe progress numbers to the observer.
+			const session = await createSession(
+				namespace,
+				{
+					initialPrompts: [
+						{ role: "system", content: analysisSystemPrompt(language) },
+					],
+					expectedOutputs: expectedTextOutputs(language),
+				},
+				observer,
+			);
 			try {
 				return await session.prompt(input);
 			} finally {
@@ -191,6 +347,7 @@ export type AskAiPromptRequest = {
 export type AskAiRecommendationRunner = (
 	request: AskAiPromptRequest,
 	language?: SupportedLanguage,
+	observer?: PromptLifecycleObserver,
 ) => Promise<string>;
 
 /**
@@ -203,28 +360,59 @@ export type AskAiRecommendationRunner = (
  */
 export function createChromeAskAiRecommendationRunner(
 	namespace: PromptModelNamespace | null = resolveNamespace(),
+	options: { logger?: Logger } = {},
 ): AskAiRecommendationRunner {
-	return async (request, language = "ja") => {
+	const logger = options.logger ?? noopLogger;
+	return async (request, language = "ja", observer) => {
 		if (!namespace) {
 			throw new PromptApiUnavailableError();
 		}
-		await assertAvailable(namespace, language);
-		const session = await namespace.create({
-			initialPrompts: [{ role: "system", content: request.systemInstruction }],
-			expectedOutputs: expectedTextOutputs(language),
-		});
+		await assertCanCreateSession(
+			namespace,
+			language,
+			logger,
+			"recommendation",
+			observer,
+		);
+		const session = await createSession(
+			namespace,
+			{
+				initialPrompts: [
+					{ role: "system", content: request.systemInstruction },
+				],
+				expectedOutputs: expectedTextOutputs(language),
+			},
+			askAiLifecycleObserver(logger, language, "recommendation", observer),
+		);
 		try {
 			return await session.prompt(request.prompt);
+		} catch (error) {
+			logger.log("warn", "ai.ask-ai.prompt-failed", {
+				...errorLogFields(error),
+				language,
+				context: "recommendation",
+			});
+			throw error;
 		} finally {
 			session.destroy?.();
 		}
 	};
 }
 
-/** Throws {@link PromptApiUnavailableError} unless the model can run NOW. */
-async function assertAvailable(
+/**
+ * Throws {@link PromptApiUnavailableError} unless the model can run NOW.
+ *
+ * Ask AI can start the Chrome-managed model setup flow for `downloadable` /
+ * `downloading` by proceeding to `create({ monitor })`. `unavailable` still
+ * falls back like before. All reported setup/download state is safe metadata
+ * only: availability, language, surface, and numeric progress.
+ */
+async function assertCanCreateSession(
 	namespace: PromptModelNamespace,
 	language: SupportedLanguage,
+	logger: Logger,
+	context: "recommendation" | "chat-session",
+	observer?: PromptLifecycleObserver,
 ): Promise<void> {
 	let availability: PromptApiAvailability;
 	try {
@@ -233,12 +421,56 @@ async function assertAvailable(
 				expectedOutputs: expectedTextOutputs(language),
 			}),
 		);
-	} catch {
+	} catch (error) {
+		logger.log("warn", "ai.ask-ai.availability-threw", {
+			...errorLogFields(error),
+			language,
+			context,
+		});
 		throw new PromptApiUnavailableError();
 	}
-	if (availability !== "available") {
+	if (availability === "unavailable") {
+		logger.log("warn", "ai.ask-ai.model-unavailable", {
+			availability,
+			language,
+			context,
+		});
 		throw new PromptApiUnavailableError();
 	}
+	if (availability === "downloadable" || availability === "downloading") {
+		logger.log("info", "ai.ask-ai.model-download-required", {
+			availability,
+			language,
+			context,
+		});
+		notify(observer, { kind: "download-required" });
+	}
+}
+
+function askAiLifecycleObserver(
+	logger: Logger,
+	language: SupportedLanguage,
+	context: "recommendation" | "chat-session",
+	observer?: PromptLifecycleObserver,
+): PromptLifecycleObserver {
+	return (event) => {
+		if (event.kind === "download-required") {
+			notify(observer, event);
+			return;
+		}
+		if (event.kind === "download-progress") {
+			logger.log("debug", "ai.ask-ai.model-download-progress", {
+				loaded: event.loaded,
+				total: event.total,
+				ratio: event.ratio,
+				language,
+				context,
+			});
+		} else {
+			logger.log("info", "ai.ask-ai.session-created", { language, context });
+		}
+		notify(observer, event);
+	};
 }
 
 /**
@@ -261,6 +493,7 @@ export type AskAiPromptSessionHandle = {
 export type AskAiPromptSessionFactory = (
 	systemInstruction: string,
 	language?: SupportedLanguage,
+	observer?: PromptLifecycleObserver,
 ) => Promise<AskAiPromptSessionHandle>;
 
 /**
@@ -272,19 +505,40 @@ export type AskAiPromptSessionFactory = (
  */
 export function createChromeAskAiPromptSessionFactory(
 	namespace: PromptModelNamespace | null = resolveNamespace(),
+	options: { logger?: Logger } = {},
 ): AskAiPromptSessionFactory {
-	return async (systemInstruction, language = "ja") => {
+	const logger = options.logger ?? noopLogger;
+	return async (systemInstruction, language = "ja", observer) => {
 		if (!namespace) {
 			throw new PromptApiUnavailableError();
 		}
-		await assertAvailable(namespace, language);
-		const session = await namespace.create({
-			initialPrompts: [{ role: "system", content: systemInstruction }],
-			expectedOutputs: expectedTextOutputs(language),
-		});
+		await assertCanCreateSession(
+			namespace,
+			language,
+			logger,
+			"chat-session",
+			observer,
+		);
+		const session = await createSession(
+			namespace,
+			{
+				initialPrompts: [{ role: "system", content: systemInstruction }],
+				expectedOutputs: expectedTextOutputs(language),
+			},
+			askAiLifecycleObserver(logger, language, "chat-session", observer),
+		);
 		return {
-			prompt(input) {
-				return session.prompt(input);
+			async prompt(input) {
+				try {
+					return await session.prompt(input);
+				} catch (error) {
+					logger.log("warn", "ai.ask-ai.prompt-failed", {
+						...errorLogFields(error),
+						language,
+						context: "chat-session",
+					});
+					throw error;
+				}
 			},
 			destroy() {
 				session.destroy?.();

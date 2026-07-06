@@ -22,6 +22,7 @@ import {
 	resolveAnalysisProfileDisplay,
 	type SaveOutcome,
 	type SaveStage,
+	type SaveStageDetail,
 } from "./use-cases";
 import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
@@ -120,10 +121,28 @@ export type SaveReceiptView = {
 	readonly driveWarning?: string;
 };
 
+/**
+ * Transient model setup/download state shown under the running trail while the
+ * `analyzing` stage prepares Chrome's built-in model (MIK download flow).
+ * Display-only: it never touches the durable bookmark `AiStatus`, and it
+ * disappears once the model is ready or the flow moves on.
+ */
+export type ModelSetupView = {
+	/** `false` while preparing (no progress events yet), `true` once downloading. */
+	readonly downloading: boolean;
+	/** Whole-percent download progress, when the browser reported a ratio. */
+	readonly percent?: number;
+};
+
 /** The flow region of the receipt: idle, running a trail, done, or errored. */
 export type FlowView =
 	| { readonly kind: "idle" }
-	| { readonly kind: "running"; readonly trail: readonly TrailStage[] }
+	| {
+			readonly kind: "running";
+			readonly trail: readonly TrailStage[];
+			/** Present while the AI model is being prepared/downloaded. */
+			readonly modelSetup?: ModelSetupView;
+	  }
 	| {
 			readonly kind: "done";
 			readonly trail: readonly TrailStage[];
@@ -340,10 +359,18 @@ export function createPopupController(
 			deleteError: undefined,
 		});
 
-		const onProgress: ProgressObserver = ({ stage }) => {
-			// Only advance while the flow is still running.
+		const onProgress: ProgressObserver = ({ stage, detail }) => {
+			// Only advance while the flow is still running. Model setup detail is
+			// transient: it shows while events carry it and clears as soon as an
+			// event arrives without it (model ready, or a later stage).
 			if (view.flow.kind === "running") {
-				setView({ flow: { kind: "running", trail: runningTrail(stage) } });
+				setView({
+					flow: {
+						kind: "running",
+						trail: runningTrail(stage),
+						modelSetup: toModelSetupView(detail),
+					},
+				});
 			}
 		};
 
@@ -461,6 +488,28 @@ export function createPopupController(
 			setView(mapState(state));
 		},
 	};
+}
+
+/**
+ * Map transient stage detail onto the running flow's model setup view.
+ * `model-ready` (and absent detail) clear the line; a malformed/missing ratio
+ * degrades to a percent-less "downloading" message.
+ */
+function toModelSetupView(
+	detail: SaveStageDetail | undefined,
+): ModelSetupView | undefined {
+	if (!detail || detail.kind === "model-ready") {
+		return undefined;
+	}
+	if (detail.kind === "model-preparing") {
+		return { downloading: false };
+	}
+	const ratio = detail.ratio;
+	const percent =
+		typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0
+			? Math.round(Math.min(1, ratio) * 100)
+			: undefined;
+	return { downloading: true, percent };
 }
 
 function toRecentDetail(record: BookmarkRecord): PopupDetailView {

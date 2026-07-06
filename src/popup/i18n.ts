@@ -35,6 +35,9 @@ export type PopupMessages = {
 	readonly saving: string;
 	readonly runningNotice: string;
 	readonly trail: Readonly<Record<SaveStage, string>>;
+	readonly modelPreparing: string;
+	readonly modelDownloading: (percent?: number) => string;
+	readonly modelSetupHint: string;
 	readonly savedLocally: string;
 	readonly unavailableReceipt: string;
 	readonly failedReceipt: (message: string) => string;
@@ -80,6 +83,13 @@ const EN: PopupMessages = {
 		analyzing: "AI analyzing",
 		syncing: "Synced to Drive",
 	},
+	modelPreparing: "Preparing the AI model…",
+	modelDownloading: (percent) =>
+		percent === undefined
+			? "Downloading the AI model…"
+			: `Downloading the AI model… ${percent}%`,
+	modelSetupHint:
+		"Chrome is preparing the model. Keep this popup open while it finishes.",
 	savedLocally: "saved locally",
 	unavailableReceipt:
 		"Saved without AI — the Prompt API was unavailable. Re-analyze later from Options.",
@@ -127,6 +137,13 @@ const JA: PopupMessages = {
 		analyzing: "AIが分析中",
 		syncing: "Driveへ同期",
 	},
+	modelPreparing: "AIモデルを準備中…",
+	modelDownloading: (percent) =>
+		percent === undefined
+			? "AIモデルをダウンロード中…"
+			: `AIモデルをダウンロード中… ${percent}%`,
+	modelSetupHint:
+		"Chromeのモデルを準備しています。ポップアップを開いたままお待ちください。",
 	savedLocally: "ローカル保存のみ",
 	unavailableReceipt:
 		"AIなしで保存しました（Prompt APIが利用できません）。後で設定ページから再分析できます。",

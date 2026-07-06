@@ -166,6 +166,95 @@ describe("Popup", () => {
 			expect(html).toContain("Keep this popup open");
 			expect(html).toContain("stay on the saved page until it finishes");
 		});
+
+		it("shows model setup as the active trail item after page extraction", () => {
+			const html = render(
+				viewOf({
+					flow: {
+						kind: "running",
+						trail: runningTrail(),
+						modelSetup: { downloading: false },
+					},
+					canSave: false,
+				}),
+			);
+
+			expect(html).toContain("Preparing the AI model…");
+			expect(html).toContain("Chrome is preparing the model");
+			expect(html).toContain("bookmark-ai-model-spin");
+			expect(html).toContain("box-shadow:");
+			expect(html.indexOf("Page excerpt extracted")).toBeLessThan(
+				html.indexOf("Preparing the AI model…"),
+			);
+			expect(html).not.toContain("AI analyzing");
+		});
+
+		it("shows download progress with a percentage when known", () => {
+			const html = render(
+				viewOf({
+					flow: {
+						kind: "running",
+						trail: runningTrail(),
+						modelSetup: { downloading: true, percent: 42 },
+					},
+					canSave: false,
+				}),
+			);
+
+			expect(html).toContain("Downloading the AI model… 42%");
+			expect(html).toContain('role="progressbar"');
+			expect(html).toContain('aria-valuenow="42"');
+			expect(html).toContain("bookmark-ai-model-shimmer");
+			expect(html).not.toContain("AI analyzing");
+		});
+
+		it("shows a percent-less download message when the ratio is unknown", () => {
+			const html = render(
+				viewOf({
+					flow: {
+						kind: "running",
+						trail: runningTrail(),
+						modelSetup: { downloading: true },
+					},
+					canSave: false,
+				}),
+			);
+
+			expect(html).toContain("Downloading the AI model…");
+			expect(html).toContain("bookmark-ai-model-indeterminate");
+			// No percentage is appended to the message when the ratio is unknown.
+			expect(html).not.toMatch(/Downloading the AI model… \d/);
+			expect(html).not.toContain('role="progressbar"');
+		});
+
+		it("shows no model setup line during an ordinary analysis", () => {
+			const html = render(
+				viewOf({
+					flow: { kind: "running", trail: runningTrail() },
+					canSave: false,
+				}),
+			);
+
+			expect(html).not.toContain("AI model");
+		});
+
+		it("localizes the model download detail (ja)", () => {
+			const html = render(
+				viewOf({
+					flow: {
+						kind: "running",
+						trail: runningTrail(),
+						modelSetup: { downloading: true, percent: 8 },
+					},
+					canSave: false,
+				}),
+				"ja",
+			);
+
+			expect(html).toContain("AIモデルをダウンロード中… 8%");
+			expect(html).toContain("Chromeのモデルを準備しています");
+			expect(html).not.toContain("AIが分析中");
+		});
 	});
 
 	describe("recent detail (MIK-028)", () => {

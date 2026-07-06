@@ -28,9 +28,10 @@ export function createAnalyzerPort(
 	options: { logger?: Logger } = {},
 ): AnalyzerPort {
 	return {
-		analyze(input, customProfiles) {
+		analyze(input, customProfiles, callOptions) {
 			return analyzePage(client, input, customProfiles, {
 				logger: options.logger,
+				onModelSetup: callOptions?.onModelSetup,
 			});
 		},
 	};

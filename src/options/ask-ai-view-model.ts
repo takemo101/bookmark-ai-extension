@@ -59,6 +59,8 @@ import {
 	type AskAiKeywordExtractionPrompt,
 	type AskAiRecommendationPrompt,
 	MAX_ASK_AI_RETRY_PROMPT_CANDIDATES,
+	type PromptLifecycleEvent,
+	type PromptLifecycleObserver,
 	buildAskAiKeywordExtractionPrompt,
 	buildAskAiRecommendationPrompt,
 	parseAskAiKeywordExtraction,
@@ -125,6 +127,10 @@ export type AskAiChatMessage =
 	  };
 
 /** The immutable snapshot the Ask AI screen renders. */
+export type AskAiModelSetupView =
+	| { readonly downloading: false }
+	| { readonly downloading: true; readonly percent?: number };
+
 export type AskAiView = {
 	/** The draft question exactly as typed (trimming happens only for policy). */
 	readonly question: string;
@@ -138,6 +144,8 @@ export type AskAiView = {
 	readonly answering: boolean;
 	/** The chat transcript, oldest first. Empty before the first submit. */
 	readonly messages: readonly AskAiChatMessage[];
+	/** Transient local-model setup/download state. Never persisted. */
+	readonly modelSetup?: AskAiModelSetupView;
 	/** Whether clear-session has anything to discard. */
 	readonly canClear: boolean;
 };
@@ -167,6 +175,7 @@ export type AskAiDeps = {
 	 */
 	runKeywordExtractionPrompt(
 		request: AskAiKeywordExtractionPrompt,
+		observer?: PromptLifecycleObserver,
 	): Promise<string>;
 	/**
 	 * Run the compact recommendation prompt through the Prompt API and return
@@ -174,7 +183,10 @@ export type AskAiDeps = {
 	 * the controller then falls back to local candidate cards. Used per turn
 	 * whenever no chat session is available (MIK-048 degradation path).
 	 */
-	runRecommendationPrompt(request: AskAiRecommendationPrompt): Promise<string>;
+	runRecommendationPrompt(
+		request: AskAiRecommendationPrompt,
+		observer?: PromptLifecycleObserver,
+	): Promise<string>;
 	/**
 	 * Optional (MIK-048): open a volatile Prompt API session pinned to the
 	 * given recommendation system instruction, kept for the lifetime of one Ask
@@ -184,6 +196,7 @@ export type AskAiDeps = {
 	 */
 	createRecommendationSession?(
 		systemInstruction: string,
+		observer?: PromptLifecycleObserver,
 	): Promise<AskAiPromptSession>;
 	/** Structured diagnostic logging. Must not receive raw question/bookmark/page text. */
 	logger?: Logger;
@@ -321,6 +334,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 	// in-flight answers out of a cleared session.
 	let session: AskAiPromptSession | null = null;
 	let sessionUnavailable = false;
+	let modelSetup: AskAiModelSetupView | undefined;
 	let narrowedIds: ReadonlySet<string> | null = null;
 	// MIK-055: the previous recommendation context — the candidates behind the
 	// cards actually shown last (or the whole turn's candidate set when no card
@@ -339,6 +353,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				question.trim().length >= DEFAULT_ASK_AI_MIN_QUESTION_LENGTH,
 			answering,
 			messages,
+			modelSetup,
 			canClear: messages.length > 0 || question.length > 0 || answering,
 		};
 	}
@@ -359,6 +374,24 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 	): void {
 		nextMessageId += 1;
 		messages = [...messages, { id: `msg-${nextMessageId}`, ...message }];
+	}
+
+	function updateModelSetup(event: PromptLifecycleEvent): void {
+		if (event.kind === "download-required") {
+			modelSetup = { downloading: false };
+		} else if (event.kind === "download-progress") {
+			const percent =
+				event.ratio !== undefined && event.ratio > 0
+					? Math.round(event.ratio * 100)
+					: undefined;
+			modelSetup =
+				percent !== undefined
+					? { downloading: true, percent }
+					: { downloading: true };
+		} else {
+			modelSetup = undefined;
+		}
+		notify();
 	}
 
 	function destroySession(): void {
@@ -397,6 +430,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			try {
 				const created = await deps.createRecommendationSession(
 					request.systemInstruction,
+					updateModelSetup,
 				);
 				if (startedGeneration === generation) {
 					session = created;
@@ -444,7 +478,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				throw error;
 			}
 		}
-		return deps.runRecommendationPrompt(request);
+		return deps.runRecommendationPrompt(request, updateModelSetup);
 	}
 
 	/**
@@ -568,7 +602,10 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			language: deps.language,
 		});
 		try {
-			const raw = await deps.runKeywordExtractionPrompt(request);
+			const raw = await deps.runKeywordExtractionPrompt(
+				request,
+				updateModelSetup,
+			);
 			const parsed = parseAskAiKeywordExtraction(raw);
 			if (!parsed.ok) {
 				logger.log("warn", "ask-ai.keyword-extraction.parse-failed", {
@@ -749,6 +786,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				// this turn belongs to; a cleared chat was already reset.
 				if (startedGeneration === generation) {
 					answering = false;
+					modelSetup = undefined;
 					notify();
 				}
 			}
@@ -758,6 +796,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			messages = [];
 			question = "";
 			answering = false;
+			modelSetup = undefined;
 			narrowedIds = null;
 			previousContextCandidates = [];
 			sessionUnavailable = false;
