@@ -25,11 +25,12 @@ import type { SupportedLanguage } from "../i18n/index";
 import { extractJsonObject, isJsonObject } from "./json";
 import { type Result, err, ok } from "./result";
 
-/** Prompt payload caps: keep up to 50 candidates compact and data-minimized. */
+/** Prompt payload caps: keep candidates compact and data-minimized. */
 export const MAX_ASK_AI_PROMPT_CANDIDATES = 50;
+export const MAX_ASK_AI_RETRY_PROMPT_CANDIDATES = 25;
 export const MAX_ASK_AI_CANDIDATE_TAGS = 5;
-export const MAX_ASK_AI_CANDIDATE_TITLE_CHARS = 160;
-export const MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS = 240;
+export const MAX_ASK_AI_CANDIDATE_TITLE_CHARS = 96;
+export const MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS = 120;
 
 /** Parse caps: bound what model output can push into the UI. */
 export const MAX_ASK_AI_RECOMMENDATIONS = 5;
@@ -54,6 +55,8 @@ export type AskAiRecommendationPromptInput = {
 	readonly question: string;
 	readonly language: SupportedLanguage;
 	readonly candidates: readonly AskAiCandidate[];
+	/** Optional smaller cap for quota retry prompts. */
+	readonly maxCandidates?: number;
 };
 
 export type AskAiRecommendationPrompt = {
@@ -207,8 +210,12 @@ function japaneseRecommendationLines(): RecommendationPromptLines {
 export function buildAskAiRecommendationPrompt(
 	input: AskAiRecommendationPromptInput,
 ): AskAiRecommendationPrompt {
+	const maxCandidates = Math.min(
+		input.maxCandidates ?? MAX_ASK_AI_PROMPT_CANDIDATES,
+		MAX_ASK_AI_PROMPT_CANDIDATES,
+	);
 	const candidatePayload = input.candidates
-		.slice(0, MAX_ASK_AI_PROMPT_CANDIDATES)
+		.slice(0, maxCandidates)
 		.map(toPromptCandidate);
 	const lines =
 		input.language === "en"

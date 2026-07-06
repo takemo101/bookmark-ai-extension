@@ -4,6 +4,7 @@ import type {
 	AskAiKeywordExtractionPrompt,
 	AskAiRecommendationPrompt,
 } from "../lib/ai/index";
+import { createMemoryLogger } from "../lib/logging/index";
 import {
 	type BookmarkRecord,
 	parseBookmarkRecord,
@@ -57,6 +58,7 @@ function fakeDeps(
 		/** Raw keyword-extraction model output; empty (unparseable) by default. */
 		extractionOutput?: string;
 		extractionError?: Error;
+		logger?: ReturnType<typeof createMemoryLogger>;
 		language?: "en" | "ja";
 	} = {},
 ) {
@@ -79,6 +81,7 @@ function fakeDeps(
 			if (options.runError) throw options.runError;
 			return options.outputs?.[promptCalls.length - 1] ?? options.output ?? "";
 		},
+		logger: options.logger,
 		language: options.language ?? "en",
 	};
 	return {
@@ -98,6 +101,14 @@ function aiOutput(
 	message = "Here are your matches.",
 ): string {
 	return JSON.stringify({ message, recommendations });
+}
+
+function quotaExceededError(): Error {
+	return Object.assign(new Error("prompt too large"), {
+		name: "QuotaExceededError",
+		requested: 30_000,
+		contextWindow: 20_000,
+	});
 }
 
 /** The latest assistant turn's result, mirroring what the UI renders last. */
@@ -426,6 +437,30 @@ describe("Ask AI local fallback (MIK-046)", () => {
 		});
 	});
 
+	it("logs safe fallback details when AI recommendation parsing fails", async () => {
+		const logger = createMemoryLogger();
+		const { deps } = fakeDeps({
+			records: strongRecords,
+			output: "sorry, no JSON here",
+			logger,
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript");
+
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ask-ai.recommendation.parse-failed",
+			fields: {
+				kind: "no-json",
+				candidateCount: 7,
+				promptCandidateCount: 7,
+				promptLength: expect.any(Number),
+				rawLength: 19,
+			},
+		});
+	});
+
 	it("localizes local fallback reasons for the Japanese UI language", async () => {
 		const { deps } = fakeDeps({
 			records: [
@@ -566,6 +601,29 @@ describe("Ask AI keyword extraction expands retrieval (MIK-047)", () => {
 
 		expect(lastResult(controller)).toEqual({ kind: "weak-candidates" });
 		expect(promptCalls).toHaveLength(0);
+	});
+
+	it("logs safe details when keyword extraction output cannot be parsed", async () => {
+		const logger = createMemoryLogger();
+		const { deps } = fakeDeps({
+			records: japaneseRecords,
+			extractionOutput: "sorry, no JSON here",
+			logger,
+			language: "ja",
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, japaneseQuestion);
+
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ask-ai.keyword-extraction.parse-failed",
+			fields: {
+				kind: "no-json",
+				promptLength: expect.any(Number),
+				rawLength: 19,
+			},
+		});
 	});
 
 	it("falls back to direct scoring when extraction returns no keywords", async () => {
@@ -716,11 +774,14 @@ describe("Ask AI Prompt API chat session (MIK-048)", () => {
 		sessionOutput?: string;
 		createError?: Error;
 		promptError?: Error;
+		promptErrors?: readonly Error[];
 		runnerOutput?: string;
+		logger?: ReturnType<typeof createMemoryLogger>;
 	}) {
 		const sessions: FakeSession[] = [];
 		const runnerCalls: AskAiRecommendationPrompt[] = [];
 		let createCalls = 0;
+		let promptCalls = 0;
 		const deps: AskAiDeps = {
 			async loadBookmarks() {
 				return options.records ?? records;
@@ -744,7 +805,10 @@ describe("Ask AI Prompt API chat session (MIK-048)", () => {
 				const session: AskAiPromptSession = {
 					async prompt(input) {
 						fake.prompts.push(input);
-						if (options.promptError) throw options.promptError;
+						const promptError =
+							options.promptErrors?.[promptCalls] ?? options.promptError;
+						promptCalls += 1;
+						if (promptError) throw promptError;
 						return options.sessionOutput ?? "";
 					},
 					destroy() {
@@ -753,6 +817,7 @@ describe("Ask AI Prompt API chat session (MIK-048)", () => {
 				};
 				return session;
 			},
+			logger: options.logger,
 			language: "en",
 		};
 		return { deps, sessions, runnerCalls, createCalls: () => createCalls };
@@ -809,6 +874,87 @@ describe("Ask AI Prompt API chat session (MIK-048)", () => {
 		expect(lastResult(controller)).toMatchObject({
 			kind: "recommendations",
 			source: "local",
+		});
+	});
+
+	it("logs quota details when a Prompt API session exceeds the context window", async () => {
+		const logger = createMemoryLogger();
+		const { deps } = sessionDeps({
+			promptError: quotaExceededError(),
+			logger,
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ask-ai.session.prompt-failed",
+			fields: {
+				errorName: "QuotaExceededError",
+				requested: 30_000,
+				contextWindow: 20_000,
+				promptLength: expect.any(Number),
+			},
+		});
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ask-ai.recommendation.runner-failed",
+			fields: {
+				errorName: "QuotaExceededError",
+				requested: 30_000,
+				contextWindow: 20_000,
+				candidateCount: 1,
+				promptCandidateCount: 1,
+				promptLength: expect.any(Number),
+			},
+		});
+	});
+
+	it("retries a quota failure once with a smaller candidate prompt", async () => {
+		const logger = createMemoryLogger();
+		const manyRecords = Array.from({ length: 50 }, (_, index) =>
+			record({
+				id: `bm-${index + 1}`,
+				canonicalUrl: `https://ts.test/${index + 1}`,
+				url: `https://ts.test/${index + 1}`,
+				title: `TypeScript testing handbook ${index + 1}`,
+				description: "TypeScript testing notes and examples.",
+			}),
+		);
+		const { deps, sessions } = sessionDeps({
+			records: manyRecords,
+			promptErrors: [quotaExceededError()],
+			sessionOutput: aiOutput([{ id: "bm-1", reason: "Match." }]),
+			logger,
+		});
+		const controller = createAskAiController(deps);
+
+		await ask(controller, "typescript testing");
+
+		expect(lastResult(controller)).toMatchObject({
+			kind: "recommendations",
+			source: "ai",
+		});
+		expect(sessions).toHaveLength(2);
+		expect(sessions[0].destroyed).toBe(true);
+		expect(sessions[1].prompts[0].length).toBeLessThan(
+			sessions[0].prompts[0].length,
+		);
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ask-ai.recommendation.quota-retry",
+			fields: {
+				errorName: "QuotaExceededError",
+				requested: 30_000,
+				contextWindow: 20_000,
+				candidateCount: 50,
+				promptCandidateCount: 50,
+				promptLength: expect.any(Number),
+				retryCandidateLimit: 25,
+				retryPromptCandidateCount: 25,
+				retryPromptLength: expect.any(Number),
+			},
 		});
 	});
 

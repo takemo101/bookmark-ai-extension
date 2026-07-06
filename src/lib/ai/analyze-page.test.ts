@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createMemoryLogger } from "../logging/index";
 import { analyzePage } from "./analyze-page";
 import type { AnalysisProfile } from "./profile";
 import {
@@ -122,6 +123,27 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.error.kind).toBe("no-json");
 	});
 
+	it("logs safe details when AI analysis output cannot be parsed", async () => {
+		const logger = createMemoryLogger();
+		const client = fakeClient({
+			availability: "available",
+			prompt: async () => "これは説明文ですがJSONではありません。",
+		});
+
+		await analyzePage(client, INPUT, [], { logger });
+
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ai.analysis.parse-failed",
+			fields: {
+				kind: "no-json",
+				language: "ja",
+				profileId: "generic-page",
+				rawLength: 21,
+			},
+		});
+	});
+
 	it("maps an empty description to failed", async () => {
 		const client = fakeClient({
 			prompt: async () => JSON.stringify({ description: "  ", tags: ["A"] }),
@@ -145,6 +167,27 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.error.message).toContain("session crashed");
 	});
 
+	it("logs safe details when the analysis prompt throws", async () => {
+		const logger = createMemoryLogger();
+		const client = fakeClient({
+			prompt: async () => {
+				throw new TypeError("session crashed");
+			},
+		});
+
+		await analyzePage(client, INPUT, [], { logger });
+
+		expect(logger.entries).toContainEqual({
+			level: "error",
+			event: "ai.analysis.prompt-failed",
+			fields: {
+				errorName: "TypeError",
+				language: "ja",
+				profileId: "generic-page",
+			},
+		});
+	});
+
 	it("maps a PromptApiUnavailableError throw to unavailable", async () => {
 		const client = fakeClient({
 			prompt: async () => {
@@ -165,6 +208,23 @@ describe("analyzePage status/error mapping", () => {
 		expect(outcome.status).toBe("unavailable");
 		if (outcome.status !== "unavailable") return;
 		expect(outcome.reason).toContain("probe blew up");
+	});
+
+	it("logs safe details when the availability probe throws", async () => {
+		const logger = createMemoryLogger();
+		const client = fakeClient({
+			availability: async () => {
+				throw new Error("probe blew up");
+			},
+		});
+
+		await analyzePage(client, INPUT, [], { logger });
+
+		expect(logger.entries).toContainEqual({
+			level: "warn",
+			event: "ai.analysis.availability-threw",
+			fields: { errorName: "Error", language: "ja" },
+		});
 	});
 
 	it("infers the output language from page text when no UI language is provided (MIK-029)", async () => {

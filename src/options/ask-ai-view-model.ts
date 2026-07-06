@@ -58,6 +58,7 @@
 import {
 	type AskAiKeywordExtractionPrompt,
 	type AskAiRecommendationPrompt,
+	MAX_ASK_AI_RETRY_PROMPT_CANDIDATES,
 	buildAskAiKeywordExtractionPrompt,
 	buildAskAiRecommendationPrompt,
 	parseAskAiKeywordExtraction,
@@ -73,6 +74,7 @@ import {
 	findAskAiCandidates,
 } from "../lib/bookmarks/index";
 import type { SupportedLanguage } from "../lib/i18n/index";
+import { errorLogFields, noopLogger, type Logger } from "../lib/logging/index";
 
 /** Cards shown per answer, AI-ranked or local fallback alike (MIK-042 plan). */
 export const MAX_ASK_AI_RESULT_CARDS = 5;
@@ -183,6 +185,8 @@ export type AskAiDeps = {
 	createRecommendationSession?(
 		systemInstruction: string,
 	): Promise<AskAiPromptSession>;
+	/** Structured diagnostic logging. Must not receive raw question/bookmark/page text. */
+	logger?: Logger;
 	/** The UI/output language for the recommendation prompt (MIK-029). */
 	language: SupportedLanguage;
 };
@@ -270,6 +274,10 @@ const JAPANESE_FALLBACK_FIELD_LABELS: Readonly<
 	domain: "ドメイン",
 };
 
+function isQuotaExceededError(error: unknown): boolean {
+	return errorLogFields(error).errorName === "QuotaExceededError";
+}
+
 function localizedFallbackReason(
 	candidate: AskAiCandidate,
 	language: SupportedLanguage,
@@ -303,6 +311,7 @@ function localFallback(
 }
 
 export function createAskAiController(deps: AskAiDeps): AskAiController {
+	const logger = deps.logger ?? noopLogger;
 	let question = "";
 	let answering = false;
 	let messages: readonly AskAiChatMessage[] = [];
@@ -400,11 +409,16 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 						// Dropped regardless.
 					}
 				}
-			} catch {
+			} catch (error) {
 				// Only the chat that saw the failure degrades to the per-turn
 				// runner; a cleared chat's failure must not poison the next one.
 				if (startedGeneration === generation) {
 					sessionUnavailable = true;
+					logger.log(
+						"warn",
+						"ask-ai.session.create-failed",
+						errorLogFields(error),
+					);
 				}
 			}
 		}
@@ -420,6 +434,10 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			try {
 				return await active.prompt(request.prompt);
 			} catch (error) {
+				logger.log("warn", "ask-ai.session.prompt-failed", {
+					...errorLogFields(error),
+					promptLength: request.prompt.length,
+				});
 				if (session === active) {
 					destroySession();
 				}
@@ -440,20 +458,74 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 		candidates: readonly AskAiCandidate[],
 		startedGeneration: number,
 	): Promise<AskAiResultView> {
+		let request = buildAskAiRecommendationPrompt({
+			question: asked,
+			language: deps.language,
+			candidates,
+		});
+		let raw: string;
 		try {
-			const request = buildAskAiRecommendationPrompt({
-				question: asked,
-				language: deps.language,
-				candidates,
-			});
-			const raw = await runRecommendation(request, startedGeneration);
-			const parsed = parseAskAiRecommendation(
-				raw,
-				request.candidatePayload.map((candidate) => candidate.id),
-			);
-			if (!parsed.ok) {
+			raw = await runRecommendation(request, startedGeneration);
+		} catch (error) {
+			if (
+				isQuotaExceededError(error) &&
+				request.candidatePayload.length > MAX_ASK_AI_RETRY_PROMPT_CANDIDATES
+			) {
+				const retryRequest = buildAskAiRecommendationPrompt({
+					question: asked,
+					language: deps.language,
+					candidates,
+					maxCandidates: MAX_ASK_AI_RETRY_PROMPT_CANDIDATES,
+				});
+				logger.log("warn", "ask-ai.recommendation.quota-retry", {
+					...errorLogFields(error),
+					candidateCount: candidates.length,
+					promptCandidateCount: request.candidatePayload.length,
+					promptLength: request.prompt.length,
+					retryCandidateLimit: MAX_ASK_AI_RETRY_PROMPT_CANDIDATES,
+					retryPromptCandidateCount: retryRequest.candidatePayload.length,
+					retryPromptLength: retryRequest.prompt.length,
+				});
+				try {
+					raw = await runRecommendation(retryRequest, startedGeneration);
+					request = retryRequest;
+				} catch (retryError) {
+					logger.log("warn", "ask-ai.recommendation.runner-failed", {
+						...errorLogFields(retryError),
+						candidateCount: candidates.length,
+						promptCandidateCount: retryRequest.candidatePayload.length,
+						promptLength: retryRequest.prompt.length,
+					});
+					return localFallback(candidates, deps.language);
+				}
+			} else {
+				logger.log("warn", "ask-ai.recommendation.runner-failed", {
+					...errorLogFields(error),
+					candidateCount: candidates.length,
+					promptCandidateCount: request.candidatePayload.length,
+					promptLength: request.prompt.length,
+				});
 				return localFallback(candidates, deps.language);
 			}
+		}
+		if (startedGeneration !== generation) {
+			return localFallback(candidates, deps.language);
+		}
+		const parsed = parseAskAiRecommendation(
+			raw,
+			request.candidatePayload.map((candidate) => candidate.id),
+		);
+		if (!parsed.ok) {
+			logger.log("warn", "ask-ai.recommendation.parse-failed", {
+				kind: parsed.error.kind,
+				candidateCount: candidates.length,
+				promptCandidateCount: request.candidatePayload.length,
+				promptLength: request.prompt.length,
+				rawLength: raw.length,
+			});
+			return localFallback(candidates, deps.language);
+		}
+		try {
 			// The parser only keeps ids that were sent, so every id resolves here.
 			const byId = new Map(
 				candidates.map((candidate) => [candidate.id, candidate]),
@@ -474,7 +546,12 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				message: parsed.value.message,
 				cards,
 			};
-		} catch {
+		} catch (error) {
+			logger.log("warn", "ask-ai.recommendation.mapping-failed", {
+				...errorLogFields(error),
+				candidateCount: candidates.length,
+				promptCandidateCount: request.candidatePayload.length,
+			});
 			return localFallback(candidates, deps.language);
 		}
 	}
@@ -486,15 +563,27 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 	 * the direct question scoring result.
 	 */
 	async function extractKeywords(asked: string): Promise<readonly string[]> {
+		const request = buildAskAiKeywordExtractionPrompt({
+			question: asked,
+			language: deps.language,
+		});
 		try {
-			const request = buildAskAiKeywordExtractionPrompt({
-				question: asked,
-				language: deps.language,
-			});
 			const raw = await deps.runKeywordExtractionPrompt(request);
 			const parsed = parseAskAiKeywordExtraction(raw);
-			return parsed.ok ? parsed.value.keywords : [];
-		} catch {
+			if (!parsed.ok) {
+				logger.log("warn", "ask-ai.keyword-extraction.parse-failed", {
+					kind: parsed.error.kind,
+					promptLength: request.prompt.length,
+					rawLength: raw.length,
+				});
+				return [];
+			}
+			return parsed.value.keywords;
+		} catch (error) {
+			logger.log("warn", "ask-ai.keyword-extraction.runner-failed", {
+				...errorLogFields(error),
+				promptLength: request.prompt.length,
+			});
 			return [];
 		}
 	}

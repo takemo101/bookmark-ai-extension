@@ -28,6 +28,7 @@ import {
 	type SupportedLanguage,
 	inferOutputLanguage,
 } from "../i18n/index";
+import { errorLogFields, noopLogger, type Logger } from "../logging/index";
 import { parseAnalysis } from "./parse";
 import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 import type { AnalysisProfile } from "./profile";
@@ -40,6 +41,10 @@ function describeError(error: unknown): string {
 		return error.message;
 	}
 	return String(error);
+}
+
+export interface AnalyzePageOptions {
+	logger?: Logger;
 }
 
 /**
@@ -63,7 +68,9 @@ export async function analyzePage(
 	client: PromptClient,
 	input: AnalysisInput,
 	customProfiles: readonly AnalysisProfile[] = [],
+	options: AnalyzePageOptions = {},
 ): Promise<AnalysisOutcome> {
+	const logger = options.logger ?? noopLogger;
 	// The output language follows the caller's current UI/browser language, with
 	// page-text inference only as a fallback (MIK-033; see selectOutputLanguage).
 	// Resolved before the availability probe so the probe can request the same
@@ -76,9 +83,17 @@ export async function analyzePage(
 	} catch (error) {
 		// A throwing availability probe means we cannot run AI — preserve the
 		// bookmark rather than marking it failed.
+		logger.log("warn", "ai.analysis.availability-threw", {
+			...errorLogFields(error),
+			language,
+		});
 		return { status: "unavailable", reason: describeError(error) };
 	}
 	if (availability !== "available") {
+		logger.log("warn", "ai.analysis.unavailable", {
+			availability,
+			language,
+		});
 		return { status: "unavailable", reason: `Prompt API ${availability}` };
 	}
 
@@ -96,8 +111,18 @@ export async function analyzePage(
 		);
 	} catch (error) {
 		if (error instanceof PromptApiUnavailableError) {
+			logger.log("warn", "ai.analysis.prompt-unavailable", {
+				...errorLogFields(error),
+				language,
+				profileId: profile.id,
+			});
 			return { status: "unavailable", reason: error.message };
 		}
+		logger.log("error", "ai.analysis.prompt-failed", {
+			...errorLogFields(error),
+			language,
+			profileId: profile.id,
+		});
 		return {
 			status: "failed",
 			error: { kind: "client-error", message: describeError(error) },
@@ -106,6 +131,12 @@ export async function analyzePage(
 
 	const parsed = parseAnalysis(raw);
 	if (!parsed.ok) {
+		logger.log("warn", "ai.analysis.parse-failed", {
+			kind: parsed.error.kind,
+			language,
+			profileId: profile.id,
+			rawLength: raw.length,
+		});
 		return { status: "failed", error: parsed.error };
 	}
 	return { status: "ready", analysis: parsed.value, profileId: profile.id };

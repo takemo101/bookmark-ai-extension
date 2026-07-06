@@ -11,6 +11,7 @@
  */
 import { bookmarkId, isoTimestampFromDate } from "../bookmarks/index";
 import { type PromptClient, analyzePage, toAnalysisProfile } from "../ai/index";
+import type { Logger } from "../logging/index";
 import { skillId } from "../settings/index";
 import type { SettingsCache } from "../storage/settings-local-cache";
 import type {
@@ -22,10 +23,15 @@ import type {
 import type { SkillIdGenerator } from "./settings-app";
 
 /** Adapt the AI module's {@link analyzePage} into an {@link AnalyzerPort}. */
-export function createAnalyzerPort(client: PromptClient): AnalyzerPort {
+export function createAnalyzerPort(
+	client: PromptClient,
+	options: { logger?: Logger } = {},
+): AnalyzerPort {
 	return {
 		analyze(input, customProfiles) {
-			return analyzePage(client, input, customProfiles);
+			return analyzePage(client, input, customProfiles, {
+				logger: options.logger,
+			});
 		},
 	};
 }

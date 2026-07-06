@@ -51,6 +51,7 @@ import {
 	createChromePromptClient,
 } from "../lib/ai/index";
 import { detectUiLanguage } from "../lib/i18n/index";
+import { createConsoleLogger } from "../lib/logging/index";
 import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
@@ -78,9 +79,10 @@ function createUnusedTabProvider(): TabProviderPort {
 export function createRuntimeUseCases(): OptionsUseCases {
 	const drive = createChromeDriveRuntime();
 	const settingsCache = createChromeSettingsCache();
+	const logger = createConsoleLogger();
 	const app = createBookmarkApp({
 		repository: drive.repository,
-		analyzer: createAnalyzerPort(createChromePromptClient()),
+		analyzer: createAnalyzerPort(createChromePromptClient(), { logger }),
 		extractor: createChromeScriptingExtractor(),
 		tabs: createUnusedTabProvider(),
 		cache: createChromeLocalCache(),
@@ -112,6 +114,7 @@ export function createRuntimeAskAiDeps(): AskAiDeps {
 	const cache = createChromeLocalCache();
 	const run = createChromeAskAiRecommendationRunner();
 	const createSession = createChromeAskAiPromptSessionFactory();
+	const logger = createConsoleLogger();
 	// The browser UI language decides both prompt and expected output language,
 	// matching the analyzer's language posture (MIK-029).
 	const language = detectUiLanguage();
@@ -128,6 +131,7 @@ export function createRuntimeAskAiDeps(): AskAiDeps {
 		createRecommendationSession(systemInstruction) {
 			return createSession(systemInstruction, language);
 		},
+		logger,
 		language,
 	};
 }

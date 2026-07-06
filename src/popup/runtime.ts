@@ -35,6 +35,7 @@ import {
 	type TabProviderPort,
 } from "../lib/app/index";
 import { detectUiLanguage } from "../lib/i18n/index";
+import { createConsoleLogger } from "../lib/logging/index";
 import {
 	createChromeDriveRuntime,
 	createChromeScriptingExtractor,
@@ -109,9 +110,10 @@ function createChromeEnvironmentProvider(
 export function createRuntimeUseCases(): PopupUseCases {
 	const tabs = createChromeTabProvider();
 	const drive = createChromeDriveRuntime();
+	const logger = createConsoleLogger();
 	const app = createBookmarkApp({
 		repository: drive.repository,
-		analyzer: createAnalyzerPort(createChromePromptClient()),
+		analyzer: createAnalyzerPort(createChromePromptClient(), { logger }),
 		extractor: createChromeScriptingExtractor(),
 		tabs,
 		cache: createChromeLocalCache(),

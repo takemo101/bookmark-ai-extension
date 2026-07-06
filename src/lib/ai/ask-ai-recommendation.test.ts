@@ -89,7 +89,24 @@ describe("buildAskAiRecommendationPrompt", () => {
 		expect(built.candidatePayload[0]?.id).toBe("id-0");
 	});
 
+	it("supports a smaller candidate cap for quota retry prompts", () => {
+		const candidates = Array.from({ length: 50 }, (_, i) =>
+			makeCandidate({ id: `id-${i}` }),
+		);
+		const built = buildAskAiRecommendationPrompt({
+			question: "typescript",
+			language: "en",
+			candidates,
+			maxCandidates: 25,
+		});
+
+		expect(built.candidatePayload).toHaveLength(25);
+		expect(built.candidatePayload.at(-1)?.id).toBe("id-24");
+	});
+
 	it("caps tags, description, and title per candidate", () => {
+		expect(MAX_ASK_AI_CANDIDATE_TITLE_CHARS).toBe(96);
+		expect(MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS).toBe(120);
 		const built = buildPrompt([
 			makeCandidate({
 				title: "t".repeat(500),
