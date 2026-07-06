@@ -206,23 +206,28 @@ section + section {
 	border: 1px solid transparent;
 }
 
-.button-primary-disabled {
-	background: var(--panel);
-	border-color: var(--border-strong);
-	color: var(--ink-muted);
-	cursor: default;
-}
-
-.button-secondary {
+.button-primary {
 	background: var(--accent);
 	border-color: var(--accent);
 	color: var(--surface);
 }
 
-.button-secondary:hover {
+.button-primary:hover {
 	background: var(--ink);
 	border-color: var(--ink);
 	color: var(--surface);
+}
+
+.button-secondary {
+	background: var(--panel);
+	border-color: var(--border-strong);
+	color: var(--ink);
+}
+
+.button-secondary:hover {
+	background: var(--surface);
+	border-color: var(--accent);
+	color: var(--accent);
 }
 
 .hero-note {

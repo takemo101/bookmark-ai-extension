@@ -4,6 +4,8 @@ Chrome extension idea for saving the current tab as an AI-enriched bookmark, sto
 
 Public site: <https://takemo101.github.io/bookmark-ai-extension/>
 
+Chrome Web Store: <https://chromewebstore.google.com/detail/bookmark-ai-extension/ihdhpjimklphbmibfdmjkchceeillkch>
+
 ## Current status
 
 The MV3 extension is wired end-to-end (Vite + TypeScript + React + `@crxjs/vite-plugin` + Vitest, managed with Bun). The popup (save current tab) and options page (research ledger) run on real adapters: `chrome.identity` + Google Drive for storage, `chrome.scripting` for page extraction, the Chrome Built-in AI / Prompt API for analysis, and `chrome.storage.local` as cache. The runtime can be loaded as an unpacked extension and exercised with the [manual smoke checklist](docs/smoke-checklist.md).

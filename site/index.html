@@ -1,424 +1,416 @@
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Bookmark AI — AI-enriched bookmarks in your own Google Drive</title>
-		<meta
-			name="description"
-			content="Bookmark AI is a Chrome extension that saves the current tab as an AI-enriched bookmark — analyzed with Chrome's built-in AI and stored as a portable file in your own Google Drive. No custom backend, no external AI APIs."
-		/>
-		<meta property="og:type" content="website" />
-		<meta
-			property="og:title"
-			content="Bookmark AI — AI-enriched bookmarks in your own Google Drive"
-		/>
-		<meta
-			property="og:description"
-			content="Save the current tab with an AI-generated description, genre, and tags. Analyzed with Chrome Built-in AI, stored in your own Google Drive. No custom backend, no external AI APIs."
-		/>
-		<meta
-			property="og:url"
-			content="https://takemo101.github.io/bookmark-ai-extension/"
-		/>
-		<meta property="og:site_name" content="Bookmark AI" />
-		<meta name="twitter:card" content="summary" />
-		<meta
-			name="twitter:title"
-			content="Bookmark AI — AI-enriched bookmarks in your own Google Drive"
-		/>
-		<meta
-			name="twitter:description"
-			content="Save the current tab with an AI-generated description, genre, and tags. Analyzed with Chrome Built-in AI, stored in your own Google Drive."
-		/>
-		<link rel="stylesheet" href="./assets/style.css" />
-	</head>
-	<body>
-		<header class="site-header">
-			<div class="wrap">
-				<a class="brand" href="./">
-					<span class="brand-mark" aria-hidden="true">B</span>
-					Bookmark AI
-				</a>
-				<nav class="site-nav" aria-label="Site">
-					<a href="#features">Features</a>
-					<a href="#how-it-works">How it works</a>
-					<a href="#privacy">Privacy</a>
-					<a href="#faq">FAQ</a>
-					<a
-						href="https://github.com/takemo101/bookmark-ai-extension"
-						rel="noreferrer"
-						>GitHub</a
-					>
-				</nav>
-			</div>
-		</header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bookmark AI — AI-enriched bookmarks in your own Google Drive</title>
+    <meta
+      name="description"
+      content="Bookmark AI is a Chrome extension that saves the current tab as an AI-enriched bookmark — analyzed with Chrome's built-in AI and stored as a portable file in your own Google Drive. No custom backend, no external AI APIs."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:title"
+      content="Bookmark AI — AI-enriched bookmarks in your own Google Drive"
+    />
+    <meta
+      property="og:description"
+      content="Save the current tab with an AI-generated description, genre, and tags. Analyzed with Chrome Built-in AI, stored in your own Google Drive. No custom backend, no external AI APIs."
+    />
+    <meta
+      property="og:url"
+      content="https://takemo101.github.io/bookmark-ai-extension/"
+    />
+    <meta property="og:site_name" content="Bookmark AI" />
+    <meta name="twitter:card" content="summary" />
+    <meta
+      name="twitter:title"
+      content="Bookmark AI — AI-enriched bookmarks in your own Google Drive"
+    />
+    <meta
+      name="twitter:description"
+      content="Save the current tab with an AI-generated description, genre, and tags. Analyzed with Chrome Built-in AI, stored in your own Google Drive."
+    />
+    <link rel="stylesheet" href="./assets/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="./">
+          <span class="brand-mark" aria-hidden="true">B</span>
+          Bookmark AI
+        </a>
+        <nav class="site-nav" aria-label="Site">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#faq">FAQ</a>
+          <a
+            href="https://github.com/takemo101/bookmark-ai-extension"
+            rel="noreferrer"
+            >GitHub</a
+          >
+        </nav>
+      </div>
+    </header>
 
-		<main>
-			<section class="hero" aria-labelledby="hero-title">
-				<div class="wrap">
-					<div>
-						<h1 id="hero-title">
-							Bookmarks that explain themselves, stored in your own Google
-							Drive.
-						</h1>
-						<p class="hero-lede">
-							Bookmark AI is a Chrome extension that saves the current tab
-							with an AI-generated description, genre, and tags — analyzed
-							with Chrome's built-in AI and written to a portable file in
-							your Google Drive. You own the data. There is no developer
-							database behind it.
-						</p>
-						<div class="cta-row">
-							<span
-								class="button button-primary-disabled"
-								aria-disabled="true"
-								>Chrome Web Store — coming soon</span
-							>
-							<a
-								class="button button-secondary"
-								href="https://github.com/takemo101/bookmark-ai-extension"
-								rel="noreferrer"
-								>View on GitHub</a
-							>
-						</div>
-						<p class="hero-note">
-							Free and open source. Uses Chrome Built-in AI (Prompt API) —
-							no external AI service required.
-						</p>
-					</div>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <div>
+            <h1 id="hero-title">
+              Bookmarks that explain themselves, stored in your own Google
+              Drive.
+            </h1>
+            <p class="hero-lede">
+              Bookmark AI is a Chrome extension that saves the current tab with
+              an AI-generated description, genre, and tags — analyzed with
+              Chrome's built-in AI and written to a portable file in your Google
+              Drive. You own the data. There is no developer database behind it.
+            </p>
+            <div class="cta-row">
+              <a
+                class="button button-primary"
+                href="https://chromewebstore.google.com/detail/bookmark-ai-extension/ihdhpjimklphbmibfdmjkchceeillkch"
+                rel="noreferrer"
+                >Install from Chrome Web Store</a
+              >
+              <a
+                class="button button-secondary"
+                href="https://github.com/takemo101/bookmark-ai-extension"
+                rel="noreferrer"
+                >View on GitHub</a
+              >
+            </div>
+            <p class="hero-note">
+              Free and open source. Uses Chrome Built-in AI (Prompt API) — no
+              external AI service required.
+            </p>
+          </div>
 
-					<div class="mock-popup" aria-hidden="true">
-						<div class="mock-titlebar">
-							<span class="mock-brand"
-								><span class="mock-dot"></span>Bookmark AI</span
-							>
-							<span class="mock-pill">Chrome AI ready</span>
-						</div>
-						<div class="mock-tab">
-							<span class="mock-favicon"></span>
-							<span>
-								<span class="mock-tab-title"
-									>fictional/reading-list — GitHub</span
-								><br />
-								<span class="mock-tab-url"
-									>github.com/fictional/reading-list</span
-								>
-							</span>
-						</div>
-						<div class="mock-save">Save &amp; Analyze</div>
-						<ul class="mock-trail">
-							<li class="done">Pending record saved</li>
-							<li class="done">Page excerpt extracted</li>
-							<li class="done">AI analysis complete</li>
-							<li class="done">Synced to Google Drive</li>
-						</ul>
-						<div class="mock-result">
-							<p class="mock-desc">
-								A library for collecting and organizing articles into a
-								personal reading list, with tagging and offline export.
-							</p>
-							<div class="mock-tags">
-								<span class="mock-tag mock-tag-genre"
-									>Developer Tools</span
-								>
-								<span class="mock-tag">GitHub</span>
-								<span class="mock-tag">reading list</span>
-								<span class="mock-tag">open source</span>
-							</div>
-						</div>
-					</div>
-				</div>
-			</section>
+          <div class="mock-popup" aria-hidden="true">
+            <div class="mock-titlebar">
+              <span class="mock-brand"
+                ><span class="mock-dot"></span>Bookmark AI</span
+              >
+              <span class="mock-pill">Chrome AI ready</span>
+            </div>
+            <div class="mock-tab">
+              <span class="mock-favicon"></span>
+              <span>
+                <span class="mock-tab-title"
+                  >fictional/reading-list — GitHub</span
+                ><br />
+                <span class="mock-tab-url"
+                  >github.com/fictional/reading-list</span
+                >
+              </span>
+            </div>
+            <div class="mock-save">Save &amp; Analyze</div>
+            <ul class="mock-trail">
+              <li class="done">Pending record saved</li>
+              <li class="done">Page excerpt extracted</li>
+              <li class="done">AI analysis complete</li>
+              <li class="done">Synced to Google Drive</li>
+            </ul>
+            <div class="mock-result">
+              <p class="mock-desc">
+                A library for collecting and organizing articles into a personal
+                reading list, with tagging and offline export.
+              </p>
+              <div class="mock-tags">
+                <span class="mock-tag mock-tag-genre">Developer Tools</span>
+                <span class="mock-tag">GitHub</span>
+                <span class="mock-tag">reading list</span>
+                <span class="mock-tag">open source</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-			<section id="features" aria-labelledby="features-title">
-				<div class="wrap">
-					<h2 class="section-title" id="features-title">
-						A warm little library for the pages you keep
-					</h2>
-					<p class="section-lede">
-						Bookmark AI turns "I'll read this later" into a searchable,
-						annotated ledger — without handing your browsing data to anyone
-						else.
-					</p>
-					<div class="feature-grid">
-						<article class="feature-card">
-							<h3>Save &amp; Analyze the current tab</h3>
-							<p>
-								One click saves the page you are on. The extension extracts
-								a temporary excerpt of the page, asks Chrome's built-in AI
-								what the page is about, and records a readable description,
-								a genre, and tags alongside the title and URL.
-							</p>
-						</article>
-						<article class="feature-card">
-							<h3>Your Google Drive is the source of truth</h3>
-							<p>
-								Bookmarks are written to a visible
-								<code>bookmark-ai/bookmarks.jsonl</code> file in your own
-								Google Drive — a plain, portable format you can open,
-								back up, or delete anytime. The same Google account syncs
-								your bookmarks across computers.
-							</p>
-						</article>
-						<article class="feature-card">
-							<h3>Library search and filters</h3>
-							<p>
-								The Library screen is a research ledger: full-text search
-								over titles, URLs, descriptions, genres, and tags, plus
-								filters by domain, genre, tag, and AI status.
-							</p>
-						</article>
-						<article class="feature-card">
-							<h3>Analysis skills</h3>
-							<p>
-								Built-in analysis profiles shape the long-form notes the AI
-								writes for each page, and you can add custom skills — for
-								example, a different analysis style for GitHub repositories
-								or documentation sites.
-							</p>
-						</article>
-						<article class="feature-card">
-							<h3>Ask AI about your bookmarks</h3>
-							<p>
-								A chat screen that answers questions using only your saved
-								bookmarks — "what did I save about testing?" — and
-								recommends matching entries. It searches your local
-								bookmark cache, never the open web.
-							</p>
-						</article>
-					</div>
-				</div>
-			</section>
+      <section id="features" aria-labelledby="features-title">
+        <div class="wrap">
+          <h2 class="section-title" id="features-title">
+            A warm little library for the pages you keep
+          </h2>
+          <p class="section-lede">
+            Bookmark AI turns "I'll read this later" into a searchable,
+            annotated ledger — without handing your browsing data to anyone
+            else.
+          </p>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <h3>Save &amp; Analyze the current tab</h3>
+              <p>
+                One click saves the page you are on. The extension extracts a
+                temporary excerpt of the page, asks Chrome's built-in AI what
+                the page is about, and records a readable description, a genre,
+                and tags alongside the title and URL.
+              </p>
+            </article>
+            <article class="feature-card">
+              <h3>Your Google Drive is the source of truth</h3>
+              <p>
+                Bookmarks are written to a visible
+                <code>bookmark-ai/bookmarks.jsonl</code> file in your own Google
+                Drive — a plain, portable format you can open, back up, or
+                delete anytime. The same Google account syncs your bookmarks
+                across computers.
+              </p>
+            </article>
+            <article class="feature-card">
+              <h3>Library search and filters</h3>
+              <p>
+                The Library screen is a research ledger: full-text search over
+                titles, URLs, descriptions, genres, and tags, plus filters by
+                domain, genre, tag, and AI status.
+              </p>
+            </article>
+            <article class="feature-card">
+              <h3>Analysis skills</h3>
+              <p>
+                Built-in analysis profiles shape the long-form notes the AI
+                writes for each page, and you can add custom skills — for
+                example, a different analysis style for GitHub repositories or
+                documentation sites.
+              </p>
+            </article>
+            <article class="feature-card">
+              <h3>Ask AI about your bookmarks</h3>
+              <p>
+                A chat screen that answers questions using only your saved
+                bookmarks — "what did I save about testing?" — and recommends
+                matching entries. It searches your local bookmark cache, never
+                the open web.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
 
-			<section id="how-it-works" aria-labelledby="flow-title">
-				<div class="wrap">
-					<h2 class="section-title" id="flow-title">How a save works</h2>
-					<p class="section-lede">
-						The whole flow runs between your browser and your own Google
-						Drive.
-					</p>
-					<ol class="flow">
-						<li>
-							<h3>You click Save &amp; Analyze</h3>
-							<p>
-								The extension reads the current tab's title and URL — only
-								after your click, using the <code>activeTab</code> and
-								<code>scripting</code> permissions.
-							</p>
-						</li>
-						<li>
-							<h3>Temporary excerpt → Chrome Built-in AI</h3>
-							<p>
-								A capped excerpt of the visible page text is built in
-								memory and analyzed with Chrome's Built-in AI (Prompt
-								API), through the browser itself.
-							</p>
-						</li>
-						<li>
-							<h3>Bookmark fields are generated</h3>
-							<p>
-								The AI produces a description, genre, tags, and a
-								long-form analysis note — never a copy of the page's raw
-								text.
-							</p>
-						</li>
-						<li>
-							<h3>Saved to your Google Drive</h3>
-							<p>
-								The record is appended to
-								<code>bookmark-ai/bookmarks.jsonl</code> in your Drive, a
-								file the extension creates and manages under the narrow
-								<code>drive.file</code> scope.
-							</p>
-						</li>
-					</ol>
-					<ul class="flow-notes">
-						<li>
-							The raw page excerpt is temporary: it is not stored in the
-							bookmark file, the local cache, or anywhere else by the
-							extension.
-						</li>
-						<li>
-							The extension does not send page content to external AI APIs
-							or to any developer server — analysis goes through Chrome's
-							built-in AI capability only.
-						</li>
-						<li>
-							On first use, Chrome may need to download its on-device AI
-							model. Bookmark AI shows setup/download progress in the popup
-							or Ask AI screen while Chrome prepares it.
-						</li>
-					</ul>
-				</div>
-			</section>
+      <section id="how-it-works" aria-labelledby="flow-title">
+        <div class="wrap">
+          <h2 class="section-title" id="flow-title">How a save works</h2>
+          <p class="section-lede">
+            The whole flow runs between your browser and your own Google Drive.
+          </p>
+          <ol class="flow">
+            <li>
+              <h3>You click Save &amp; Analyze</h3>
+              <p>
+                The extension reads the current tab's title and URL — only after
+                your click, using the <code>activeTab</code> and
+                <code>scripting</code> permissions.
+              </p>
+            </li>
+            <li>
+              <h3>Temporary excerpt → Chrome Built-in AI</h3>
+              <p>
+                A capped excerpt of the visible page text is built in memory and
+                analyzed with Chrome's Built-in AI (Prompt API), through the
+                browser itself.
+              </p>
+            </li>
+            <li>
+              <h3>Bookmark fields are generated</h3>
+              <p>
+                The AI produces a description, genre, tags, and a long-form
+                analysis note — never a copy of the page's raw text.
+              </p>
+            </li>
+            <li>
+              <h3>Saved to your Google Drive</h3>
+              <p>
+                The record is appended to
+                <code>bookmark-ai/bookmarks.jsonl</code> in your Drive, a file
+                the extension creates and manages under the narrow
+                <code>drive.file</code> scope.
+              </p>
+            </li>
+          </ol>
+          <ul class="flow-notes">
+            <li>
+              The raw page excerpt is temporary: it is not stored in the
+              bookmark file, the local cache, or anywhere else by the extension.
+            </li>
+            <li>
+              The extension does not send page content to external AI APIs or to
+              any developer server — analysis goes through Chrome's built-in AI
+              capability only.
+            </li>
+            <li>
+              On first use, Chrome may need to download its on-device AI model.
+              Bookmark AI shows setup/download progress in the popup or Ask AI
+              screen while Chrome prepares it.
+            </li>
+          </ul>
+        </div>
+      </section>
 
-			<section id="privacy" aria-labelledby="privacy-title">
-				<div class="wrap">
-					<h2 class="section-title" id="privacy-title">
-						Privacy and permissions, kept narrow
-					</h2>
-					<p class="section-lede">
-						The extension asks only for what the save flow needs — nothing
-						always-on, nothing broad.
-					</p>
-					<div class="privacy-grid">
-						<article class="privacy-card">
-							<h3><code>drive.file</code> only</h3>
-							<p>
-								The only Google Drive scope requested. It lets the
-								extension manage the files it creates — it cannot see the
-								rest of your Drive.
-							</p>
-						</article>
-						<article class="privacy-card">
-							<h3>Page access only on your click</h3>
-							<p>
-								<code>activeTab</code> + <code>scripting</code> run only
-								after you press Save. There are no always-on content
-								scripts and no broad host permissions.
-							</p>
-						</article>
-						<article class="privacy-card">
-							<h3>No custom backend database</h3>
-							<p>
-								There is no developer server storing your bookmarks. Your
-								Google Drive file is the source of truth; Chrome's local
-								storage is only a cache.
-							</p>
-						</article>
-						<article class="privacy-card">
-							<h3>No external AI providers</h3>
-							<p>
-								The current version uses Chrome Built-in AI (Prompt API)
-								only — no Gemini API, OpenAI, or API-key fallback of any
-								kind.
-							</p>
-						</article>
-					</div>
-					<p>
-						The full details are in the
-						<a href="./privacy/">Bookmark AI privacy policy</a>.
-					</p>
-				</div>
-			</section>
+      <section id="privacy" aria-labelledby="privacy-title">
+        <div class="wrap">
+          <h2 class="section-title" id="privacy-title">
+            Privacy and permissions, kept narrow
+          </h2>
+          <p class="section-lede">
+            The extension asks only for what the save flow needs — nothing
+            always-on, nothing broad.
+          </p>
+          <div class="privacy-grid">
+            <article class="privacy-card">
+              <h3><code>drive.file</code> only</h3>
+              <p>
+                The only Google Drive scope requested. It lets the extension
+                manage the files it creates — it cannot see the rest of your
+                Drive.
+              </p>
+            </article>
+            <article class="privacy-card">
+              <h3>Page access only on your click</h3>
+              <p>
+                <code>activeTab</code> + <code>scripting</code> run only after
+                you press Save. There are no always-on content scripts and no
+                broad host permissions.
+              </p>
+            </article>
+            <article class="privacy-card">
+              <h3>No custom backend database</h3>
+              <p>
+                There is no developer server storing your bookmarks. Your Google
+                Drive file is the source of truth; Chrome's local storage is
+                only a cache.
+              </p>
+            </article>
+            <article class="privacy-card">
+              <h3>No external AI providers</h3>
+              <p>
+                The current version uses Chrome Built-in AI (Prompt API) only —
+                no Gemini API, OpenAI, or API-key fallback of any kind.
+              </p>
+            </article>
+          </div>
+          <p>
+            The full details are in the
+            <a href="./privacy/">Bookmark AI privacy policy</a>.
+          </p>
+        </div>
+      </section>
 
-			<section id="faq" class="faq" aria-labelledby="faq-title">
-				<div class="wrap">
-					<h2 class="section-title" id="faq-title">
-						Frequently asked questions
-					</h2>
-					<details>
-						<summary>Where is my bookmark data stored?</summary>
-						<p>
-							In your own Google Drive, in a visible folder named
-							<code>bookmark-ai</code> containing
-							<code>bookmarks.jsonl</code> (your bookmarks) and, if you
-							define custom analysis skills,
-							<code>settings.json</code>. Chrome's extension storage keeps
-							a local cache so the popup and library open fast, but Drive
-							remains the source of truth.
-						</p>
-					</details>
-					<details>
-						<summary>Why does it need Google Drive access?</summary>
-						<p>
-							Google Drive is where your bookmarks live. Storing them in a
-							file you own means they sync across your computers through
-							your Google account, stay portable, and never depend on a
-							developer-run database.
-						</p>
-					</details>
-					<details>
-						<summary>What does the <code>drive.file</code> scope mean?</summary>
-						<p>
-							It is Google's narrow, per-app Drive scope: the extension can
-							create and manage only files it created itself (or files you
-							explicitly open with it). It cannot read, list, or modify the
-							rest of your Drive.
-						</p>
-					</details>
-					<details>
-						<summary>Are raw page excerpts stored?</summary>
-						<p>
-							No. A temporary excerpt of the page text is built in memory
-							to give the AI something to analyze, and it is discarded
-							afterwards. It is not intentionally persisted — not in the
-							Drive file, not in the local cache. If a page needs
-							re-analysis, the extension re-extracts from the live page.
-						</p>
-					</details>
-					<details>
-						<summary>Does it use external AI APIs?</summary>
-						<p>
-							No. The current version uses Chrome's Built-in AI (Prompt
-							API) only. There is no external Gemini API, OpenAI API, or
-							bring-your-own-key fallback, and the extension does not send
-							page content to any external AI provider or developer
-							server.
-						</p>
-					</details>
-					<details>
-						<summary>Why can the first AI use take a while?</summary>
-						<p>
-							Chrome may need to download its on-device Built-in AI model
-							before Prompt API analysis or Ask AI can run. Bookmark AI
-							shows setup/download progress in the popup or Ask AI screen;
-							keep that UI open until setup finishes. If progress appears
-							stuck for a long time, fully restart Chrome and try again.
-						</p>
-					</details>
-					<details>
-						<summary>
-							What happens if Chrome Built-in AI is unavailable?
-						</summary>
-						<p>
-							The bookmark is still saved with its title and URL, marked
-							with an "AI unavailable" status. You can re-run analysis
-							later — for example, by saving the page again once Chrome's
-							built-in AI is available.
-						</p>
-					</details>
-					<details>
-						<summary>How can I delete my data?</summary>
-						<p>
-							Delete individual bookmarks from the extension's Library, or
-							delete the <code>bookmark-ai</code> folder directly in Google
-							Drive. You can also revoke the extension's access from your
-							Google Account settings, and removing the extension from
-							Chrome clears its local cache.
-						</p>
-					</details>
-				</div>
-			</section>
-		</main>
+      <section id="faq" class="faq" aria-labelledby="faq-title">
+        <div class="wrap">
+          <h2 class="section-title" id="faq-title">
+            Frequently asked questions
+          </h2>
+          <details>
+            <summary>Where is my bookmark data stored?</summary>
+            <p>
+              In your own Google Drive, in a visible folder named
+              <code>bookmark-ai</code> containing
+              <code>bookmarks.jsonl</code> (your bookmarks) and, if you define
+              custom analysis skills, <code>settings.json</code>. Chrome's
+              extension storage keeps a local cache so the popup and library
+              open fast, but Drive remains the source of truth.
+            </p>
+          </details>
+          <details>
+            <summary>Why does it need Google Drive access?</summary>
+            <p>
+              Google Drive is where your bookmarks live. Storing them in a file
+              you own means they sync across your computers through your Google
+              account, stay portable, and never depend on a developer-run
+              database.
+            </p>
+          </details>
+          <details>
+            <summary>What does the <code>drive.file</code> scope mean?</summary>
+            <p>
+              It is Google's narrow, per-app Drive scope: the extension can
+              create and manage only files it created itself (or files you
+              explicitly open with it). It cannot read, list, or modify the rest
+              of your Drive.
+            </p>
+          </details>
+          <details>
+            <summary>Are raw page excerpts stored?</summary>
+            <p>
+              No. A temporary excerpt of the page text is built in memory to
+              give the AI something to analyze, and it is discarded afterwards.
+              It is not intentionally persisted — not in the Drive file, not in
+              the local cache. If a page needs re-analysis, the extension
+              re-extracts from the live page.
+            </p>
+          </details>
+          <details>
+            <summary>Does it use external AI APIs?</summary>
+            <p>
+              No. The current version uses Chrome's Built-in AI (Prompt API)
+              only. There is no external Gemini API, OpenAI API, or
+              bring-your-own-key fallback, and the extension does not send page
+              content to any external AI provider or developer server.
+            </p>
+          </details>
+          <details>
+            <summary>Why can the first AI use take a while?</summary>
+            <p>
+              Chrome may need to download its on-device Built-in AI model before
+              Prompt API analysis or Ask AI can run. Bookmark AI shows
+              setup/download progress in the popup or Ask AI screen; keep that
+              UI open until setup finishes. If progress appears stuck for a long
+              time, fully restart Chrome and try again.
+            </p>
+          </details>
+          <details>
+            <summary>
+              What happens if Chrome Built-in AI is unavailable?
+            </summary>
+            <p>
+              The bookmark is still saved with its title and URL, marked with an
+              "AI unavailable" status. You can re-run analysis later — for
+              example, by saving the page again once Chrome's built-in AI is
+              available.
+            </p>
+          </details>
+          <details>
+            <summary>How can I delete my data?</summary>
+            <p>
+              Delete individual bookmarks from the extension's Library, or
+              delete the <code>bookmark-ai</code> folder directly in Google
+              Drive. You can also revoke the extension's access from your Google
+              Account settings, and removing the extension from Chrome clears
+              its local cache.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
 
-		<footer class="site-footer">
-			<div class="wrap">
-				<ul class="footer-links">
-					<li><a href="./privacy/">Privacy Policy</a></li>
-					<li>
-						<a
-							href="https://github.com/takemo101/bookmark-ai-extension"
-							rel="noreferrer"
-							>GitHub repository</a
-						>
-					</li>
-					<li>
-						<a
-							href="https://github.com/takemo101/bookmark-ai-extension/issues"
-							rel="noreferrer"
-							>Support — GitHub Issues</a
-						>
-					</li>
-				</ul>
-				<p>
-					Bookmark AI (formal name: "Bookmark AI Extension") is an independent
-					open-source project. Chrome, Google Drive, and Gemini are
-					trademarks of Google LLC; this project is not affiliated with or
-					endorsed by Google.
-				</p>
-			</div>
-		</footer>
-	</body>
+    <footer class="site-footer">
+      <div class="wrap">
+        <ul class="footer-links">
+          <li><a href="./privacy/">Privacy Policy</a></li>
+          <li>
+            <a
+              href="https://github.com/takemo101/bookmark-ai-extension"
+              rel="noreferrer"
+              >GitHub repository</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/takemo101/bookmark-ai-extension/issues"
+              rel="noreferrer"
+              >Support — GitHub Issues</a
+            >
+          </li>
+        </ul>
+        <p>
+          Bookmark AI (formal name: "Bookmark AI Extension") is an independent
+          open-source project. Chrome, Google Drive, and Gemini are trademarks
+          of Google LLC; this project is not affiliated with or endorsed by
+          Google.
+        </p>
+      </div>
+    </footer>
+  </body>
 </html>
