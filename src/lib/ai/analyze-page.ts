@@ -130,7 +130,6 @@ export async function analyzePage(
 			availability,
 			language,
 		});
-		options.onModelSetup?.({ kind: "model-preparing" });
 	}
 
 	const profiles =
@@ -139,9 +138,9 @@ export async function analyzePage(
 			: BUILT_IN_PROFILES;
 	const profile = selectAnalysisProfile(input.url, profiles);
 
+	let reportedModelSetup = false;
 	const onLifecycleEvent = (event: PromptLifecycleEvent): void => {
 		if (event.kind === "download-required") {
-			options.onModelSetup?.({ kind: "model-preparing" });
 			return;
 		}
 		if (event.kind === "download-progress") {
@@ -153,6 +152,7 @@ export async function analyzePage(
 				language,
 				profileId: profile.id,
 			});
+			reportedModelSetup = true;
 			options.onModelSetup?.({
 				kind: "model-downloading",
 				ratio: event.ratio,
@@ -167,7 +167,9 @@ export async function analyzePage(
 				profileId: profile.id,
 			});
 		}
-		options.onModelSetup?.({ kind: "model-ready" });
+		if (reportedModelSetup) {
+			options.onModelSetup?.({ kind: "model-ready" });
+		}
 	};
 
 	let raw: string;

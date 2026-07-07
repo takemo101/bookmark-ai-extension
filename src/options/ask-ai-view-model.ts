@@ -81,6 +81,8 @@ import { errorLogFields, noopLogger, type Logger } from "../lib/logging/index";
 /** Cards shown per answer, AI-ranked or local fallback alike (MIK-042 plan). */
 export const MAX_ASK_AI_RESULT_CARDS = 5;
 
+const MODEL_SETUP_REVEAL_DELAY_MS = 300;
+
 /** One recommendation card: app-owned bookmark data plus a display reason. */
 export type AskAiCardView = {
 	readonly canonicalUrl: string;
@@ -342,6 +344,8 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 	// broadening to all bookmarks. Memory-only and generation-fenced.
 	let previousContextCandidates: readonly AskAiCandidate[] = [];
 	let generation = 0;
+	let pendingModelSetup: AskAiModelSetupView | undefined;
+	let modelSetupTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const listeners = new Set<() => void>();
 
@@ -376,21 +380,59 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 		messages = [...messages, { id: `msg-${nextMessageId}`, ...message }];
 	}
 
+	function clearPendingModelSetup(): void {
+		if (modelSetupTimer !== undefined) {
+			clearTimeout(modelSetupTimer);
+			modelSetupTimer = undefined;
+		}
+		pendingModelSetup = undefined;
+	}
+
+	function revealPendingModelSetup(): void {
+		modelSetupTimer = undefined;
+		const setup = pendingModelSetup;
+		pendingModelSetup = undefined;
+		if (!setup) {
+			return;
+		}
+		modelSetup = setup;
+		notify();
+	}
+
+	function scheduleModelSetup(setup: AskAiModelSetupView): void {
+		pendingModelSetup = setup;
+		if (modelSetupTimer === undefined) {
+			modelSetupTimer = setTimeout(
+				revealPendingModelSetup,
+				MODEL_SETUP_REVEAL_DELAY_MS,
+			);
+		}
+	}
+
 	function updateModelSetup(event: PromptLifecycleEvent): void {
 		if (event.kind === "download-required") {
-			modelSetup = { downloading: false };
-		} else if (event.kind === "download-progress") {
+			return;
+		}
+		if (event.kind === "download-progress") {
 			const percent =
 				event.ratio !== undefined && event.ratio > 0
 					? Math.round(event.ratio * 100)
 					: undefined;
-			modelSetup =
+			const setup =
 				percent !== undefined
 					? { downloading: true, percent }
 					: { downloading: true };
-		} else {
-			modelSetup = undefined;
+			if (modelSetup) {
+				clearPendingModelSetup();
+				modelSetup = setup;
+				notify();
+				return;
+			}
+			scheduleModelSetup(setup);
+			return;
 		}
+		clearPendingModelSetup();
+		modelSetup = undefined;
 		notify();
 	}
 
@@ -786,6 +828,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 				// this turn belongs to; a cleared chat was already reset.
 				if (startedGeneration === generation) {
 					answering = false;
+					clearPendingModelSetup();
 					modelSetup = undefined;
 					notify();
 				}
@@ -796,6 +839,7 @@ export function createAskAiController(deps: AskAiDeps): AskAiController {
 			messages = [];
 			question = "";
 			answering = false;
+			clearPendingModelSetup();
 			modelSetup = undefined;
 			narrowedIds = null;
 			previousContextCandidates = [];

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
 	AskAiKeywordExtractionPrompt,
@@ -15,9 +15,16 @@ import {
 	type AskAiDeps,
 	type AskAiPromptSession,
 	type AskAiResultView,
+	type AskAiView,
 	createAskAiController,
 	isAskAiComposerSubmitKey,
 } from "./ask-ai-view-model";
+
+const MODEL_SETUP_REVEAL_DELAY_MS = 300;
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 /**
  * Controller tests for the Ask AI screen: the MIK-045 in-memory question state,
@@ -275,7 +282,34 @@ describe("Ask AI model setup progress", () => {
 		}),
 	];
 
-	it("reports transient model setup progress from Prompt API lifecycle events and clears it after the answer", async () => {
+	it("does not surface a model setup flash when progress immediately resolves", async () => {
+		const snapshots: Array<AskAiView["modelSetup"]> = [];
+		const deps: AskAiDeps = {
+			async loadBookmarks() {
+				return records;
+			},
+			async runKeywordExtractionPrompt(_request, observer) {
+				observer?.({ kind: "download-progress", loaded: 1, ratio: 1 });
+				observer?.({ kind: "session-created" });
+				return "";
+			},
+			async runRecommendationPrompt() {
+				return aiOutput([{ id: "bm-ts", reason: "Covers this." }]);
+			},
+			language: "en",
+		};
+		const controller = createAskAiController(deps);
+		controller.subscribe(() => snapshots.push(controller.getView().modelSetup));
+
+		controller.setQuestion("typescript testing");
+		await controller.submit();
+
+		expect(snapshots).not.toContainEqual({ downloading: true, percent: 100 });
+		expect(snapshots.every((setup) => setup === undefined)).toBe(true);
+	});
+
+	it("reports sustained model setup progress from Prompt API lifecycle events and clears it after the answer", async () => {
+		vi.useFakeTimers();
 		let releaseExtraction: (value: string) => void = () => {};
 		const pendingExtraction = new Promise<string>((resolve) => {
 			releaseExtraction = resolve;
@@ -308,6 +342,10 @@ describe("Ask AI model setup progress", () => {
 		await Promise.resolve();
 
 		expect(controller.getView().answering).toBe(true);
+		expect(controller.getView().modelSetup).toBeUndefined();
+
+		await vi.advanceTimersByTimeAsync(MODEL_SETUP_REVEAL_DELAY_MS);
+
 		expect(controller.getView().modelSetup).toEqual({
 			downloading: true,
 			percent: 42,
@@ -321,6 +359,7 @@ describe("Ask AI model setup progress", () => {
 	});
 
 	it("keeps setup progress indeterminate when the download ratio is unknown or zero", async () => {
+		vi.useFakeTimers();
 		for (const progress of [
 			{ loaded: 200 },
 			{ loaded: 0, ratio: 0 },
@@ -349,6 +388,10 @@ describe("Ask AI model setup progress", () => {
 			const submitted = controller.submit();
 			await Promise.resolve();
 			await Promise.resolve();
+
+			expect(controller.getView().modelSetup).toBeUndefined();
+
+			await vi.advanceTimersByTimeAsync(MODEL_SETUP_REVEAL_DELAY_MS);
 
 			expect(controller.getView().modelSetup).toEqual({ downloading: true });
 
