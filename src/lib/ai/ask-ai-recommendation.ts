@@ -26,11 +26,11 @@ import { extractJsonObject, isJsonObject } from "./json";
 import { type Result, err, ok } from "./result";
 
 /** Prompt payload caps: keep candidates compact and data-minimized. */
-export const MAX_ASK_AI_PROMPT_CANDIDATES = 50;
-export const MAX_ASK_AI_RETRY_PROMPT_CANDIDATES = 25;
+export const MAX_ASK_AI_PROMPT_CANDIDATES = 25;
+export const MAX_ASK_AI_RETRY_PROMPT_CANDIDATES = 15;
 export const MAX_ASK_AI_CANDIDATE_TAGS = 5;
 export const MAX_ASK_AI_CANDIDATE_TITLE_CHARS = 96;
-export const MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS = 120;
+export const MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS = 200;
 
 /** Parse caps: bound what model output can push into the UI. */
 export const MAX_ASK_AI_RECOMMENDATIONS = 5;

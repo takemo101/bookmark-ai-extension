@@ -1086,10 +1086,10 @@ describe("Ask AI Prompt API chat session (MIK-048)", () => {
 				requested: 30_000,
 				contextWindow: 20_000,
 				candidateCount: 50,
-				promptCandidateCount: 50,
+				promptCandidateCount: 25,
 				promptLength: expect.any(Number),
-				retryCandidateLimit: 25,
-				retryPromptCandidateCount: 25,
+				retryCandidateLimit: 15,
+				retryPromptCandidateCount: 15,
 				retryPromptLength: expect.any(Number),
 			},
 		});

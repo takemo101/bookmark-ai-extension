@@ -97,16 +97,16 @@ describe("buildAskAiRecommendationPrompt", () => {
 			question: "typescript",
 			language: "en",
 			candidates,
-			maxCandidates: 25,
+			maxCandidates: 15,
 		});
 
-		expect(built.candidatePayload).toHaveLength(25);
-		expect(built.candidatePayload.at(-1)?.id).toBe("id-24");
+		expect(built.candidatePayload).toHaveLength(15);
+		expect(built.candidatePayload.at(-1)?.id).toBe("id-14");
 	});
 
 	it("caps tags, description, and title per candidate", () => {
 		expect(MAX_ASK_AI_CANDIDATE_TITLE_CHARS).toBe(96);
-		expect(MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS).toBe(120);
+		expect(MAX_ASK_AI_CANDIDATE_DESCRIPTION_CHARS).toBe(200);
 		const built = buildPrompt([
 			makeCandidate({
 				title: "t".repeat(500),
