@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	type BookmarkRecord,
@@ -32,6 +32,12 @@ import {
  */
 
 const URL = "https://example.test/page";
+
+const MODEL_SETUP_REVEAL_DELAY_MS = 300;
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 function recordOf(opts: {
 	url?: string;
@@ -256,22 +262,16 @@ describe("createPopupController", () => {
 			);
 		});
 
-		it("surfaces transient model setup/download detail during analyzing, then clears it", async () => {
+		it("does not surface a model setup flash when progress immediately resolves", async () => {
 			const fake = new FakeUseCases();
 			fake.progressEvents = [
 				{ stage: "saving" },
 				{ stage: "extracting" },
 				{ stage: "analyzing" },
-				{ stage: "analyzing", detail: { kind: "model-preparing" } },
 				{
 					stage: "analyzing",
-					detail: { kind: "model-downloading", ratio: 0 },
+					detail: { kind: "model-downloading", ratio: 1 },
 				},
-				{
-					stage: "analyzing",
-					detail: { kind: "model-downloading", ratio: 0.42 },
-				},
-				{ stage: "analyzing", detail: { kind: "model-downloading" } },
 				{ stage: "analyzing", detail: { kind: "model-ready" } },
 				{ stage: "syncing" },
 			];
@@ -288,18 +288,52 @@ describe("createPopupController", () => {
 
 			await controller.save();
 
-			expect(setups).toEqual([
-				undefined, // flow start (trail at saving)
-				undefined, // saving
-				undefined, // extracting
-				undefined, // analyzing began
-				{ downloading: false }, // model-preparing
-				{ downloading: true, percent: undefined }, // 0% stays percent-less
-				{ downloading: true, percent: 42 }, // progress with ratio
-				{ downloading: true, percent: undefined }, // progress without ratio
-				undefined, // model-ready clears the line
-				undefined, // syncing
-			]);
+			expect(setups).not.toContainEqual({ downloading: true, percent: 100 });
+			expect(setups.every((setup) => setup === undefined)).toBe(true);
+		});
+
+		it("surfaces sustained model setup/download detail during analyzing, then clears it", async () => {
+			vi.useFakeTimers();
+			const fake = new FakeUseCases();
+			let releaseSave: () => void = () => {};
+			const saveCanFinish = new Promise<void>((resolve) => {
+				releaseSave = resolve;
+			});
+			fake.saveCurrentTab = async (onProgress?: ProgressObserver) => {
+				fake.saveCalls += 1;
+				onProgress?.({ stage: "saving" });
+				onProgress?.({ stage: "extracting" });
+				onProgress?.({ stage: "analyzing" });
+				onProgress?.({
+					stage: "analyzing",
+					detail: { kind: "model-downloading", ratio: 0.42 },
+				});
+				await saveCanFinish;
+				onProgress?.({ stage: "analyzing", detail: { kind: "model-ready" } });
+				onProgress?.({ stage: "syncing" });
+				return fake.saveResult;
+			};
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const saving = controller.save();
+			await Promise.resolve();
+
+			let flow = controller.getView().flow;
+			expect(flow.kind).toBe("running");
+			if (flow.kind !== "running") return;
+			expect(flow.modelSetup).toBeUndefined();
+
+			await vi.advanceTimersByTimeAsync(MODEL_SETUP_REVEAL_DELAY_MS);
+
+			flow = controller.getView().flow;
+			expect(flow.kind).toBe("running");
+			if (flow.kind !== "running") return;
+			expect(flow.modelSetup).toEqual({ downloading: true, percent: 42 });
+
+			releaseSave();
+			await saving;
+
 			// The flow still finishes normally; the detail never leaks into the
 			// durable receipt.
 			expect(controller.getView().flow.kind).toBe("done");

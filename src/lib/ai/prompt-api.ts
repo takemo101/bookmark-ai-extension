@@ -367,13 +367,7 @@ export function createChromeAskAiRecommendationRunner(
 		if (!namespace) {
 			throw new PromptApiUnavailableError();
 		}
-		await assertCanCreateSession(
-			namespace,
-			language,
-			logger,
-			"recommendation",
-			observer,
-		);
+		await assertCanCreateSession(namespace, language, logger, "recommendation");
 		const session = await createSession(
 			namespace,
 			{
@@ -412,7 +406,6 @@ async function assertCanCreateSession(
 	language: SupportedLanguage,
 	logger: Logger,
 	context: "recommendation" | "chat-session",
-	observer?: PromptLifecycleObserver,
 ): Promise<void> {
 	let availability: PromptApiAvailability;
 	try {
@@ -443,7 +436,6 @@ async function assertCanCreateSession(
 			language,
 			context,
 		});
-		notify(observer, { kind: "download-required" });
 	}
 }
 
@@ -512,13 +504,7 @@ export function createChromeAskAiPromptSessionFactory(
 		if (!namespace) {
 			throw new PromptApiUnavailableError();
 		}
-		await assertCanCreateSession(
-			namespace,
-			language,
-			logger,
-			"chat-session",
-			observer,
-		);
+		await assertCanCreateSession(namespace, language, logger, "chat-session");
 		const session = await createSession(
 			namespace,
 			{

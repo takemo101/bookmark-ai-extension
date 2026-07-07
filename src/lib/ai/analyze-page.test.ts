@@ -142,6 +142,24 @@ describe("analyzePage status/error mapping", () => {
 		}
 	});
 
+	it("does not report model setup when a downloadable model creates a session without progress", async () => {
+		const setupEvents: AnalysisModelSetup[] = [];
+		const client = fakeClient({
+			availability: "downloadable",
+			prompt: async (_input, _language, observer) => {
+				observer?.({ kind: "session-created" });
+				return VALID_OUTPUT;
+			},
+		});
+
+		const outcome = await analyzePage(client, INPUT, [], {
+			onModelSetup: (event) => setupEvents.push(event),
+		});
+
+		expect(outcome.status).toBe("ready");
+		expect(setupEvents).toEqual([]);
+	});
+
 	it("reports model setup, download progress, and readiness through onModelSetup", async () => {
 		const logger = createMemoryLogger();
 		const setupEvents: AnalysisModelSetup[] = [];
@@ -165,7 +183,6 @@ describe("analyzePage status/error mapping", () => {
 
 		expect(outcome.status).toBe("ready");
 		expect(setupEvents).toEqual([
-			{ kind: "model-preparing" },
 			{ kind: "model-downloading", ratio: 0.42 },
 			{ kind: "model-ready" },
 		]);

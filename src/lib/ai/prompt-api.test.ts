@@ -319,7 +319,6 @@ describe("createChromeAskAiRecommendationRunner", () => {
 
 			expect(fake.sawMonitor()).toBe(true);
 			expect(events).toEqual([
-				{ kind: "download-required" },
 				{ kind: "download-progress", loaded: 0, total: undefined, ratio: 0 },
 				{ kind: "download-progress", loaded: 4, total: 10, ratio: 0.4 },
 				{ kind: "session-created" },
@@ -544,7 +543,6 @@ describe("createChromeAskAiPromptSessionFactory", () => {
 			expect(fake.sawMonitor()).toBe(true);
 			expect(await session.prompt("question")).toBe("model output");
 			expect(events).toEqual([
-				{ kind: "download-required" },
 				{
 					kind: "download-progress",
 					loaded: 0.25,

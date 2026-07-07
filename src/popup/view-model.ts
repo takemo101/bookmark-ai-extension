@@ -223,6 +223,7 @@ export interface PopupController {
 }
 
 const MAX_RECENT = 6;
+const MODEL_SETUP_REVEAL_DELAY_MS = 300;
 
 const INITIAL_VIEW: PopupView = {
 	loading: true,
@@ -254,6 +255,8 @@ export function createPopupController(
 	// cache refresh so the detail updates in place or closes when the record is
 	// gone (deleted, or pushed out of the recent slice).
 	let selectedRecentDisplay: string | undefined;
+	let pendingModelSetup: ModelSetupView | undefined;
+	let modelSetupTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function setView(next: Partial<PopupView>): void {
 		view = { ...view, ...next };
@@ -348,6 +351,36 @@ export function createPopupController(
 		}));
 	}
 
+	function clearPendingModelSetup(): void {
+		if (modelSetupTimer !== undefined) {
+			clearTimeout(modelSetupTimer);
+			modelSetupTimer = undefined;
+		}
+		pendingModelSetup = undefined;
+	}
+
+	function revealPendingModelSetup(): void {
+		modelSetupTimer = undefined;
+		const setup = pendingModelSetup;
+		pendingModelSetup = undefined;
+		if (!setup || view.flow.kind !== "running") {
+			return;
+		}
+		setView({
+			flow: { ...view.flow, modelSetup: setup },
+		});
+	}
+
+	function scheduleModelSetup(setup: ModelSetupView): void {
+		pendingModelSetup = setup;
+		if (modelSetupTimer === undefined) {
+			modelSetupTimer = setTimeout(
+				revealPendingModelSetup,
+				MODEL_SETUP_REVEAL_DELAY_MS,
+			);
+		}
+	}
+
 	async function runFlow(
 		invoke: (
 			onProgress: ProgressObserver,
@@ -361,20 +394,30 @@ export function createPopupController(
 
 		const onProgress: ProgressObserver = ({ stage, detail }) => {
 			// Only advance while the flow is still running. Model setup detail is
-			// transient: it shows while events carry it and clears as soon as an
-			// event arrives without it (model ready, or a later stage).
+			// transient and intentionally delayed: Chrome can emit a short-lived
+			// progress event even when the model is already local, and showing it
+			// immediately causes a visible flash.
 			if (view.flow.kind === "running") {
-				setView({
-					flow: {
-						kind: "running",
-						trail: runningTrail(stage),
-						modelSetup: toModelSetupView(detail),
-					},
-				});
+				const trail = runningTrail(stage);
+				const setup = toModelSetupView(detail);
+				const visibleSetup = view.flow.modelSetup;
+				if (!setup) {
+					clearPendingModelSetup();
+					setView({ flow: { kind: "running", trail } });
+					return;
+				}
+				if (visibleSetup) {
+					clearPendingModelSetup();
+					setView({ flow: { kind: "running", trail, modelSetup: setup } });
+					return;
+				}
+				scheduleModelSetup(setup);
+				setView({ flow: { kind: "running", trail } });
 			}
 		};
 
 		const result = await invoke(onProgress);
+		clearPendingModelSetup();
 		setView({ flow: finalizeFlow(result), canSave: true });
 
 		// Refresh recents/sync/current-page from cache so the saved bookmark is
