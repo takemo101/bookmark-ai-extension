@@ -305,9 +305,11 @@ Focus:
   operation.
 - On success, the bookmark is updated to `ready` with description, genre, tags,
   analysisMarkdown, and analysisProfileId.
-- If Prompt API is unavailable, the bookmark remains saved with
-  `aiStatus: "unavailable"`.
-- If analysis fails, the bookmark becomes `failed` with a safe error message.
+- If Prompt API is unavailable or analysis fails, the analyzer may produce an
+  on-device Summarizer API concise fallback as specified in
+  [`summarizer-fallback.md`](summarizer-fallback.md). A successful fallback is
+  `ready` but visibly marked as a concise summary; if it cannot run, the
+  original `unavailable` or `failed` result is retained.
 - If the UI closes before analysis finishes, the in-memory excerpt is dropped
   and the bookmark remains `pending` (or the last durably written status); the
   user can re-run analysis later from a valid active tab.

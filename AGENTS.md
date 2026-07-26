@@ -122,17 +122,20 @@ Use durable docs as the source of truth. Before changing behavior, architecture,
 1. `docs/design.md` — canonical MVP design and architecture.
 2. `docs/ai-analysis-v2.md` — AI Analysis v2 plan for long-form Markdown
    analysis, analysis skills, and foreground analysis behavior.
-3. `docs/implementation-principles.md` — implementation principles adapted from okite-ai skills.
-4. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
-5. `docs/privacy-policy.md` — privacy constraints and policy draft.
-6. `docs/local-unpacked-setup.md` — detailed local unpacked-extension
+3. `docs/summarizer-fallback.md` — approved on-device Summarizer fallback
+   contract for Prompt API terminal failures.
+4. `docs/implementation-principles.md` — implementation principles adapted from okite-ai skills.
+5. `docs/publication.md` — Chrome Web Store and OAuth publication plan.
+6. `docs/privacy-policy.md` — privacy constraints and policy draft.
+7. `docs/local-unpacked-setup.md` — detailed local unpacked-extension
    setup and dev OAuth guide.
-7. `docs/handoff.md` — historical handoff only.
+8. `docs/handoff.md` — historical handoff only.
 
 If `docs/handoff.md` conflicts with newer durable docs, trust
 `docs/design.md`, `docs/ai-analysis-v2.md`,
-`docs/implementation-principles.md`, `docs/publication.md`,
-`docs/privacy-policy.md`, and `docs/local-unpacked-setup.md`.
+`docs/summarizer-fallback.md`, `docs/implementation-principles.md`,
+`docs/publication.md`, `docs/privacy-policy.md`, and
+`docs/local-unpacked-setup.md`.
 
 ## MVP scope guard
 
