@@ -38,8 +38,20 @@ export const AI_STATUSES = [
 ] as const;
 export type AiStatus = (typeof AI_STATUSES)[number];
 
+/** The normal rich-analysis path (Chrome Prompt API). */
 export const AI_MODEL = "chrome-prompt-api";
-export type AiModel = typeof AI_MODEL;
+/**
+ * The concise Summarizer API fallback (docs/summarizer-fallback.md). A record
+ * carrying this marker holds usable generated content, but never a genre, tag
+ * set, or analysis profile: it is not a full analysis.
+ */
+export const AI_MODEL_SUMMARIZER = "chrome-summarizer-api";
+/**
+ * The closed set of models a record may name. Existing records either name the
+ * Prompt model or omit `aiModel` entirely, so both keep parsing unchanged.
+ */
+export const AI_MODELS = [AI_MODEL, AI_MODEL_SUMMARIZER] as const;
+export type AiModel = (typeof AI_MODELS)[number];
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -85,6 +97,16 @@ export type BookmarkRecord = {
 	readonly analysisProfileId?: string;
 };
 
+/**
+ * Whether this record's content came from the concise Summarizer fallback
+ * rather than the full Prompt analysis (docs/summarizer-fallback.md). UI uses it
+ * to show the localized "concise summary" explanation beside a normal `ready`
+ * status; records from before the fallback shipped simply answer `false`.
+ */
+export function isConciseFallback(record: { aiModel?: AiModel }): boolean {
+	return record.aiModel === AI_MODEL_SUMMARIZER;
+}
+
 export type RecordError = { readonly field: string; readonly message: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -95,6 +117,13 @@ function isAiStatus(value: unknown): value is AiStatus {
 	return (
 		typeof value === "string" &&
 		(AI_STATUSES as readonly string[]).includes(value)
+	);
+}
+
+function isAiModel(value: unknown): value is AiModel {
+	return (
+		typeof value === "string" &&
+		(AI_MODELS as readonly string[]).includes(value)
 	);
 }
 
@@ -187,13 +216,17 @@ export function parseBookmarkRecord(
 		);
 	}
 
-	if (value.aiModel !== undefined && value.aiModel !== AI_MODEL) {
-		return err(
-			fieldError(
-				"aiModel",
-				`unknown aiModel: ${JSON.stringify(value.aiModel)}`,
-			),
-		);
+	let aiModel: AiModel | undefined;
+	if (value.aiModel !== undefined) {
+		if (!isAiModel(value.aiModel)) {
+			return err(
+				fieldError(
+					"aiModel",
+					`unknown aiModel: ${JSON.stringify(value.aiModel)}`,
+				),
+			);
+		}
+		aiModel = value.aiModel;
 	}
 
 	if (value.aiError !== undefined && typeof value.aiError !== "string") {
@@ -263,7 +296,7 @@ export function parseBookmarkRecord(
 		genre,
 		tags: tags.value,
 		aiStatus: value.aiStatus,
-		aiModel: value.aiModel,
+		aiModel,
 		aiError: value.aiError,
 		createdAt: createdAt.value,
 		updatedAt: updatedAt.value,

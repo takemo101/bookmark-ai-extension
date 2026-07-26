@@ -49,6 +49,7 @@ import {
 	createChromeAskAiPromptSessionFactory,
 	createChromeAskAiRecommendationRunner,
 	createChromePromptClient,
+	createChromeSummarizerClient,
 } from "../lib/ai/index";
 import { detectUiLanguage } from "../lib/i18n/index";
 import { createConsoleLogger } from "../lib/logging/index";
@@ -82,7 +83,12 @@ export function createRuntimeUseCases(): OptionsUseCases {
 	const logger = createConsoleLogger();
 	const app = createBookmarkApp({
 		repository: drive.repository,
-		analyzer: createAnalyzerPort(createChromePromptClient(), { logger }),
+		analyzer: createAnalyzerPort(createChromePromptClient(), {
+			logger,
+			// Concise fallback after a terminal Prompt outcome only
+			// (docs/summarizer-fallback.md).
+			summarizer: createChromeSummarizerClient(),
+		}),
 		extractor: createChromeScriptingExtractor(),
 		tabs: createUnusedTabProvider(),
 		cache: createChromeLocalCache(),

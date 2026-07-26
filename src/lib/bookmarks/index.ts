@@ -20,6 +20,7 @@ export {
 } from "./ask-ai-candidates";
 export {
 	type AiAnalysis,
+	type AiConciseSummary,
 	Bookmarks,
 	type CollectionError,
 	type FilterCriteria,
@@ -36,6 +37,8 @@ export {
 
 export {
 	AI_MODEL,
+	AI_MODELS,
+	AI_MODEL_SUMMARIZER,
 	AI_STATUSES,
 	type AiModel,
 	type AiStatus,
@@ -43,6 +46,7 @@ export {
 	type BookmarkRecordV1,
 	CURRENT_SCHEMA_VERSION,
 	createBookmarkRecord,
+	isConciseFallback,
 	type NewBookmarkInput,
 	parseBookmarkRecord,
 	type RecordError,

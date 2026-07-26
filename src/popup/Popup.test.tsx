@@ -101,6 +101,7 @@ function detailOf(overrides: Partial<PopupDetailView> = {}): PopupDetailView {
 		analysisMarkdown: "## 概要\n\n分析本文。",
 		analysisProfileId: "github-repository",
 		analysisProfileName: "GitHubリポジトリ",
+		conciseFallback: false,
 		...overrides,
 	};
 }
@@ -499,6 +500,75 @@ describe("Popup", () => {
 			);
 			expect(html).toContain('alt=""');
 			expect(html).not.toContain(">E<");
+		});
+	});
+
+	describe("concise Summarizer fallback (docs/summarizer-fallback.md)", () => {
+		function fallbackDetail() {
+			return detailOf({
+				description: "要点1 / 要点2",
+				genre: undefined,
+				tags: [],
+				analysisMarkdown: "- 要点1\n- 要点2",
+				analysisProfileId: undefined,
+				analysisProfileName: undefined,
+				conciseFallback: true,
+			});
+		}
+
+		it("explains a fallback detail in English without exposing an error", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: fallbackDetail() }),
+			);
+
+			expect(html).toContain(
+				"Concise summary — detailed analysis was unavailable",
+			);
+			expect(html).toContain("ready");
+			expect(html).not.toContain("GitHub");
+		});
+
+		it("explains a fallback detail in Japanese", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: fallbackDetail() }),
+				"ja",
+			);
+
+			expect(html).toContain("簡易要約 — 詳細分析を取得できなかったため");
+		});
+
+		it("says nothing extra for a normal Prompt-analysis detail", () => {
+			const html = render(
+				viewOf({ recent: [recentOf()], selectedRecent: detailOf() }),
+			);
+
+			expect(html).not.toContain(
+				"Concise summary — detailed analysis was unavailable",
+			);
+		});
+
+		it("explains a fallback save receipt", () => {
+			const html = render(
+				viewOf({
+					flow: {
+						kind: "done",
+						trail: [],
+						receipt: {
+							title: "Recent Page",
+							url: URL,
+							canonicalUrl: URL,
+							aiStatus: "ready",
+							preview: { description: "要点1 / 要点2", tags: [] },
+							driveSynced: true,
+							conciseFallback: true,
+						},
+					},
+				}),
+			);
+
+			expect(html).toContain(
+				"Concise summary — detailed analysis was unavailable",
+			);
 		});
 	});
 });

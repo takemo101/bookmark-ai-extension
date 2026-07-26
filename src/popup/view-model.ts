@@ -24,6 +24,7 @@ import {
 	type SaveStage,
 	type SaveStageDetail,
 } from "./use-cases";
+import { isConciseFallback } from "./view-types";
 import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
 export type {
@@ -99,6 +100,12 @@ export type PopupDetailView = {
 	 * (custom-name resolution and edit navigation live in Options).
 	 */
 	readonly analysisProfileName?: string;
+	/**
+	 * This `ready` record holds a concise Summarizer fallback, not the full
+	 * analysis (docs/summarizer-fallback.md). The UI shows a localized
+	 * explanation; the underlying Prompt failure is never surfaced.
+	 */
+	readonly conciseFallback: boolean;
 };
 
 /** The Japanese AI preview shown on a `ready` receipt. */
@@ -119,6 +126,8 @@ export type SaveReceiptView = {
 	readonly driveSynced: boolean;
 	/** Present when the AI ran but the Drive write failed; safe, token-free. */
 	readonly driveWarning?: string;
+	/** The saved record is a concise Summarizer fallback (see PopupDetailView). */
+	readonly conciseFallback: boolean;
 };
 
 /**
@@ -571,6 +580,7 @@ function toRecentDetail(record: BookmarkRecord): PopupDetailView {
 		analysisProfileName: record.analysisProfileId
 			? resolveAnalysisProfileDisplay(record.analysisProfileId).name
 			: undefined,
+		conciseFallback: isConciseFallback(record),
 	};
 }
 
@@ -631,6 +641,7 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 		driveWarning: driveSynced
 			? undefined
 			: safeMessage(outcome.driveError?.message ?? "Drive sync failed"),
+		conciseFallback: isConciseFallback(record),
 	};
 	const preview: AiPreview = {
 		description: record.description,

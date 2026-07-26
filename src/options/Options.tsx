@@ -1015,7 +1015,13 @@ function LedgerRow({
 			genre={row.genre}
 			tags={row.tags}
 			metaSuffix={
-				row.analysisProfileId ? `· ${row.analysisProfileId}` : undefined
+				// A fallback row carries no profile; it says so instead
+				// (docs/summarizer-fallback.md "User experience").
+				row.conciseFallback
+					? `· ${m.conciseFallbackNotice}`
+					: row.analysisProfileId
+						? `· ${row.analysisProfileId}`
+						: undefined
 			}
 			aiStatus={row.aiStatus}
 			selected={row.selected}
@@ -1189,6 +1195,21 @@ function BookmarkDetailDrawer({
 				</>
 			}
 		>
+			{/* A concise Summarizer fallback is a normal `ready` result with an
+			    honest label; the underlying Prompt failure is never shown
+			    (docs/summarizer-fallback.md "User experience"). */}
+			{detail.conciseFallback ? (
+				<p
+					style={{
+						fontSize: 12,
+						color: palette.inkSoft,
+						margin: "0 0 8px",
+					}}
+				>
+					{m.conciseFallbackNotice}
+				</p>
+			) : null}
+
 			{detail.description ? (
 				<p style={{ fontSize: 13, color: palette.ink, margin: 0 }}>
 					{detail.description}

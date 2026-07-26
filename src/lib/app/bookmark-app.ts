@@ -237,6 +237,14 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			},
 		);
 
+		if (
+			outcome.status === "ready" &&
+			outcome.model === "chrome-summarizer-api"
+		) {
+			// A concise Summarizer fallback replaces any prior rich analysis rather
+			// than merging into it (docs/summarizer-fallback.md "Persisted result").
+			return bookmarks.applyConciseSummary(canonicalUrl, outcome.summary, now);
+		}
 		if (outcome.status === "ready") {
 			const analysis: AiAnalysis = {
 				description: outcome.analysis.description,

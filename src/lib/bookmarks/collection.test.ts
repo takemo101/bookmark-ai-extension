@@ -558,3 +558,79 @@ describe("Bookmarks search and filter", () => {
 		).toBe("legacy.test");
 	});
 });
+
+/**
+ * The Summarizer concise fallback (docs/summarizer-fallback.md): usable ready
+ * content that must never masquerade as the rich profile-driven analysis.
+ */
+describe("Bookmarks.applyConciseSummary", () => {
+	const later = isoTimestamp("2026-06-26T00:00:00.000Z");
+	const SUMMARY = {
+		description: "要点1 / 要点2 / 要点3",
+		analysisMarkdown: "- 要点1\n- 要点2\n- 要点3",
+	};
+
+	it("stores the concise summary as ready with the Summarizer model marker", () => {
+		const base = Bookmarks.from([record({ aiStatus: "pending" })]);
+		const result = base.applyConciseSummary(CANON_A, SUMMARY, later);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const saved = result.value.get(CANON_A);
+		expect(saved?.aiStatus).toBe("ready");
+		expect(saved?.aiModel).toBe("chrome-summarizer-api");
+		expect(saved?.description).toBe(SUMMARY.description);
+		expect(saved?.analysisMarkdown).toBe(SUMMARY.analysisMarkdown);
+		expect(saved?.lastAnalyzedAt).toBe(later);
+		expect(saved?.updatedAt).toBe(later);
+		expect(saved?.createdAt).toBe("2026-06-25T00:00:00.000Z");
+	});
+
+	it("clears stale structured fields from a prior rich analysis", () => {
+		const base = Bookmarks.from([
+			record({
+				aiStatus: "failed",
+				aiModel: "chrome-prompt-api",
+				aiError: "parse failed",
+				genre: "開発ツール",
+				tags: ["GitHub"],
+				analysisProfileId: "github-repository",
+				analysisMarkdown: "## 概要\n\n古い分析。",
+			}),
+		]);
+
+		const result = base.applyConciseSummary(CANON_A, SUMMARY, later);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const saved = result.value.get(CANON_A);
+		expect(saved?.genre).toBeUndefined();
+		expect(saved?.tags).toEqual([]);
+		expect(saved?.analysisProfileId).toBeUndefined();
+		expect(saved?.aiError).toBeUndefined();
+		expect(saved?.analysisMarkdown).toBe(SUMMARY.analysisMarkdown);
+	});
+
+	it("does not move updatedAt backward", () => {
+		const base = Bookmarks.from([record({ aiStatus: "pending" })]);
+		const result = base.applyConciseSummary(
+			CANON_A,
+			SUMMARY,
+			isoTimestamp("2026-06-24T00:00:00.000Z"),
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.get(CANON_A)?.updatedAt).toBe(
+				"2026-06-25T00:00:00.000Z",
+			);
+		}
+	});
+
+	it("errors when no record exists for the canonical URL", () => {
+		const result = Bookmarks.empty().applyConciseSummary(
+			CANON_A,
+			SUMMARY,
+			later,
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.error.field).toBe("canonicalUrl");
+	});
+});

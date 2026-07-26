@@ -21,6 +21,13 @@
  *   - malformed output                → `failed` (recoverable parse error).
  *   - valid output                    → `ready` with the parsed analysis.
  *
+ * Every terminal outcome above (`unavailable` and every `failed`) then gets one
+ * concise Summarizer API attempt when a {@link SummarizerClient} is wired
+ * (docs/summarizer-fallback.md). It runs only if Summarizer is *already*
+ * available, never downloads a model, and yields a `ready` outcome marked
+ * `chrome-summarizer-api`. If it cannot produce usable text, the original Prompt
+ * outcome is returned unchanged. A Prompt *success* never reaches Summarizer.
+ *
  * `customProfiles` (MIK-018, docs/ai-analysis-v2.md "Skill matching") are the
  * caller's currently-enabled Drive-synced custom skills, already converted to
  * {@link AnalysisProfile} by `ai/custom-profile.ts`. They are merged with the
@@ -35,6 +42,7 @@ import {
 	inferOutputLanguage,
 } from "../i18n/index";
 import { errorLogFields, noopLogger, type Logger } from "../logging/index";
+import { buildConciseSummary } from "./concise-summary";
 import { parseAnalysis } from "./parse";
 import { BUILT_IN_PROFILES, selectAnalysisProfile } from "./profile";
 import type { AnalysisProfile } from "./profile";
@@ -45,7 +53,13 @@ import {
 	PromptApiUnavailableError,
 	PromptSessionCreateError,
 } from "./prompt-api";
-import type { AnalysisInput, AnalysisOutcome } from "./types";
+import type { SummarizerClient } from "./summarizer-api";
+import {
+	PROMPT_ANALYSIS_MODEL,
+	SUMMARIZER_ANALYSIS_MODEL,
+	type AnalysisInput,
+	type AnalysisOutcome,
+} from "./types";
 
 function describeError(error: unknown): string {
 	if (error instanceof Error) {
@@ -69,6 +83,83 @@ export interface AnalyzePageOptions {
 	logger?: Logger;
 	/** Best-effort model setup/download reporter; must never affect the result. */
 	onModelSetup?: (event: AnalysisModelSetup) => void;
+	/**
+	 * Optional Summarizer API client used *only* as a concise fallback after a
+	 * terminal Prompt API outcome (docs/summarizer-fallback.md). Omitting it
+	 * reproduces the Prompt-only behavior exactly.
+	 */
+	summarizer?: SummarizerClient;
+}
+
+/**
+ * The concise Summarizer input: the same in-memory title and excerpt the Prompt
+ * path already received. Deliberately *not* the analysis prompt — no profile
+ * instruction, no output contract, no system prompt reaches Summarizer.
+ */
+function buildSummarizerInput(input: AnalysisInput): string {
+	return `${input.title}\n\n${input.excerpt}`.trim();
+}
+
+/**
+ * One concise-summary attempt after the Prompt API reached a terminal outcome.
+ *
+ * Returns a ready fallback outcome only when Summarizer is *already* available
+ * and produced nonblank text; every other path returns `null` so the caller
+ * keeps the original Prompt outcome unchanged. Never starts a model download,
+ * and logs safe metadata only (no excerpt, URL, output, or browser error text).
+ */
+async function summarizerFallback(
+	summarizer: SummarizerClient | undefined,
+	input: AnalysisInput,
+	language: SupportedLanguage,
+	logger: Logger,
+): Promise<AnalysisOutcome | null> {
+	if (!summarizer) {
+		return null;
+	}
+
+	let availability: Awaited<ReturnType<SummarizerClient["availability"]>>;
+	try {
+		availability = await summarizer.availability(language);
+	} catch (error) {
+		logger.log("warn", "ai.analysis.summarizer-fallback-failed", {
+			...errorLogFields(error),
+			language,
+		});
+		return null;
+	}
+	// Availability is independent of the Prompt API's: only an already-prepared
+	// model may run here. A `downloadable`/`downloading` model is skipped rather
+	// than downloaded (docs/summarizer-fallback.md "Trigger and availability").
+	if (availability !== "available") {
+		logger.log("info", "ai.analysis.summarizer-fallback-skipped", {
+			availability,
+			language,
+		});
+		return null;
+	}
+
+	let raw: string;
+	try {
+		raw = await summarizer.summarize(buildSummarizerInput(input), language);
+	} catch (error) {
+		logger.log("warn", "ai.analysis.summarizer-fallback-failed", {
+			...errorLogFields(error),
+			language,
+		});
+		return null;
+	}
+
+	const summary = buildConciseSummary(raw);
+	if (!summary) {
+		// Blank output is unusable — keep the Prompt outcome rather than storing
+		// an empty "ready" summary.
+		logger.log("warn", "ai.analysis.summarizer-fallback-blank", { language });
+		return null;
+	}
+
+	logger.log("info", "ai.analysis.summarizer-fallback-ready", { language });
+	return { status: "ready", model: SUMMARIZER_ANALYSIS_MODEL, summary };
 }
 
 /**
@@ -101,6 +192,17 @@ export async function analyzePage(
 	// language-specific expected outputs the session will use.
 	const language = selectOutputLanguage(input);
 
+	/**
+	 * Every terminal Prompt outcome — `unavailable` or any `failed` — gets one
+	 * concise Summarizer attempt; the Prompt outcome survives unchanged whenever
+	 * that attempt cannot produce usable text (docs/summarizer-fallback.md).
+	 */
+	const withFallback = async (
+		promptOutcome: AnalysisOutcome,
+	): Promise<AnalysisOutcome> =>
+		(await summarizerFallback(options.summarizer, input, language, logger)) ??
+		promptOutcome;
+
 	let availability: Awaited<ReturnType<PromptClient["availability"]>>;
 	try {
 		availability = await client.availability(language);
@@ -111,14 +213,20 @@ export async function analyzePage(
 			...errorLogFields(error),
 			language,
 		});
-		return { status: "unavailable", reason: describeError(error) };
+		return withFallback({
+			status: "unavailable",
+			reason: describeError(error),
+		});
 	}
 	if (availability === "unavailable") {
 		logger.log("warn", "ai.analysis.unavailable", {
 			availability,
 			language,
 		});
-		return { status: "unavailable", reason: `Prompt API ${availability}` };
+		return withFallback({
+			status: "unavailable",
+			reason: `Prompt API ${availability}`,
+		});
 	}
 
 	// `downloadable` / `downloading` are no longer terminal: proceeding into
@@ -186,7 +294,7 @@ export async function analyzePage(
 				language,
 				profileId: profile.id,
 			});
-			return { status: "unavailable", reason: error.message };
+			return withFallback({ status: "unavailable", reason: error.message });
 		}
 		if (error instanceof PromptSessionCreateError) {
 			// Session creation (which includes the model download) failed — log it
@@ -199,20 +307,20 @@ export async function analyzePage(
 				language,
 				profileId: profile.id,
 			});
-			return {
+			return withFallback({
 				status: "failed",
 				error: { kind: "client-error", message: error.message },
-			};
+			});
 		}
 		logger.log("error", "ai.analysis.prompt-failed", {
 			...errorLogFields(error),
 			language,
 			profileId: profile.id,
 		});
-		return {
+		return withFallback({
 			status: "failed",
 			error: { kind: "client-error", message: describeError(error) },
-		};
+		});
 	}
 
 	const parsed = parseAnalysis(raw);
@@ -223,7 +331,12 @@ export async function analyzePage(
 			profileId: profile.id,
 			rawLength: raw.length,
 		});
-		return { status: "failed", error: parsed.error };
+		return withFallback({ status: "failed", error: parsed.error });
 	}
-	return { status: "ready", analysis: parsed.value, profileId: profile.id };
+	return {
+		status: "ready",
+		model: PROMPT_ANALYSIS_MODEL,
+		analysis: parsed.value,
+		profileId: profile.id,
+	};
 }

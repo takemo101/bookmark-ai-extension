@@ -76,6 +76,12 @@ export type OptionsMessages = {
 	readonly profileLabel: string;
 	readonly editProfileAria: (name: string) => string;
 	readonly analysisLabel: string;
+	/**
+	 * Shown beside a normal `ready` status when the stored content came from the
+	 * concise Summarizer fallback (docs/summarizer-fallback.md). Never exposes the
+	 * underlying Prompt/browser error.
+	 */
+	readonly conciseFallbackNotice: string;
 	readonly createdLabel: string;
 	readonly updatedLabel: string;
 	readonly analyzedLabel: string;
@@ -237,6 +243,7 @@ const EN: OptionsMessages = {
 	profileLabel: "Profile",
 	editProfileAria: (name) => `Edit analysis skill ${name}`,
 	analysisLabel: "Analysis",
+	conciseFallbackNotice: "Concise summary — detailed analysis was unavailable",
 	createdLabel: "Created",
 	updatedLabel: "Updated",
 	analyzedLabel: "Analyzed",
@@ -423,6 +430,7 @@ const JA: OptionsMessages = {
 	profileLabel: "プロファイル",
 	editProfileAria: (name) => `分析スキル「${name}」を編集`,
 	analysisLabel: "分析",
+	conciseFallbackNotice: "簡易要約 — 詳細分析を取得できなかったため",
 	createdLabel: "作成",
 	updatedLabel: "更新",
 	analyzedLabel: "分析日時",

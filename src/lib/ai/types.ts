@@ -44,6 +44,31 @@ export type PageAnalysis = {
 /** Tags beyond this count are dropped rather than treated as malformed output. */
 export const MAX_TAGS = 8;
 
+/** The Prompt API produced the stored analysis (the normal rich path). */
+export const PROMPT_ANALYSIS_MODEL = "chrome-prompt-api";
+/** The Summarizer API produced a concise fallback (docs/summarizer-fallback.md). */
+export const SUMMARIZER_ANALYSIS_MODEL = "chrome-summarizer-api";
+
+/**
+ * Which on-device Chrome API produced a `ready` result. Deliberately plain
+ * string literals: the bookmark domain's `AiModel` is structurally identical,
+ * so the AI module stays free of a `bookmarks/*` import.
+ */
+export type AnalysisModel =
+	| typeof PROMPT_ANALYSIS_MODEL
+	| typeof SUMMARIZER_ANALYSIS_MODEL;
+
+/**
+ * A Summarizer API concise fallback — usable generated content, but *not* a
+ * full analysis: no genre, tags, or analysis profile (docs/summarizer-fallback.md
+ * "Persisted result"). `description` is a deterministic one-line plain-text
+ * join of the generated key points for compact list/receipt display.
+ */
+export type ConciseSummary = {
+	readonly description: string;
+	readonly analysisMarkdown: string;
+};
+
 export type AnalysisParseErrorKind =
 	| "empty-output"
 	| "no-json"
@@ -77,17 +102,27 @@ export type AnalysisStatus = "ready" | "unavailable" | "failed";
 
 /**
  * Outcome of {@link analyzePage}. Each variant maps onto a bookmark `aiStatus`:
- *   - `ready`        → apply the analysis, status `ready`. `profileId` identifies
- *                      the built-in analysis profile selected for the page (see
- *                      ./profile.ts), independent of the AI-produced JSON.
+ *   - `ready` / `chrome-prompt-api`      → apply the analysis, status `ready`.
+ *                      `profileId` identifies the analysis profile selected for
+ *                      the page (see ./profile.ts), independent of the AI JSON.
+ *   - `ready` / `chrome-summarizer-api`  → apply the concise Summarizer fallback,
+ *                      status `ready` (docs/summarizer-fallback.md). There is no
+ *                      profile, genre, or tag set: the fallback never pretends to
+ *                      be profile-driven structured analysis.
  *   - `unavailable`  → keep the bookmark, status `unavailable` (re-analyze later).
  *   - `failed`       → keep the bookmark, status `failed`, record the reason.
  */
 export type AnalysisOutcome =
 	| {
 			readonly status: "ready";
+			readonly model: typeof PROMPT_ANALYSIS_MODEL;
 			readonly analysis: PageAnalysis;
 			readonly profileId: string;
+	  }
+	| {
+			readonly status: "ready";
+			readonly model: typeof SUMMARIZER_ANALYSIS_MODEL;
+			readonly summary: ConciseSummary;
 	  }
 	| { readonly status: "unavailable"; readonly reason: string }
 	| { readonly status: "failed"; readonly error: AnalysisFailure };
