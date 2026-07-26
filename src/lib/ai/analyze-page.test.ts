@@ -10,6 +10,11 @@ import {
 	PromptApiUnavailableError,
 	PromptSessionCreateError,
 } from "./prompt-api";
+import {
+	type SummarizerAvailability,
+	type SummarizerClient,
+	SummarizerRunError,
+} from "./summarizer-api";
 import type { AnalysisInput } from "./types";
 
 const INPUT: AnalysisInput = {
@@ -59,7 +64,8 @@ describe("analyzePage status/error mapping", () => {
 		});
 		const outcome = await analyzePage(client, INPUT);
 		expect(outcome.status).toBe("ready");
-		if (outcome.status !== "ready") return;
+		if (outcome.status !== "ready" || outcome.model !== "chrome-prompt-api")
+			return;
 		expect(outcome.analysis.description).toBe("説明");
 		expect(outcome.analysis.genre).toBe("技術");
 		expect(outcome.analysis.tags).toEqual(["A"]);
@@ -85,7 +91,8 @@ describe("analyzePage status/error mapping", () => {
 			url: "https://github.com/facebook/react",
 		});
 		expect(outcome.status).toBe("ready");
-		if (outcome.status !== "ready") return;
+		if (outcome.status !== "ready" || outcome.model !== "chrome-prompt-api")
+			return;
 		expect(outcome.profileId).toBe("github-repository");
 		expect(seen).toContain("GitHub");
 	});
@@ -443,7 +450,8 @@ describe("analyzePage status/error mapping", () => {
 			fallbackLanguage: "ja",
 		});
 		expect(outcome.status).toBe("ready");
-		if (outcome.status !== "ready") return;
+		if (outcome.status !== "ready" || outcome.model !== "chrome-prompt-api")
+			return;
 		expect(outcome.profileId).toBe("github-repository");
 		expect(availabilityLanguages).toEqual(["ja"]);
 		expect(promptLanguages).toEqual(["ja"]);
@@ -551,7 +559,8 @@ describe("analyzePage status/error mapping", () => {
 			[custom],
 		);
 		expect(outcome.status).toBe("ready");
-		if (outcome.status !== "ready") return;
+		if (outcome.status !== "ready" || outcome.model !== "chrome-prompt-api")
+			return;
 		expect(outcome.profileId).toBe("custom-github");
 	});
 
@@ -577,7 +586,294 @@ describe("analyzePage status/error mapping", () => {
 			[custom],
 		);
 		expect(outcome.status).toBe("ready");
-		if (outcome.status !== "ready") return;
+		if (outcome.status !== "ready" || outcome.model !== "chrome-prompt-api")
+			return;
 		expect(outcome.profileId).toBe("github-repository");
+	});
+});
+
+/**
+ * Summarizer API concise fallback (docs/summarizer-fallback.md). The Prompt API
+ * stays the normal path; these cases only cover what happens *after* it reaches
+ * a terminal failure.
+ */
+describe("analyzePage Summarizer fallback", () => {
+	const SUMMARY_MARKDOWN = "- 要点1\n- 要点2\n- 要点3";
+
+	/** A fake Summarizer client; no Chrome / Summarizer API involved. */
+	function fakeSummarizer(opts: {
+		availability?: SummarizerAvailability;
+		summarize?: (input: string, language?: string) => Promise<string>;
+	}) {
+		const calls: Array<{ input: string; language?: string }> = [];
+		const client: SummarizerClient = {
+			availability: async () => opts.availability ?? "available",
+			summarize: async (input, language) => {
+				calls.push({ input, language });
+				return opts.summarize
+					? opts.summarize(input, language)
+					: SUMMARY_MARKDOWN;
+			},
+		};
+		return { client, calls };
+	}
+
+	const failingPromptClients: ReadonlyArray<
+		readonly [string, () => PromptClient]
+	> = [
+		["unavailable API", () => fakeClient({ availability: "unavailable" })],
+		[
+			"throwing availability probe",
+			() =>
+				fakeClient({
+					availability: async () => {
+						throw new Error("probe blew up");
+					},
+				}),
+		],
+		[
+			"PromptApiUnavailableError",
+			() =>
+				fakeClient({
+					prompt: async () => {
+						throw new PromptApiUnavailableError();
+					},
+				}),
+		],
+		[
+			"session creation failure",
+			() =>
+				fakeClient({
+					prompt: async () => {
+						throw new PromptSessionCreateError(new Error("nope"));
+					},
+				}),
+		],
+		[
+			"generic prompt failure",
+			() =>
+				fakeClient({
+					prompt: async () => {
+						throw new Error("inference failed");
+					},
+				}),
+		],
+		["malformed JSON output", () => fakeClient({ prompt: async () => "oops" })],
+	];
+
+	it("never consults Summarizer when the Prompt API succeeds", async () => {
+		const summarizer = fakeSummarizer({});
+		const client = fakeClient({ prompt: async () => VALID_OUTPUT });
+
+		const outcome = await analyzePage(client, INPUT, [], {
+			summarizer: summarizer.client,
+		});
+
+		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready") return;
+		expect(outcome.model).toBe("chrome-prompt-api");
+		expect(summarizer.calls).toEqual([]);
+	});
+
+	for (const [label, makeClient] of failingPromptClients) {
+		it(`falls back once after a terminal Prompt outcome: ${label}`, async () => {
+			const summarizer = fakeSummarizer({});
+
+			const outcome = await analyzePage(makeClient(), INPUT, [], {
+				summarizer: summarizer.client,
+			});
+
+			expect(summarizer.calls).toHaveLength(1);
+			expect(outcome.status).toBe("ready");
+			if (outcome.status !== "ready") return;
+			expect(outcome.model).toBe("chrome-summarizer-api");
+			if (outcome.model !== "chrome-summarizer-api") return;
+			expect(outcome.summary.analysisMarkdown).toBe(SUMMARY_MARKDOWN);
+			expect(outcome.summary.description).toBe("要点1 / 要点2 / 要点3");
+		});
+	}
+
+	it("keeps the original Prompt outcome when no Summarizer client is wired", async () => {
+		const outcome = await analyzePage(
+			fakeClient({ availability: "unavailable" }),
+			INPUT,
+		);
+		expect(outcome.status).toBe("unavailable");
+	});
+
+	it("does not summarize unless Summarizer is already available", async () => {
+		for (const availability of [
+			"downloadable",
+			"downloading",
+			"unavailable",
+		] as const) {
+			const summarizer = fakeSummarizer({ availability });
+
+			const outcome = await analyzePage(
+				fakeClient({ prompt: async () => "not json" }),
+				INPUT,
+				[],
+				{ summarizer: summarizer.client },
+			);
+
+			expect(summarizer.calls).toEqual([]);
+			expect(outcome.status).toBe("failed");
+		}
+	});
+
+	it("keeps the original Prompt outcome when Summarizer throws", async () => {
+		const summarizer = fakeSummarizer({
+			summarize: async () => {
+				throw new SummarizerRunError(new Error("browser said no"));
+			},
+		});
+
+		const outcome = await analyzePage(
+			fakeClient({ availability: "unavailable" }),
+			INPUT,
+			[],
+			{ summarizer: summarizer.client },
+		);
+
+		expect(outcome.status).toBe("unavailable");
+		if (outcome.status !== "unavailable") return;
+		expect(outcome.reason).toContain("unavailable");
+	});
+
+	it("keeps the original Prompt outcome when the availability probe throws", async () => {
+		const summarizer: SummarizerClient = {
+			availability: async () => {
+				throw new Error("probe blew up");
+			},
+			summarize: async () => SUMMARY_MARKDOWN,
+		};
+
+		const outcome = await analyzePage(
+			fakeClient({
+				prompt: async () => {
+					throw new Error("inference failed");
+				},
+			}),
+			INPUT,
+			[],
+			{ summarizer },
+		);
+
+		expect(outcome.status).toBe("failed");
+	});
+
+	it("keeps the original Prompt outcome when Summarizer returns blank output", async () => {
+		for (const blank of ["", "   \n\t", "- \n- \n"]) {
+			const summarizer = fakeSummarizer({ summarize: async () => blank });
+
+			const outcome = await analyzePage(
+				fakeClient({ prompt: async () => "not json" }),
+				INPUT,
+				[],
+				{ summarizer: summarizer.client },
+			);
+
+			expect(outcome.status).toBe("failed");
+			if (outcome.status !== "failed") return;
+			expect(outcome.error.kind).not.toBe("client-error");
+		}
+	});
+
+	it("accepts irregular nonblank Markdown that is not three key points", async () => {
+		const summarizer = fakeSummarizer({
+			summarize: async () => "This page explains one single thing.",
+		});
+
+		const outcome = await analyzePage(
+			fakeClient({ availability: "unavailable" }),
+			INPUT,
+			[],
+			{ summarizer: summarizer.client },
+		);
+
+		expect(outcome.status).toBe("ready");
+		if (outcome.status !== "ready" || outcome.model !== "chrome-summarizer-api")
+			return;
+		expect(outcome.summary.description).toBe(
+			"This page explains one single thing.",
+		);
+	});
+
+	it("propagates the resolved output language to Summarizer", async () => {
+		for (const language of ["ja", "en"] as const) {
+			const summarizer = fakeSummarizer({});
+
+			await analyzePage(
+				fakeClient({ availability: "unavailable" }),
+				{ ...INPUT, fallbackLanguage: language },
+				[],
+				{ summarizer: summarizer.client },
+			);
+
+			expect(summarizer.calls[0]?.language).toBe(language);
+		}
+	});
+
+	it("sends the in-memory page text and never a profile instruction", async () => {
+		const summarizer = fakeSummarizer({});
+
+		await analyzePage(
+			fakeClient({ availability: "unavailable" }),
+			{ ...INPUT, url: "https://github.com/facebook/react" },
+			[],
+			{ summarizer: summarizer.client },
+		);
+
+		const sent = summarizer.calls[0]?.input ?? "";
+		expect(sent).toContain(INPUT.excerpt);
+		expect(sent).not.toContain("GitHub");
+	});
+
+	it("logs the fallback with safe metadata only", async () => {
+		const logger = createMemoryLogger();
+		const summarizer = fakeSummarizer({});
+
+		await analyzePage(
+			fakeClient({ availability: "unavailable" }),
+			{ ...INPUT, fallbackLanguage: "ja" },
+			[],
+			{ logger, summarizer: summarizer.client },
+		);
+
+		expect(logger.entries).toContainEqual({
+			level: "info",
+			event: "ai.analysis.summarizer-fallback-ready",
+			fields: { language: "ja" },
+		});
+		const serialized = JSON.stringify(logger.entries);
+		expect(serialized).not.toContain(INPUT.excerpt);
+		expect(serialized).not.toContain(INPUT.title);
+		expect(serialized).not.toContain(INPUT.url);
+		expect(serialized).not.toContain(SUMMARY_MARKDOWN);
+	});
+
+	it("logs a skipped fallback without leaking the browser failure text", async () => {
+		const logger = createMemoryLogger();
+		const summarizer = fakeSummarizer({
+			summarize: async () => {
+				const failure = new Error("secret browser detail");
+				failure.name = "InvalidStateError";
+				throw new SummarizerRunError(failure);
+			},
+		});
+
+		await analyzePage(fakeClient({ availability: "unavailable" }), INPUT, [], {
+			logger,
+			summarizer: summarizer.client,
+		});
+
+		expect(
+			logger.entries.some(
+				(e) => e.event === "ai.analysis.summarizer-fallback-failed",
+			),
+		).toBe(true);
+		expect(JSON.stringify(logger.entries)).not.toContain(
+			"secret browser detail",
+		);
 	});
 });

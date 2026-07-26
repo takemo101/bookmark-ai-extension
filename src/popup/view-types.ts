@@ -10,4 +10,6 @@ export type {
 	AiStatus,
 	BookmarkRecord,
 } from "../lib/bookmarks/index";
+/** Read-only predicate: is this record a concise Summarizer fallback? */
+export { isConciseFallback } from "../lib/bookmarks/index";
 export type { SyncStatus } from "../lib/storage/index";

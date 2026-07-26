@@ -21,7 +21,10 @@
  * chrome/fetch dependencies in `runtime/*` and `storage/*`.
  */
 
-import { createChromePromptClient } from "../lib/ai/index";
+import {
+	createChromePromptClient,
+	createChromeSummarizerClient,
+} from "../lib/ai/index";
 import {
 	type AppError,
 	err as appErr,
@@ -113,7 +116,12 @@ export function createRuntimeUseCases(): PopupUseCases {
 	const logger = createConsoleLogger();
 	const app = createBookmarkApp({
 		repository: drive.repository,
-		analyzer: createAnalyzerPort(createChromePromptClient(), { logger }),
+		analyzer: createAnalyzerPort(createChromePromptClient(), {
+			logger,
+			// Concise fallback after a terminal Prompt outcome only
+			// (docs/summarizer-fallback.md).
+			summarizer: createChromeSummarizerClient(),
+		}),
 		extractor: createChromeScriptingExtractor(),
 		tabs,
 		cache: createChromeLocalCache(),

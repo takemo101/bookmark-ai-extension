@@ -60,6 +60,7 @@ function detailOf(overrides: Partial<DetailView> = {}): DetailView {
 		canReAnalyze: false,
 		analysisMarkdown: "## 概要\n\n分析本文。",
 		analysisProfileId: "github-repository",
+		conciseFallback: false,
 		...overrides,
 	};
 }
@@ -77,6 +78,7 @@ function rowOf(overrides: Partial<RowView> = {}): RowView {
 		selected: false,
 		canReAnalyze: false,
 		analysisProfileId: "github-repository",
+		conciseFallback: false,
 		...overrides,
 	};
 }
@@ -2590,6 +2592,64 @@ describe("Options shared UI foundation (MIK-053)", () => {
 
 			const library = renderWithSkills(populatedView, skillsViewOf());
 			expect(library).toContain('aria-label="Delete Selected bookmark"');
+		});
+	});
+
+	describe("concise Summarizer fallback (docs/summarizer-fallback.md)", () => {
+		function fallbackView(): OptionsView {
+			const detail = detailOf({
+				description: "要点1 / 要点2",
+				genre: undefined,
+				tags: [],
+				analysisMarkdown: "- 要点1\n- 要点2",
+				analysisProfileId: undefined,
+				conciseFallback: true,
+			});
+			return viewOf({
+				rows: [
+					rowOf({
+						selected: true,
+						summary: "要点1 / 要点2",
+						genre: undefined,
+						tags: [],
+						analysisProfileId: undefined,
+						conciseFallback: true,
+					}),
+				],
+				totalCount: 1,
+				filteredCount: 1,
+				selected: detail,
+			});
+		}
+
+		it("explains a fallback record in English without a profile label", () => {
+			const html = render(fallbackView());
+
+			expect(html).toContain(
+				"Concise summary — detailed analysis was unavailable",
+			);
+			expect(html).not.toContain("github-repository");
+		});
+
+		it("explains a fallback record in Japanese", () => {
+			const html = render(fallbackView(), "ja");
+
+			expect(html).toContain("簡易要約 — 詳細分析を取得できなかったため");
+		});
+
+		it("says nothing extra for a normal Prompt analysis", () => {
+			const html = render(
+				viewOf({
+					rows: [rowOf({ selected: true })],
+					totalCount: 1,
+					filteredCount: 1,
+					selected: detailOf(),
+				}),
+			);
+
+			expect(html).not.toContain(
+				"Concise summary — detailed analysis was unavailable",
+			);
 		});
 	});
 });

@@ -10,7 +10,12 @@
  * and no Chrome glue). The local-cache adapter lives in `storage/*`.
  */
 import { bookmarkId, isoTimestampFromDate } from "../bookmarks/index";
-import { type PromptClient, analyzePage, toAnalysisProfile } from "../ai/index";
+import {
+	type PromptClient,
+	type SummarizerClient,
+	analyzePage,
+	toAnalysisProfile,
+} from "../ai/index";
 import type { Logger } from "../logging/index";
 import { skillId } from "../settings/index";
 import type { SettingsCache } from "../storage/settings-local-cache";
@@ -22,15 +27,22 @@ import type {
 } from "./ports";
 import type { SkillIdGenerator } from "./settings-app";
 
-/** Adapt the AI module's {@link analyzePage} into an {@link AnalyzerPort}. */
+/**
+ * Adapt the AI module's {@link analyzePage} into an {@link AnalyzerPort}.
+ *
+ * `summarizer`, when given, is the concise fallback client the analyzer reaches
+ * for *only* after a terminal Prompt API outcome (docs/summarizer-fallback.md).
+ * Omitting it keeps the Prompt-only behavior.
+ */
 export function createAnalyzerPort(
 	client: PromptClient,
-	options: { logger?: Logger } = {},
+	options: { logger?: Logger; summarizer?: SummarizerClient } = {},
 ): AnalyzerPort {
 	return {
 		analyze(input, customProfiles, callOptions) {
 			return analyzePage(client, input, customProfiles, {
 				logger: options.logger,
+				summarizer: options.summarizer,
 				onModelSetup: callOptions?.onModelSetup,
 			});
 		},

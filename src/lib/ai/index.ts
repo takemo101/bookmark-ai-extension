@@ -20,6 +20,11 @@
  *   - {@link toAnalysisProfile}       — converts a settings-domain `CustomSkill`
  *                                        into an `AnalysisProfile`.
  *   - {@link createChromePromptClient} — browser Prompt API adapter.
+ *   - {@link createChromeSummarizerClient} — browser Summarizer API adapter,
+ *                                        used only for the concise fallback
+ *                                        after a terminal Prompt outcome
+ *                                        (docs/summarizer-fallback.md).
+ *   - {@link buildConciseSummary}     — pure Summarizer-output transform.
  *   - {@link buildAskAiRecommendationPrompt} / {@link parseAskAiRecommendation}
  *                                     — pure Ask AI recommendation prompt
  *                                        builder and output parser (MIK-044).
@@ -34,6 +39,7 @@ export { ok, err } from "./result";
 
 export type {
 	AnalysisInput,
+	AnalysisModel,
 	PageAnalysis,
 	AnalysisParseErrorKind,
 	AnalysisParseError,
@@ -41,8 +47,29 @@ export type {
 	AnalysisFailure,
 	AnalysisStatus,
 	AnalysisOutcome,
+	ConciseSummary,
 } from "./types";
-export { MAX_TAGS } from "./types";
+export {
+	MAX_TAGS,
+	PROMPT_ANALYSIS_MODEL,
+	SUMMARIZER_ANALYSIS_MODEL,
+} from "./types";
+
+export type {
+	SummarizerAvailability,
+	SummarizerClient,
+	SummarizerNamespace,
+	SummarizerSession,
+} from "./summarizer-api";
+export {
+	CONCISE_SUMMARY_OPTIONS,
+	CONCISE_SUMMARY_SHARED_CONTEXT,
+	SummarizerApiUnavailableError,
+	SummarizerRunError,
+	createChromeSummarizerClient,
+} from "./summarizer-api";
+
+export { buildConciseSummary } from "./concise-summary";
 
 export type {
 	AskAiPromptRequest,

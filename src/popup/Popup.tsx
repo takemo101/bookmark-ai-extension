@@ -536,6 +536,14 @@ function Receipt({
 					</span>
 				) : null}
 			</div>
+			{/* A concise Summarizer fallback is a normal `ready` result with an
+			    honest label — never the raw Prompt/browser error
+			    (docs/summarizer-fallback.md "User experience"). */}
+			{receipt.conciseFallback ? (
+				<p style={{ fontSize: 11, color: palette.inkSoft, margin: "0 0 4px" }}>
+					{m.conciseFallbackNotice}
+				</p>
+			) : null}
 			{receipt.aiStatus === "ready" ? (
 				<Preview preview={receipt.preview} />
 			) : (
@@ -754,6 +762,14 @@ function RecentDetail({
 					{detail.url}
 				</ExternalLink>
 			</header>
+
+			{/* Honest label for a concise Summarizer fallback; the underlying Prompt
+			    failure stays out of the UI (docs/summarizer-fallback.md). */}
+			{detail.conciseFallback ? (
+				<p style={{ fontSize: 11, color: palette.inkSoft, margin: "8px 0 0" }}>
+					{m.conciseFallbackNotice}
+				</p>
+			) : null}
 
 			{detail.description ? (
 				<p style={{ fontSize: 12, color: palette.ink, margin: "8px 0 0" }}>

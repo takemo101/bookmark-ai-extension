@@ -50,6 +50,7 @@ function recordOf(opts: {
 	id?: string;
 	analysisMarkdown?: string;
 	analysisProfileId?: string;
+	aiModel?: BookmarkRecord["aiModel"];
 }): BookmarkRecord {
 	const res = Bookmarks.empty().upsert(
 		{
@@ -60,6 +61,7 @@ function recordOf(opts: {
 			genre: opts.genre,
 			tags: opts.tags,
 			aiError: opts.aiError,
+			aiModel: opts.aiModel,
 			analysisMarkdown: opts.analysisMarkdown,
 			analysisProfileId: opts.analysisProfileId,
 		},
@@ -801,6 +803,84 @@ describe("createPopupController", () => {
 
 			expect(controller.getView().sync.status).toBe("error");
 			expect(controller.getView().sync.error).toBe("token expired");
+		});
+	});
+
+	describe("concise Summarizer fallback (docs/summarizer-fallback.md)", () => {
+		it("flags a Summarizer-model recent detail as a concise fallback", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({
+					aiStatus: "ready",
+					aiModel: "chrome-summarizer-api",
+					description: "要点1 / 要点2",
+					analysisMarkdown: "- 要点1\n- 要点2",
+				}),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent(controller.getView().recent[0].canonicalUrl);
+			const detail = controller.getView().selectedRecent;
+
+			expect(detail?.aiStatus).toBe("ready");
+			expect(detail?.conciseFallback).toBe(true);
+			// A fallback never carries profile-driven structured metadata.
+			expect(detail?.analysisProfileName).toBeUndefined();
+			expect(detail?.genre).toBeUndefined();
+			expect(detail?.tags).toEqual([]);
+		});
+
+		it("does not flag a normal Prompt-analysis detail", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({ aiStatus: "ready", aiModel: "chrome-prompt-api" }),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			controller.selectRecent(controller.getView().recent[0].canonicalUrl);
+			expect(controller.getView().selectedRecent?.conciseFallback).toBe(false);
+		});
+
+		it("flags the save receipt when the saved record is a concise fallback", async () => {
+			const fake = new FakeUseCases();
+			fake.saveResult = {
+				ok: true,
+				value: outcomeOf(
+					recordOf({
+						aiStatus: "ready",
+						aiModel: "chrome-summarizer-api",
+						description: "要点1 / 要点2",
+					}),
+				),
+			};
+			const controller = controllerWith(fake);
+			await controller.init();
+			await controller.save();
+
+			const flow = controller.getView().flow;
+			expect(flow.kind).toBe("done");
+			if (flow.kind !== "done") return;
+			expect(flow.receipt.aiStatus).toBe("ready");
+			expect(flow.receipt.conciseFallback).toBe(true);
+		});
+
+		it("does not flag the receipt for a normal Prompt analysis", async () => {
+			const fake = new FakeUseCases();
+			fake.saveResult = {
+				ok: true,
+				value: outcomeOf(
+					recordOf({ aiStatus: "ready", aiModel: "chrome-prompt-api" }),
+				),
+			};
+			const controller = controllerWith(fake);
+			await controller.init();
+			await controller.save();
+
+			const flow = controller.getView().flow;
+			if (flow.kind !== "done") return;
+			expect(flow.receipt.conciseFallback).toBe(false);
 		});
 	});
 });

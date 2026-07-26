@@ -36,6 +36,7 @@ function rowOf(overrides: Partial<RowView> = {}): RowView {
 		selected: false,
 		canReAnalyze: false,
 		analysisProfileId: "github-repository",
+		conciseFallback: false,
 		...overrides,
 	};
 }

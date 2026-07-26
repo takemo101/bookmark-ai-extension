@@ -42,6 +42,12 @@ export type PopupMessages = {
 	readonly unavailableReceipt: string;
 	readonly failedReceipt: (message: string) => string;
 	readonly savedReceipt: string;
+	/**
+	 * Shown beside a normal `ready` status when the stored content came from the
+	 * concise Summarizer fallback (docs/summarizer-fallback.md). Never exposes the
+	 * underlying Prompt/browser error.
+	 */
+	readonly conciseFallbackNotice: string;
 	readonly drivePending: (message: string) => string;
 	readonly recentBookmarks: string;
 	readonly reAnalyze: string;
@@ -96,6 +102,7 @@ const EN: PopupMessages = {
 	failedReceipt: (message) =>
 		`Saved, but analysis failed: ${message}. Re-analyze later from Options.`,
 	savedReceipt: "Saved. Re-analyze later from Options.",
+	conciseFallbackNotice: "Concise summary — detailed analysis was unavailable",
 	drivePending: (message) => `Drive sync pending: ${message}`,
 	recentBookmarks: "Recent bookmarks",
 	reAnalyze: "Re-analyze",
@@ -150,6 +157,7 @@ const JA: PopupMessages = {
 	failedReceipt: (message) =>
 		`保存しましたが、分析に失敗しました: ${message}。後で設定ページから再分析できます。`,
 	savedReceipt: "保存しました。後で設定ページから再分析できます。",
+	conciseFallbackNotice: "簡易要約 — 詳細分析を取得できなかったため",
 	drivePending: (message) => `Drive同期が保留中: ${message}`,
 	recentBookmarks: "最近のブックマーク",
 	reAnalyze: "再分析",

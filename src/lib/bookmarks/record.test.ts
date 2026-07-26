@@ -218,3 +218,43 @@ describe("createBookmarkRecord", () => {
 		expect(createBookmarkRecord({ url: "nope" }, ctx).ok).toBe(false);
 	});
 });
+
+/**
+ * The Summarizer concise fallback marks its records with a distinct `aiModel`
+ * (docs/summarizer-fallback.md "Persisted result"). Legacy records — Prompt or
+ * no model at all — must keep parsing unchanged.
+ */
+describe("aiModel compatibility", () => {
+	it("accepts the Summarizer fallback model marker", () => {
+		const result = parseBookmarkRecord(
+			validV1({ aiModel: "chrome-summarizer-api" }),
+		);
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.value.aiModel).toBe("chrome-summarizer-api");
+	});
+
+	it("round-trips a Summarizer fallback record through JSONL", () => {
+		const parsed = parseBookmarkRecord(
+			validV1({
+				aiStatus: "ready",
+				aiModel: "chrome-summarizer-api",
+				description: "要点1 / 要点2",
+				analysisMarkdown: "- 要点1\n- 要点2",
+			}),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		const serialized = serializeBookmarkRecord(parsed.value);
+		expect(serialized.aiModel).toBe("chrome-summarizer-api");
+		const reparsed = parseBookmarkRecord(serialized);
+		expect(reparsed.ok).toBe(true);
+		if (reparsed.ok) expect(reparsed.value).toEqual(parsed.value);
+	});
+
+	it("still accepts existing Prompt-model and model-less records", () => {
+		expect(
+			parseBookmarkRecord(validV1({ aiModel: "chrome-prompt-api" })).ok,
+		).toBe(true);
+		expect(parseBookmarkRecord(validV1({})).ok).toBe(true);
+	});
+});

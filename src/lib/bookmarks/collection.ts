@@ -13,6 +13,8 @@
  */
 import { type Result, err, ok } from "./result";
 import {
+	AI_MODEL,
+	AI_MODEL_SUMMARIZER,
 	type BookmarkRecord,
 	type NewBookmarkInput,
 	type RecordError,
@@ -39,6 +41,16 @@ export type AiAnalysis = {
 	tags?: string[];
 	analysisMarkdown?: string;
 	analysisProfileId?: string;
+};
+
+/**
+ * A Summarizer API concise fallback (docs/summarizer-fallback.md). Both fields
+ * are required: unlike {@link AiAnalysis}, this result never merges into a prior
+ * analysis — it replaces it.
+ */
+export type AiConciseSummary = {
+	description: string;
+	analysisMarkdown: string;
 };
 
 export type CollectionError =
@@ -295,13 +307,64 @@ export class Bookmarks {
 				genre: analysis.genre ?? existing.genre,
 				tags: analysis.tags ?? [...existing.tags],
 				aiStatus: "ready",
-				aiModel: "chrome-prompt-api",
+				aiModel: AI_MODEL,
 				aiError: undefined,
 				lastAnalyzedAt: updatedAt,
 				analysisMarkdown:
 					analysis.analysisMarkdown ?? existing.analysisMarkdown,
 				analysisProfileId:
 					analysis.analysisProfileId ?? existing.analysisProfileId,
+			},
+			{ id: existing.id, now: updatedAt },
+		);
+		if (!updated.ok) {
+			return updated;
+		}
+		return ok(
+			this.with({
+				...updated.value,
+				createdAt: existing.createdAt,
+				canonicalUrl: existing.canonicalUrl,
+			}),
+		);
+	}
+
+	/**
+	 * Apply a Summarizer API concise fallback and move the record to `ready`
+	 * (docs/summarizer-fallback.md "Persisted result").
+	 *
+	 * Unlike {@link applyAiAnalysis} this **replaces** rather than merges: a prior
+	 * rich analysis's genre, tags, profile id, and AI error are cleared, so stale
+	 * structured metadata can never appear current beside a concise summary. The
+	 * distinct `aiModel` marker is the only extra distinction — there is no
+	 * separate degraded status.
+	 */
+	applyConciseSummary(
+		canonicalUrl: CanonicalUrl,
+		summary: AiConciseSummary,
+		now: IsoTimestamp,
+	): Result<Bookmarks, CollectionError> {
+		const existing = this.byUrl.get(canonicalUrl);
+		if (!existing) {
+			return err({
+				field: "canonicalUrl",
+				message: "no record for canonical URL",
+			});
+		}
+		const updatedAt = maxIsoTimestamp(existing.updatedAt, now);
+		const updated = createBookmarkRecord(
+			{
+				url: existing.url,
+				title: existing.title,
+				description: summary.description,
+				genre: undefined,
+				tags: [],
+				aiStatus: "ready",
+				aiModel: AI_MODEL_SUMMARIZER,
+				aiError: undefined,
+				lastAnalyzedAt: updatedAt,
+				analysisMarkdown: summary.analysisMarkdown,
+				analysisProfileId: undefined,
 			},
 			{ id: existing.id, now: updatedAt },
 		);

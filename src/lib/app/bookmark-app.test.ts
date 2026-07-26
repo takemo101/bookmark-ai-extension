@@ -228,6 +228,7 @@ function samplePage(url: string, title: string): ExtractedPage {
 
 const READY: AnalysisOutcome = {
 	status: "ready",
+	model: "chrome-prompt-api",
 	analysis: {
 		description: "説明文",
 		genre: "開発ツール",
@@ -235,6 +236,16 @@ const READY: AnalysisOutcome = {
 		analysisMarkdown: "## 概要\n\n分析本文。",
 	},
 	profileId: "github-repository",
+};
+
+/** A Summarizer concise fallback (docs/summarizer-fallback.md). */
+const CONCISE_FALLBACK: AnalysisOutcome = {
+	status: "ready",
+	model: "chrome-summarizer-api",
+	summary: {
+		description: "要点1 / 要点2 / 要点3",
+		analysisMarkdown: "- 要点1\n- 要点2\n- 要点3",
+	},
 };
 
 type Harness = {
@@ -919,5 +930,81 @@ describe("createBookmarkApp", () => {
 				expect(JSON.stringify(record)).not.toContain(rawExcerptText);
 			}
 		});
+	});
+});
+
+/**
+ * Persisting the Summarizer concise fallback (docs/summarizer-fallback.md).
+ * The app layer only maps the analyzer's discriminated ready outcome onto the
+ * matching domain intent; the fallback rules themselves live in `ai/*`.
+ */
+describe("concise Summarizer fallback persistence", () => {
+	it("saves the fallback as a ready record marked with the Summarizer model", async () => {
+		const { app } = makeHarness({ outcome: CONCISE_FALLBACK });
+
+		const saved = await app.saveCurrentTab();
+
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		const { record } = saved.value;
+		expect(record.aiStatus).toBe("ready");
+		expect(record.aiModel).toBe("chrome-summarizer-api");
+		expect(record.description).toBe("要点1 / 要点2 / 要点3");
+		expect(record.analysisMarkdown).toBe("- 要点1\n- 要点2\n- 要点3");
+		expect(record.genre).toBeUndefined();
+		expect(record.tags).toEqual([]);
+		expect(record.analysisProfileId).toBeUndefined();
+		expect(record.aiError).toBeUndefined();
+		expect(saved.value.driveSynced).toBe(true);
+	});
+
+	it("replaces a prior rich analysis, clearing its stale structured fields", async () => {
+		const { app, analyzer } = makeHarness();
+
+		const first = await app.saveCurrentTab();
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+		expect(first.value.record.genre).toBe("開発ツール");
+
+		analyzer.setOutcome(CONCISE_FALLBACK);
+		const fallback = await app.reAnalyzeBookmark(
+			first.value.record.canonicalUrl,
+		);
+
+		expect(fallback.ok).toBe(true);
+		if (!fallback.ok) return;
+		expect(fallback.value.record.aiModel).toBe("chrome-summarizer-api");
+		expect(fallback.value.record.genre).toBeUndefined();
+		expect(fallback.value.record.tags).toEqual([]);
+		expect(fallback.value.record.analysisProfileId).toBeUndefined();
+	});
+
+	it("lets a later full analysis upgrade a concise fallback record", async () => {
+		const { app, analyzer } = makeHarness({ outcome: CONCISE_FALLBACK });
+
+		const fallback = await app.saveCurrentTab();
+		expect(fallback.ok).toBe(true);
+		if (!fallback.ok) return;
+
+		analyzer.setOutcome(READY);
+		const upgraded = await app.reAnalyzeBookmark(
+			fallback.value.record.canonicalUrl,
+		);
+
+		expect(upgraded.ok).toBe(true);
+		if (!upgraded.ok) return;
+		expect(upgraded.value.record.aiModel).toBe("chrome-prompt-api");
+		expect(upgraded.value.record.genre).toBe("開発ツール");
+		expect(upgraded.value.record.analysisProfileId).toBe("github-repository");
+	});
+
+	it("never persists the raw page excerpt with a fallback record", async () => {
+		const { app, repo } = makeHarness({ outcome: CONCISE_FALLBACK });
+
+		await app.saveCurrentTab();
+
+		expect(JSON.stringify(repo.remote.toArray())).not.toContain(
+			"Some body text for the excerpt.",
+		);
 	});
 });

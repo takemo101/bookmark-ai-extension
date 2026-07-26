@@ -20,6 +20,7 @@
  * or Prompt API required.
  */
 import type { CacheState, CanonicalUrl, OptionsUseCases } from "./use-cases";
+import { isConciseFallback } from "./view-types";
 import type { AiStatus, BookmarkRecord, SyncStatus } from "./view-types";
 
 /** AI-status filter options offered in the left rail, in lifecycle order. */
@@ -70,6 +71,11 @@ export type RowView = {
 	readonly canReAnalyze: boolean;
 	/** ID of the analysis profile shown as compact row metadata (MIK-022). */
 	readonly analysisProfileId?: string;
+	/**
+	 * This `ready` record holds a concise Summarizer fallback rather than the
+	 * full analysis (docs/summarizer-fallback.md).
+	 */
+	readonly conciseFallback: boolean;
 };
 
 /** The detail side sheet for the selected (open) bookmark (MIK-022). */
@@ -90,6 +96,8 @@ export type DetailView = {
 	readonly analysisMarkdown?: string;
 	/** ID of the built-in analysis profile that generated the current analysis. */
 	readonly analysisProfileId?: string;
+	/** This record is a concise Summarizer fallback (see {@link RowView}). */
+	readonly conciseFallback: boolean;
 };
 
 export type SyncView = {
@@ -419,6 +427,7 @@ function toRow(record: BookmarkRecord, selected: boolean): RowView {
 		selected,
 		canReAnalyze: record.aiStatus !== "ready",
 		analysisProfileId: record.analysisProfileId,
+		conciseFallback: isConciseFallback(record),
 	};
 }
 
@@ -438,6 +447,7 @@ function toDetail(record: BookmarkRecord): DetailView {
 		canReAnalyze: record.aiStatus !== "ready",
 		analysisMarkdown: record.analysisMarkdown,
 		analysisProfileId: record.analysisProfileId,
+		conciseFallback: isConciseFallback(record),
 	};
 }
 

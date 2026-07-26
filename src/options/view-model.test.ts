@@ -38,6 +38,7 @@ function recordOf(opts: {
 	updatedAt?: string;
 	analysisMarkdown?: string;
 	analysisProfileId?: string;
+	aiModel?: BookmarkRecord["aiModel"];
 }): BookmarkRecord {
 	seq += 1;
 	const url = opts.url ?? `https://example.test/p${seq}`;
@@ -50,6 +51,7 @@ function recordOf(opts: {
 			genre: opts.genre,
 			tags: opts.tags,
 			aiError: opts.aiError,
+			aiModel: opts.aiModel,
 			analysisMarkdown: opts.analysisMarkdown,
 			analysisProfileId: opts.analysisProfileId,
 		},
@@ -899,6 +901,54 @@ describe("createOptionsController", () => {
 			const view = controller.getView();
 			expect(view.filteredCount).toBe(1);
 			expect(view.rows[0].title).toBe("Needle in the haystack");
+		});
+	});
+
+	describe("concise Summarizer fallback (docs/summarizer-fallback.md)", () => {
+		it("flags fallback rows and details, without profile metadata", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({
+					id: "p",
+					aiStatus: "ready",
+					aiModel: "chrome-summarizer-api",
+					description: "要点1 / 要点2",
+					analysisMarkdown: "- 要点1\n- 要点2",
+				}),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const row = controller.getView().rows[0];
+			expect(row.aiStatus).toBe("ready");
+			expect(row.conciseFallback).toBe(true);
+			expect(row.analysisProfileId).toBeUndefined();
+
+			controller.select(row.canonicalUrl);
+			const detail = controller.getView().selected;
+			expect(detail?.conciseFallback).toBe(true);
+			expect(detail?.analysisProfileId).toBeUndefined();
+			expect(detail?.genre).toBeUndefined();
+			expect(detail?.tags).toEqual([]);
+		});
+
+		it("does not flag a normal Prompt-analysis row or detail", async () => {
+			const fake = new FakeUseCases();
+			fake.cache = cacheOf([
+				recordOf({
+					id: "p",
+					aiStatus: "ready",
+					aiModel: "chrome-prompt-api",
+					analysisProfileId: "github-repository",
+				}),
+			]);
+			const controller = controllerWith(fake);
+			await controller.init();
+
+			const row = controller.getView().rows[0];
+			expect(row.conciseFallback).toBe(false);
+			controller.select(row.canonicalUrl);
+			expect(controller.getView().selected?.conciseFallback).toBe(false);
 		});
 	});
 });

@@ -102,6 +102,7 @@ function makeApp(mark: (event: string) => void) {
 			mark("analyze");
 			return {
 				status: "ready",
+				model: "chrome-prompt-api",
 				analysis: {
 					description: "説明",
 					genre: "開発",
