@@ -196,7 +196,7 @@ type BookmarkRecordV1 = {
   genre?: string;
   tags: string[];
   aiStatus: AiStatus;
-  aiModel?: 'chrome-prompt-api';
+  aiModel?: 'chrome-prompt-api' | 'chrome-summarizer-api';
   aiError?: string;
   createdAt: string;
   updatedAt: string;
@@ -219,7 +219,10 @@ Notes:
 - `analysisMarkdown` and `analysisProfileId` are optional for backward
   compatibility with records written before AI Analysis v2 Phase 1; see
   [`ai-analysis-v2.md`](ai-analysis-v2.md) for the full data model and prompt
-  contract.
+  contract. `aiModel: 'chrome-summarizer-api'` marks a successful concise
+  fallback; it has no genre, tags, or profile ID and is visibly distinguished
+  in the UI. The full fallback contract is in
+  [`summarizer-fallback.md`](summarizer-fallback.md).
 - Raw page excerpt is not stored.
 - Deletions are recorded as separate **tombstone** lines
   (`kind: "tombstone"`), not by removing the record line; see "Durable deletion
@@ -237,21 +240,28 @@ Notes:
    8k-12k characters.
 8. Extension writes or updates a pending bookmark record in Drive/local cache.
 9. Popup/options runs Prompt API analysis in the foreground while the screen
-   stays open, then updates the bookmark record with the target-language
-   `description`, `genre`, `tags`, `aiStatus`, and analysis timestamps before reporting the
-   save as complete (MIK-021). Analysis is never handed off to a service
-   worker, offscreen document, or background queue.
+   stays open. A ready result updates the bookmark with target-language
+   `description`, `genre`, `tags`, `analysisMarkdown`, and profile metadata. A
+   terminal Prompt failure can use an already-available on-device Summarizer
+   API to save a visibly labelled concise fallback; its full contract is in
+   [`summarizer-fallback.md`](summarizer-fallback.md). Analysis is never handed
+   off to a service worker, offscreen document, or background queue.
 10. If the UI closes mid-flow, the in-memory excerpt is dropped (it is never
     persisted) and the durable record remains `pending`, recoverable for later
     re-analysis from a valid active tab.
 
-If AI is unavailable or fails:
+If Prompt API is unavailable or fails:
 
 - Still save the bookmark with URL/title and metadata.
-- Set `aiStatus` to `unavailable` or `failed`.
-- Keep the record recoverable for later re-analysis: saving the page again
-  from the popup re-runs analysis. The Options detail drawer no longer offers a
-  Re-analyze action (MIK-024).
+- Attempt the concise Summarizer fallback only when that API is already
+  available; never download its model as a fallback side effect.
+- If the fallback succeeds, set `aiStatus` to `ready` and
+  `aiModel` to `chrome-summarizer-api`, clear structured-only fields, and show
+  the localized concise-fallback explanation. Otherwise retain the original
+  `unavailable` or `failed` status.
+- Keep the record recoverable for later full analysis: saving the page again
+  from the popup re-runs Prompt analysis first. The Options detail drawer does
+  not offer a dedicated retry action.
 
 ## Page Extraction
 
@@ -273,7 +283,9 @@ Do not persist the excerpt in `bookmarks.jsonl`.
 
 ## AI Design
 
-Use Chrome Built-in AI / Prompt API only in MVP.
+Use Chrome Built-in AI / Prompt API as the normal MVP analysis path, with the
+on-device Summarizer API permitted only as the terminal-failure fallback
+specified in [`summarizer-fallback.md`](summarizer-fallback.md).
 
 - No Gemini API key fallback in MVP.
 - No OpenAI fallback in MVP.
@@ -508,8 +520,12 @@ The popup should behave like a save receipt:
    - page excerpt extracted;
    - AI analyzing;
    - Drive synced / AI ready.
-4. Show a short preview of the generated description, genre, and tags when ready.
-5. If Prompt API is unavailable or fails, keep the saved bookmark visible with `unavailable` or `failed` status and a path to re-analyze later.
+4. Show a short preview of the generated description, genre, and tags for a
+   full analysis, or the localized concise-fallback explanation and summary
+   when Summarizer provided the result.
+5. If both Prompt and the eligible Summarizer fallback cannot provide output,
+   keep the saved bookmark visible with `unavailable` or `failed` status and a
+   path to re-analyze later.
 
 ### Options page: Research Ledger
 
