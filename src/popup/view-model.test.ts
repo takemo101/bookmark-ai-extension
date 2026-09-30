@@ -160,6 +160,48 @@ function controllerWith(fake: FakeUseCases) {
 }
 
 describe("createPopupController", () => {
+	it("reconnects to an active worker save on reopen without starting it again", async () => {
+		const fake = new FakeUseCases();
+		let complete!: (result: Result<SaveOutcome, AppError>) => void;
+		const useCases: PopupUseCases = Object.assign(fake, {
+			activeSave: async () => "existing",
+			waitForSave: async (_id: string, progress?: ProgressObserver) => {
+				progress?.({ stage: "analyzing" });
+				return new Promise<Result<SaveOutcome, AppError>>((resolve) => {
+					complete = resolve;
+				});
+			},
+		});
+		const controller = createPopupController(useCases);
+		await controller.init();
+		expect(controller.getView().flow.kind).toBe("running");
+		expect(controller.getView().canSave).toBe(false);
+		expect(fake.saveCalls).toBe(0);
+		complete(fake.saveResult);
+		await vi.waitFor(() => expect(controller.getView().flow.kind).toBe("done"));
+	});
+	it("prepares the model only on explicit intent, preventing overlapping saves", async () => {
+		const fake = new FakeUseCases();
+		let complete!: () => void;
+		const prepareAi = vi.fn(async () => {
+			await new Promise<void>((resolve) => {
+				complete = resolve;
+			});
+			return { ok: true as const, value: undefined };
+		});
+		const controller = createPopupController(
+			Object.assign(fake, { prepareAi }),
+		);
+		await controller.init();
+		expect(prepareAi).not.toHaveBeenCalled();
+		const preparing = controller.prepareAi();
+		expect(controller.getView().preparingAi).toBe(true);
+		await controller.save();
+		expect(fake.saveCalls).toBe(0);
+		complete();
+		await preparing;
+		expect(controller.getView().preparingAi).toBe(false);
+	});
 	describe("init", () => {
 		it("loads tab, badges, recent bookmarks, and sync state", async () => {
 			const fake = new FakeUseCases();

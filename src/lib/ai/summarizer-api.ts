@@ -109,7 +109,7 @@ export class SummarizerRunError extends Error {
 // --- Structural view of the browser globals (see file header assumptions) ---
 
 export interface SummarizerSession {
-	summarize(input: string): Promise<string>;
+	summarize(input: string, options?: { signal?: AbortSignal }): Promise<string>;
 	destroy?(): void;
 }
 
@@ -164,6 +164,7 @@ function normalizeAvailability(value: unknown): SummarizerAvailability {
  */
 export function createChromeSummarizerClient(
 	namespace: SummarizerNamespace | null = resolveSummarizerNamespace(),
+	options: { signal?: AbortSignal } = {},
 ): SummarizerClient {
 	return {
 		async availability(
@@ -194,20 +195,34 @@ export function createChromeSummarizerClient(
 			// Prompt failure (docs/summarizer-fallback.md "Trigger and availability").
 			let session: SummarizerSession;
 			try {
+				options.signal?.throwIfAborted();
 				session = await namespace.create({
 					...CONCISE_SUMMARY_OPTIONS,
 					sharedContext: CONCISE_SUMMARY_SHARED_CONTEXT,
 					outputLanguage: language,
+					...(options.signal ? { signal: options.signal } : {}),
 				});
 			} catch (cause) {
 				throw new SummarizerRunError(cause);
 			}
+			const destroy = () => {
+				try {
+					session.destroy?.();
+				} catch {
+					/* Best-effort cleanup. */
+				}
+			};
+			options.signal?.addEventListener("abort", destroy, { once: true });
 			try {
-				return await session.summarize(input);
+				options.signal?.throwIfAborted();
+				return await (options.signal
+					? session.summarize(input, { signal: options.signal })
+					: session.summarize(input));
 			} catch (cause) {
 				throw new SummarizerRunError(cause);
 			} finally {
-				session.destroy?.();
+				options.signal?.removeEventListener("abort", destroy);
+				destroy();
 			}
 		},
 	};

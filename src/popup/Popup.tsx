@@ -83,6 +83,32 @@ export function Popup({
 				onDelete={() => void controller.deleteCurrentBookmark()}
 			/>
 			<Badges view={view} m={m} />
+			{view.promptApi === "downloadable" ||
+			view.promptApi === "downloading" ||
+			view.preparingAi ? (
+				<section style={{ marginBottom: 8 }}>
+					<button
+						type="button"
+						style={styles.subtleButton}
+						disabled={view.preparingAi || view.flow.kind === "running"}
+						onClick={() => void controller.prepareAi()}
+					>
+						{view.preparingAi ? m.modelPreparing : m.prepareAi}
+					</button>
+					<p style={{ fontSize: 11, color: palette.inkSoft }}>
+						{m.preparationHint}
+					</p>
+				</section>
+			) : null}
+			{view.preparationError ? (
+				<p role="alert" style={{ color: palette.danger }}>
+					{view.preparationError}
+				</p>
+			) : null}
+			{view.currentBookmark?.aiStatus === "pending" &&
+			view.flow.kind === "idle" ? (
+				<p style={{ fontSize: 11, color: palette.inkSoft }}>{m.pendingHint}</p>
+			) : null}
 			<SaveAction view={view} m={m} onSave={() => void controller.save()} />
 			<Flow flow={view.flow} m={m} />
 			<Recent

@@ -18,6 +18,8 @@ import type { SkillError } from "../settings/index";
 import type { SyncError } from "../storage/index";
 
 export type AppErrorKind =
+	| "busy" // another worker operation owns bookmark mutations
+	| "interrupted" // a worker job was lost or could not complete
 	| "no-active-tab" // no resolvable active tab to save
 	| "invalid-tab" // active tab lacks a usable URL
 	| "invalid-bookmark" // a domain invariant rejected the record (e.g. bad URL)

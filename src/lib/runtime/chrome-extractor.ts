@@ -23,6 +23,7 @@
  * straight to the excerpt builder and AI input (docs/privacy-policy.md).
  */
 import type { ExtractionTarget, PageExtractorPort } from "../app/index";
+import { canonicalizeUrl } from "../bookmarks/index";
 import {
 	type ExtractedPage,
 	type ExtractionError,
@@ -156,7 +157,18 @@ export function createChromeScriptingExtractor(
 
 			// Parse at the boundary: untrusted in-page output becomes a trusted
 			// ExtractedPage or a typed error, never raw text flowing inward.
-			return parseExtractedPage(raw);
+			const parsed = parseExtractedPage(raw);
+			if (!parsed.ok) return parsed;
+			const actual = canonicalizeUrl(parsed.value.url);
+			const expected = canonicalizeUrl(target.url);
+			if (!actual.ok || !expected.ok || actual.value !== expected.value) {
+				return extractionErr({
+					field: "page",
+					message:
+						"The selected tab navigated. Open the saved page and try again.",
+				});
+			}
+			return parsed;
 		},
 	};
 }

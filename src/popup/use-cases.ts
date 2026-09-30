@@ -93,6 +93,14 @@ export type ProgressObserver = (progress: SaveProgress) => void;
  * all a controller test needs.
  */
 export interface PopupUseCases {
+	/** Observe an accepted worker save after reopening, without submitting it again. */
+	activeSave?(): Promise<string | null>;
+	waitForSave?(
+		id: string,
+		onProgress?: ProgressObserver,
+	): Promise<Result<SaveOutcome, AppError>>;
+	/** Explicit foreground model download; no bookmark/page input. */
+	prepareAi?(): Promise<Result<void, AppError>>;
 	/** The active tab to show in the receipt header. */
 	currentTab(): Promise<Result<TabInfo, AppError>>;
 	/** Connection + Prompt API badges. Never throws; returns `unknown` when unsure. */

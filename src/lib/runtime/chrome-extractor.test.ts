@@ -37,6 +37,17 @@ function fakeScripting(
 }
 
 describe("createChromeScriptingExtractor", () => {
+	it("rejects content after the selected tab navigates to a different page", async () => {
+		const extractor = createChromeScriptingExtractor({
+			scripting: fakeScripting({ ...RAW, url: "https://example.test/other" }),
+		});
+		const result = await extractor.extract({
+			url: URL,
+			title: "Article",
+			tabId: 7,
+		});
+		expect(result).toMatchObject({ ok: false, error: { field: "page" } });
+	});
 	it("injects into the explicit save target tab and parses the result", async () => {
 		const scripting = fakeScripting(RAW);
 		const extractor = createChromeScriptingExtractor({

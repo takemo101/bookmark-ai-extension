@@ -117,7 +117,10 @@
 				<ul>
 					<li>
 						Raw page text excerpts are used transiently, in memory, as
-						input for AI analysis.
+						input for AI analysis. An explicitly started save can continue in
+						the extension's background worker after the popup closes. The
+						excerpt is discarded when that operation or worker ends; it is
+						not stored for automatic replay.
 					</li>
 					<li>
 						Raw excerpts are not stored in

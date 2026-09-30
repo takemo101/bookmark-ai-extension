@@ -31,20 +31,13 @@
  * state, so an offline mutation is never silently discarded and is eventually
  * pushed once Drive recovers (MIK-014).
  *
- * ## Foreground AI analysis (MIK-021)
+ * ## Worker-owned AI analysis
  *
- * Save/re-analyze runs the whole flow in the initiating UI's foreground:
- * persist the pending record durably first, extract the page, run the Prompt
- * API analysis, and push the final result to Drive — all before the call
- * resolves. There is no background/service-worker/offscreen processing and no
- * analysis queue (the MIK-019 queue was removed by MIK-021 after MIK-020
- * concluded against background Prompt API processing); the UI stays open and
- * shows real progress until the operation reaches a terminal AI status. The
- * extracted page/excerpt lives only in this call's in-memory scope — it is
- * never written to the cache or the repository, so closing the popup/options
- * page mid-flow merely drops it, leaving the already-durable `pending` record
- * recoverable via re-analyze (docs/ai-analysis-v2.md "Foreground analysis
- * behavior"; docs/privacy-policy.md).
+ * This use case still resolves only after final persistence. The runtime now
+ * hosts it in the Service Worker, serializing all bookmark mutations there.
+ * Popup lifetime does not own the promise or excerpt. Worker termination drops
+ * volatile work, leaving the last durable status recoverable by explicit retry.
+ * Excerpts are never written to cache or Drive (docs/ai-analysis-v2.md).
  */
 import {
 	type AiAnalysis,
@@ -93,7 +86,7 @@ export interface BookmarkApp {
 	/** Pull the authoritative store from Drive and refresh the cache. */
 	syncFromDrive(): Promise<Result<CacheState, AppError>>;
 	/**
-	 * Save the current active tab in one foreground flow (MIK-021): persist a
+	 * Save the captured tab in one worker-owned flow: persist a
 	 * pending record durably, extract the page, run AI analysis, and push the
 	 * final result to Drive. Resolves only once the record has reached a
 	 * terminal AI status (`ready`/`unavailable`/`failed`) and the final write
@@ -109,7 +102,7 @@ export interface BookmarkApp {
 	): Promise<Result<CacheState, AppError>>;
 	/**
 	 * Re-run AI analysis for an existing bookmark by canonical URL in the same
-	 * foreground flow as {@link BookmarkApp.saveCurrentTab} (MIK-021):
+	 * worker-owned flow as {@link BookmarkApp.saveCurrentTab}:
 	 * re-extract the page, analyze it, and push the outcome before resolving.
 	 * `onProgress`, when supplied, fires as each stage genuinely begins.
 	 */
@@ -311,13 +304,9 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	}
 
 	/**
-	 * The foreground tail once a page has been extracted (MIK-021): analyze it
-	 * and push the result to Drive before the save/re-analyze call resolves.
-	 * `page` lives only in this call's in-memory scope — it is never written to
-	 * `deps.cache` or `deps.repository` (docs/ai-analysis-v2.md "Non-goals";
-	 * docs/privacy-policy.md). If the initiating UI closes mid-analysis, the
-	 * whole JS context (and the excerpt with it) is dropped; the pending record
-	 * already persisted by the caller stays durable and re-analyzable.
+	 * Analyze and push before this call resolves. `page` lives only in the
+	 * worker's in-memory scope, never in cache or Drive. Worker termination
+	 * drops it; popup closure does not. The pending bookmark remains durable.
 	 */
 	async function finishAnalysis(
 		base: CacheState,
@@ -487,7 +476,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				);
 			}
 
-			// 5. Extraction succeeded: run AI analysis in the foreground and push the
+			// 5. Extraction succeeded: run AI analysis in this worker and push the
 			//    final result before resolving, so the caller's receipt reflects the
 			//    terminal AI status (MIK-021).
 			return finishAnalysis(
@@ -576,7 +565,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 				);
 			}
 
-			// Extraction succeeded: run analysis in the foreground, same as save.
+			// Extraction succeeded: run analysis in this worker, same as save.
 			return finishAnalysis(
 				pendingPush.state,
 				canonicalUrl,
