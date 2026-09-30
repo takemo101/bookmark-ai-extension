@@ -260,6 +260,12 @@ UI observation stop after four minutes. See
 [`ai-analysis-v2.md`](ai-analysis-v2.md#popup-independent-analysis-behavior)
 for the lifecycle/recovery contract and remaining manual Chrome validation gates.
 
+During AI analysis only, the popup's **Stop analysis** action targets the observed
+worker job, including after reopening. It aborts AI and ignores late results, not
+bookmark saving. Final cache/Drive persistence still settles under the same lock;
+the record remains recoverable with `failed` and a fixed stopped reason. There is
+no new durable job/status. Explicit stop must not start a Summarizer fallback.
+
 If Prompt API is unavailable or fails:
 
 - Still save the bookmark with URL/title and metadata.

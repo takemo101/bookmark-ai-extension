@@ -160,6 +160,185 @@ function controllerWith(fake: FakeUseCases) {
 }
 
 describe("createPopupController", () => {
+	it.each([
+		"save",
+		"reopen",
+	])("stops an observed %s once, then waits for the cancelled bookmark's sync", async (mode) => {
+		const fake = new FakeUseCases();
+		let complete!: (result: Result<SaveOutcome, AppError>) => void;
+		const wait = async (progress?: ProgressObserver) => {
+			progress?.({ stage: "analyzing" });
+			return new Promise<Result<SaveOutcome, AppError>>((resolve) => {
+				complete = resolve;
+			});
+		};
+		const stopAnalysis = vi.fn(async () => ({
+			ok: true as const,
+			value: undefined,
+		}));
+		const useCases = Object.assign(fake, {
+			stopAnalysis,
+			saveCurrentTab: wait,
+			...(mode === "reopen"
+				? {
+						activeSave: async () => "existing",
+						waitForSave: (_id: string, progress?: ProgressObserver) =>
+							wait(progress),
+					}
+				: {}),
+		});
+		const controller = createPopupController(useCases);
+		await controller.init();
+		const run = mode === "save" ? controller.save() : undefined;
+		expect(controller.getView().canStopAnalysis).toBe(true);
+		await controller.stopAnalysis();
+		await controller.stopAnalysis();
+		expect(stopAnalysis).toHaveBeenCalledOnce();
+		expect(controller.getView()).toMatchObject({
+			stoppingAnalysis: true,
+			canStopAnalysis: false,
+			canSave: false,
+			flow: { kind: "running" },
+		});
+		const record = recordOf({
+			aiStatus: "failed",
+			aiError: "Analysis stopped by user. Save this page again to retry.",
+		});
+		fake.cache = cacheOf([record]);
+		complete({
+			ok: true,
+			value: {
+				...outcomeOf(record, false, { kind: "drive", message: "offline" }),
+				cancelled: true,
+			},
+		});
+		await run;
+		await vi.waitFor(() => expect(controller.getView().flow.kind).toBe("done"));
+		expect(controller.getView()).toMatchObject({
+			stoppingAnalysis: false,
+			canStopAnalysis: false,
+			canSave: true,
+			flow: {
+				receipt: {
+					cancelled: true,
+					driveSynced: false,
+					driveWarning: "offline",
+				},
+			},
+		});
+		await controller.stopAnalysis();
+		expect(stopAnalysis).toHaveBeenCalledOnce();
+	});
+
+	it("ignores an old stop rejection after a newer save starts", async () => {
+		const fake = new FakeUseCases();
+		let complete!: (result: Result<SaveOutcome, AppError>) => void;
+		let rejectStop!: () => void;
+		const stopAnalysis = vi.fn(
+			() =>
+				new Promise<Result<void, AppError>>((resolve) => {
+					rejectStop = () =>
+						resolve({
+							ok: false,
+							error: { kind: "not-found", message: "Old job finished" },
+						});
+				}),
+		);
+		const controller = createPopupController(
+			Object.assign(fake, {
+				stopAnalysis,
+				saveCurrentTab: (progress?: ProgressObserver) => {
+					progress?.({ stage: "analyzing" });
+					return new Promise<Result<SaveOutcome, AppError>>((resolve) => {
+						complete = resolve;
+					});
+				},
+			}),
+		);
+		await controller.init();
+		const first = controller.save();
+		const stopping = controller.stopAnalysis();
+		complete(fake.saveResult);
+		await first;
+		const second = controller.save();
+		rejectStop();
+		await stopping;
+		expect(controller.getView()).toMatchObject({
+			stoppingAnalysis: false,
+			canStopAnalysis: true,
+			flow: { kind: "running" },
+		});
+		expect(controller.getView().stopError).toBeUndefined();
+		complete(fake.saveResult);
+		await second;
+	});
+
+	it("does not display thrown stop error content or finalize a running analysis", async () => {
+		const fake = new FakeUseCases();
+		let complete!: (result: Result<SaveOutcome, AppError>) => void;
+		const controller = createPopupController(
+			Object.assign(fake, {
+				stopAnalysis: async () => {
+					throw new Error("private page content");
+				},
+				saveCurrentTab: (progress?: ProgressObserver) => {
+					progress?.({ stage: "analyzing" });
+					return new Promise<Result<SaveOutcome, AppError>>((resolve) => {
+						complete = resolve;
+					});
+				},
+			}),
+		);
+		await controller.init();
+		const run = controller.save();
+		await controller.stopAnalysis();
+		expect(controller.getView().flow.kind).toBe("running");
+		expect(controller.getView().stopError).toBe(
+			"Could not stop analysis. Check progress and retry.",
+		);
+		complete(fake.saveResult);
+		await run;
+	});
+
+	it("keeps observing after a rejected stop and does not offer stop during persistence", async () => {
+		const fake = new FakeUseCases();
+		let progress!: ProgressObserver;
+		let complete!: (result: Result<SaveOutcome, AppError>) => void;
+		const stopAnalysis = vi.fn(async () => ({
+			ok: false as const,
+			error: { kind: "not-found" as const, message: "Analysis already ended" },
+		}));
+		const controller = createPopupController(
+			Object.assign(fake, {
+				stopAnalysis,
+				saveCurrentTab: (observer?: ProgressObserver) => {
+					if (!observer) throw new Error("missing observer");
+					progress = observer;
+					return new Promise<Result<SaveOutcome, AppError>>((resolve) => {
+						complete = resolve;
+					});
+				},
+			}),
+		);
+		await controller.init();
+		const run = controller.save();
+		await controller.stopAnalysis();
+		expect(stopAnalysis).not.toHaveBeenCalled();
+		progress({ stage: "analyzing" });
+		await controller.stopAnalysis();
+		expect(controller.getView()).toMatchObject({
+			stopError: "Analysis already ended",
+			stoppingAnalysis: false,
+			flow: { kind: "running" },
+		});
+		progress({ stage: "syncing" });
+		expect(controller.getView().canStopAnalysis).toBe(false);
+		await controller.stopAnalysis();
+		expect(stopAnalysis).toHaveBeenCalledOnce();
+		complete(fake.saveResult);
+		await run;
+	});
+
 	it("reconnects to an active worker save on reopen without starting it again", async () => {
 		const fake = new FakeUseCases();
 		let complete!: (result: Result<SaveOutcome, AppError>) => void;

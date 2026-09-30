@@ -12,6 +12,11 @@ import type { SupportedLanguage } from "../lib/i18n/index";
 import type { SaveStage } from "./use-cases";
 
 export type PopupMessages = {
+	readonly stopAnalysis: string;
+	readonly stoppingAnalysis: string;
+	readonly stopHint: string;
+	readonly stopped: string;
+	readonly stoppedReceipt: string;
 	readonly tagline: string;
 	readonly prepareAi: string;
 	readonly preparationHint: string;
@@ -61,6 +66,13 @@ export type PopupMessages = {
 };
 
 const EN: PopupMessages = {
+	stopAnalysis: "Stop analysis",
+	stoppingAnalysis: "Stopping & saving…",
+	stopHint:
+		"Stops AI only. Your bookmark is kept; any Drive write finishes safely.",
+	stopped: "stopped",
+	stoppedReceipt:
+		"Analysis stopped. Bookmark kept. Save & Analyze again from this page to retry.",
 	prepareAi: "Prepare AI model",
 	preparationHint:
 		"Keep this popup open during preparation, then Save & Analyze. Saving itself never downloads a model.",
@@ -121,6 +133,13 @@ const EN: PopupMessages = {
 };
 
 const JA: PopupMessages = {
+	stopAnalysis: "分析を停止",
+	stoppingAnalysis: "停止・保存処理中…",
+	stopHint:
+		"AI分析のみを停止します。ブックマークは残り、Driveへの保存は最後まで行います。",
+	stopped: "停止済み",
+	stoppedReceipt:
+		"分析を停止しました。ブックマークは残っています。このページから保存＆分析を再実行できます。",
 	prepareAi: "AIモデルを準備",
 	preparationHint:
 		"準備中はポップアップを開いたままお待ちください。準備後に保存＆分析を実行できます。保存時にはモデルをダウンロードしません。",

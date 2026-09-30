@@ -57,6 +57,79 @@ it("destroys a late-created Prompt session after cancellation without prompting"
 	expect(destroy).toHaveBeenCalledOnce();
 });
 
+it("never probes an aborted Prompt or Summarizer fallback", async () => {
+	const abort = new AbortController();
+	abort.abort();
+	const namespace = {
+		availability: vi.fn(async () => "available"),
+		create: vi.fn(),
+	};
+	expect(
+		await createChromePromptClient(namespace, {
+			signal: abort.signal,
+		}).availability(),
+	).toBe("unavailable");
+	expect(
+		await createChromeSummarizerClient(namespace, {
+			signal: abort.signal,
+		}).availability(),
+	).toBe("unavailable");
+	expect(namespace.availability).not.toHaveBeenCalled();
+});
+
+it("does not create a worker Prompt session when stopped during the availability probe", async () => {
+	const abort = new AbortController();
+	let release!: (value: string) => void;
+	const create = vi.fn();
+	const client = createChromePromptClient(
+		{
+			availability: () =>
+				new Promise((resolve) => {
+					release = resolve;
+				}),
+			create,
+		},
+		{ allowDownload: false, signal: abort.signal },
+	);
+	const run = client.prompt("excerpt");
+	abort.abort();
+	release("available");
+	await expect(run).rejects.toThrow();
+	expect(create).not.toHaveBeenCalled();
+});
+
+it.each([
+	"prompt",
+	"summarize",
+] as const)("destroys an in-flight %s session on abort", async (method) => {
+	const abort = new AbortController();
+	let release!: (value: string) => void;
+	const generate = vi.fn(
+		() =>
+			new Promise<string>((resolve) => {
+				release = resolve;
+			}),
+	);
+	const destroy = vi.fn();
+	const namespace = {
+		availability: async () => "available",
+		create: async () => ({ prompt: generate, summarize: generate, destroy }),
+	};
+	const run =
+		method === "prompt"
+			? createChromePromptClient(namespace, { signal: abort.signal }).prompt(
+					"excerpt",
+				)
+			: createChromeSummarizerClient(namespace, {
+					signal: abort.signal,
+				}).summarize("excerpt");
+	await vi.waitFor(() => expect(generate).toHaveBeenCalledOnce());
+	abort.abort();
+	expect(destroy).toHaveBeenCalled();
+	release("late result");
+	await run;
+});
+
 it("passes cancellation to both native generation APIs and destroys active sessions", async () => {
 	const abort = new AbortController();
 	const prompt = vi.fn(async () => "result");

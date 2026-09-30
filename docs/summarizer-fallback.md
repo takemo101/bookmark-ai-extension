@@ -17,7 +17,9 @@ or Offscreen document (see `ai-analysis-v2.md`).
 1. Extract the existing bounded page excerpt in the worker for the explicitly selected tab.
 2. Run the Prompt API analysis as today.
 3. If Prompt returns `unavailable` or any `failed` outcome—including session
-   creation, inference, or JSON parsing failure—probe Summarizer.
+   creation, inference, or JSON parsing failure—probe Summarizer. Explicit user
+   stop or the worker's analysis deadline ends the attempt instead; it must not
+   start a fallback session after cancellation.
 4. Run Summarizer only when it is already `available`. Do not create or download
    a Summarizer model after Prompt fails.
 5. If Summarizer is unavailable, fails, or returns blank output, keep the

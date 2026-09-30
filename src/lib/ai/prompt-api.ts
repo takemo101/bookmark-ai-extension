@@ -287,7 +287,7 @@ export function createChromePromptClient(
 		async availability(
 			language: SupportedLanguage = "ja",
 		): Promise<PromptApiAvailability> {
-			if (!namespace) {
+			if (!namespace || options.signal?.aborted) {
 				return "unavailable";
 			}
 			try {
@@ -296,7 +296,8 @@ export function createChromePromptClient(
 						expectedOutputs: expectedTextOutputs(language),
 					}),
 				);
-				return options.allowDownload === false && availability !== "available"
+				return options.signal?.aborted ||
+					(options.allowDownload === false && availability !== "available")
 					? "unavailable"
 					: availability;
 			} catch {
@@ -322,6 +323,7 @@ export function createChromePromptClient(
 			) {
 				throw new PromptApiUnavailableError();
 			}
+			options.signal?.throwIfAborted();
 			// `create({ monitor })` starts (or joins) the built-in model download
 			// when availability is downloadable/downloading; the monitor relays
 			// safe progress numbers to the observer.

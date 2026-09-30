@@ -169,6 +169,8 @@ export interface Redactor {
 export type AppDeps = {
 	readonly repository: BookmarkRepositoryPort;
 	readonly analyzer: AnalyzerPort;
+	/** User stop applies only to AI; extraction/persistence never receive this signal. */
+	readonly analysisSignal?: AbortSignal;
 	readonly extractor: PageExtractorPort;
 	readonly tabs: TabProviderPort;
 	readonly cache: LocalCache;

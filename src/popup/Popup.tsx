@@ -111,6 +111,24 @@ export function Popup({
 			) : null}
 			<SaveAction view={view} m={m} onSave={() => void controller.save()} />
 			<Flow flow={view.flow} m={m} />
+			{view.canStopAnalysis || view.stoppingAnalysis ? (
+				<section style={{ marginTop: 8 }} aria-live="polite">
+					<button
+						type="button"
+						style={styles.subtleButton}
+						disabled={!view.canStopAnalysis}
+						onClick={() => void controller.stopAnalysis()}
+					>
+						{view.stoppingAnalysis ? m.stoppingAnalysis : m.stopAnalysis}
+					</button>
+					<p style={{ fontSize: 11, color: palette.inkSoft }}>{m.stopHint}</p>
+				</section>
+			) : null}
+			{view.stopError ? (
+				<p role="alert" style={{ color: palette.danger }}>
+					{view.stopError}
+				</p>
+			) : null}
 			<Recent
 				items={view.recent}
 				m={m}
@@ -555,7 +573,11 @@ function Receipt({
 					marginBottom: 4,
 				}}
 			>
-				<StatusPill status={receipt.aiStatus} />
+				{receipt.cancelled ? (
+					<span style={{ fontSize: 11, color: palette.warn }}>{m.stopped}</span>
+				) : (
+					<StatusPill status={receipt.aiStatus} />
+				)}
 				{!receipt.driveSynced ? (
 					<span style={{ fontSize: 11, color: palette.warn }}>
 						{m.savedLocally}
@@ -570,15 +592,17 @@ function Receipt({
 					{m.conciseFallbackNotice}
 				</p>
 			) : null}
-			{receipt.aiStatus === "ready" ? (
+			{receipt.aiStatus === "ready" && !receipt.cancelled ? (
 				<Preview preview={receipt.preview} />
 			) : (
 				<p style={{ fontSize: 12, color: palette.inkSoft, margin: 0 }}>
-					{receipt.aiStatus === "unavailable"
-						? m.unavailableReceipt
-						: receipt.aiError
-							? m.failedReceipt(receipt.aiError)
-							: m.savedReceipt}
+					{receipt.cancelled
+						? m.stoppedReceipt
+						: receipt.aiStatus === "unavailable"
+							? m.unavailableReceipt
+							: receipt.aiError
+								? m.failedReceipt(receipt.aiError)
+								: m.savedReceipt}
 				</p>
 			)}
 			{receipt.driveWarning ? (

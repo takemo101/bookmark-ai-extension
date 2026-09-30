@@ -117,6 +117,7 @@ export type AiPreview = {
 
 /** The saved record, as the receipt body renders it after a flow resolves. */
 export type SaveReceiptView = {
+	readonly cancelled?: true;
 	readonly title: string;
 	readonly url: string;
 	readonly canonicalUrl: string;
@@ -192,6 +193,9 @@ export type SyncView = {
 
 /** The complete immutable snapshot the React component renders. */
 export type PopupView = {
+	readonly canStopAnalysis?: boolean;
+	readonly stoppingAnalysis?: boolean;
+	readonly stopError?: string;
 	readonly preparingAi?: boolean;
 	readonly preparationError?: string;
 	readonly loading: boolean;
@@ -215,6 +219,7 @@ export type PopupView = {
 export type TabInfoView = { readonly title: string; readonly url: string };
 
 export interface PopupController {
+	stopAnalysis(): Promise<void>;
 	prepareAi(): Promise<void>;
 	getView(): PopupView;
 	subscribe(listener: () => void): () => void;
@@ -269,9 +274,20 @@ export function createPopupController(
 	let selectedRecentDisplay: string | undefined;
 	let pendingModelSetup: ModelSetupView | undefined;
 	let modelSetupTimer: ReturnType<typeof setTimeout> | undefined;
+	let flowGeneration = 0;
 
 	function setView(next: Partial<PopupView>): void {
 		view = { ...view, ...next };
+		view = {
+			...view,
+			canStopAnalysis:
+				Boolean(useCases.stopAnalysis) &&
+				!view.stoppingAnalysis &&
+				view.flow.kind === "running" &&
+				view.flow.trail.some(
+					(stage) => stage.key === "analyzing" && stage.status === "active",
+				),
+		};
 		for (const listener of listeners) {
 			listener();
 		}
@@ -398,7 +414,10 @@ export function createPopupController(
 			onProgress: ProgressObserver,
 		) => Promise<Awaited<ReturnType<PopupUseCases["saveCurrentTab"]>>>,
 	): Promise<void> {
+		flowGeneration += 1;
 		setView({
+			stoppingAnalysis: false,
+			stopError: undefined,
 			flow: { kind: "running", trail: runningTrail("saving") },
 			canSave: false,
 			deleteError: undefined,
@@ -430,7 +449,12 @@ export function createPopupController(
 
 		const result = await invoke(onProgress);
 		clearPendingModelSetup();
-		setView({ flow: finalizeFlow(result), canSave: true });
+		setView({
+			flow: finalizeFlow(result),
+			canSave: true,
+			stoppingAnalysis: false,
+			stopError: undefined,
+		});
 
 		// Refresh recents/sync/current-page from cache so the saved bookmark is
 		// visible even when AI was unavailable/failed or Drive did not accept the
@@ -440,6 +464,29 @@ export function createPopupController(
 	}
 
 	return {
+		async stopAnalysis() {
+			if (!view.canStopAnalysis || !useCases.stopAnalysis) return;
+			const generation = flowGeneration;
+			setView({ stoppingAnalysis: true, stopError: undefined });
+			try {
+				const result = await useCases.stopAnalysis();
+				if (
+					!result.ok &&
+					generation === flowGeneration &&
+					view.flow.kind === "running"
+				)
+					setView({
+						stoppingAnalysis: false,
+						stopError: safeMessage(result.error.message),
+					});
+			} catch {
+				if (generation === flowGeneration && view.flow.kind === "running")
+					setView({
+						stoppingAnalysis: false,
+						stopError: "Could not stop analysis. Check progress and retry.",
+					});
+			}
+		},
 		getView() {
 			return view;
 		},
@@ -665,6 +712,7 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 	const { record, driveSynced } = outcome;
 	const syncing: TrailStageStatus = driveSynced ? "done" : "failed";
 	const receiptBase: Omit<SaveReceiptView, "preview"> = {
+		...(outcome.cancelled ? { cancelled: true as const } : {}),
 		title: record.title,
 		url: record.url,
 		canonicalUrl: record.canonicalUrl,
@@ -674,7 +722,7 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 		driveWarning: driveSynced
 			? undefined
 			: safeMessage(outcome.driveError?.message ?? "Drive sync failed"),
-		conciseFallback: isConciseFallback(record),
+		conciseFallback: !outcome.cancelled && isConciseFallback(record),
 	};
 	const preview: AiPreview = {
 		description: record.description,
@@ -682,7 +730,7 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 		tags: [...record.tags],
 	};
 
-	if (record.aiStatus === "ready") {
+	if (record.aiStatus === "ready" && !outcome.cancelled) {
 		return {
 			kind: "done",
 			trail: trailFrom({
@@ -695,7 +743,7 @@ function doneFlow(outcome: SaveOutcome): FlowView {
 		};
 	}
 
-	if (record.aiStatus === "unavailable") {
+	if (record.aiStatus === "unavailable" || outcome.cancelled) {
 		return {
 			kind: "done",
 			trail: trailFrom({

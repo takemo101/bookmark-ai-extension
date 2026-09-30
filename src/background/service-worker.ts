@@ -4,6 +4,8 @@
  * Owns accepted bookmark operations independently of popup/options lifetime.
  * Domain, Drive and AI rules remain behind their existing app ports.
  */
+import { detectUiLanguage } from "../lib/i18n/index";
+import { createBookmarkBadge } from "./bookmark-badge";
 import {
 	createBookmarkJobs,
 	isBookmarkUiSender,
@@ -11,10 +13,18 @@ import {
 } from "./bookmark-jobs";
 import { createWorkerBookmarkApp } from "./bookmark-runtime";
 
+const badge = createBookmarkBadge(chrome.action, detectUiLanguage());
+// In-memory jobs do not survive restart. Never leave an old "AI" badge implying
+// that a terminated job is still running, or restore success from a cache guess.
+void badge.update(null);
+
 const jobs = createBookmarkJobs({
 	createApp: createWorkerBookmarkApp,
 	newId: () => crypto.randomUUID(),
 	keepAlive: () => chrome.runtime.getPlatformInfo(),
+	onChange: (job) => {
+		void badge.update(job);
+	},
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

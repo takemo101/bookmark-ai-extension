@@ -20,10 +20,14 @@ import {
 } from "../lib/storage/index";
 
 /** Composition only: domain, Drive, extraction and AI rules stay in their ports. */
-export function createWorkerBookmarkApp(tab?: ActiveTab) {
+export function createWorkerBookmarkApp(
+	tab?: ActiveTab,
+	analysisSignal?: AbortSignal,
+) {
 	return createBookmarkApp({
 		repository: createChromeDriveRuntime().repository,
-		analyzer: createBackgroundAnalyzer(),
+		analyzer: createBackgroundAnalyzer(undefined, analysisSignal),
+		analysisSignal,
 		extractor: createChromeScriptingExtractor({
 			resolveActiveTab: async () => tab,
 		}),

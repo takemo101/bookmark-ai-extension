@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBookmarkJobs } from "../../background/bookmark-jobs";
+import { createBackgroundAnalyzer } from "../runtime/background-analyzer";
 import { serializeCacheState } from "../storage/index";
 
 import {
@@ -315,6 +316,7 @@ function makeHarness(
 			currentCustomProfiles(): Promise<readonly AnalysisProfile[]>;
 		};
 		fallbackLanguage?: "ja" | "en";
+		analysisSignal?: AbortSignal;
 	} = {},
 ): Harness {
 	const tab =
@@ -337,6 +339,7 @@ function makeHarness(
 		ids: fakeIds(),
 		settingsProvider: opts.settingsProvider,
 		fallbackLanguage: opts.fallbackLanguage,
+		analysisSignal: opts.analysisSignal,
 	});
 	return { app, repo, analyzer, extractor, cache };
 }
@@ -347,6 +350,122 @@ async function flushMicrotasks(): Promise<void> {
 		await Promise.resolve();
 	}
 }
+
+it.each([
+	false,
+	true,
+])("preserves a cancelled bookmark, discards late AI fields, and completes persistence (Drive failure: %s)", async (driveFails) => {
+	const stop = new AbortController();
+	const h = makeHarness({ analysisSignal: stop.signal });
+	if (driveFails) h.repo.failKind = "network";
+	const deferred = new DeferredAnalyzer();
+	h.analyzer.analyze = deferred.analyze.bind(deferred);
+	const progress = vi.fn();
+	const run = h.app.saveCurrentTab(progress);
+	await vi.waitFor(() => expect(deferred.calls).toHaveLength(1));
+	expect(h.cache.state.bookmarks.toArray()[0]?.aiStatus).toBe("pending");
+	stop.abort();
+	deferred.release(READY);
+	expect(await run).toMatchObject({
+		ok: true,
+		value: { cancelled: true, aiStatus: "failed", driveSynced: !driveFails },
+	});
+	const record = h.cache.state.bookmarks.toArray()[0];
+	expect(record?.aiError).toBe(
+		"Analysis stopped by user. Save this page again to retry.",
+	);
+	expect(record?.analysisMarkdown).toBeUndefined();
+	expect(record?.description).toBeUndefined();
+	expect(progress).toHaveBeenLastCalledWith("syncing");
+	expect(Boolean(h.cache.state.sync.pending)).toBe(driveFails);
+	if (!driveFails)
+		expect(h.repo.remote.toArray()[0]?.aiError).toBe(record?.aiError);
+	if (driveFails) {
+		h.repo.failKind = null;
+		expect((await h.app.syncFromDrive()).ok).toBe(true);
+		expect(h.repo.remote.toArray()[0]?.aiError).toBe(record?.aiError);
+		expect(h.cache.state.sync.pending).toBeFalsy();
+	}
+	for (const saved of h.cache.saves)
+		expect(JSON.stringify(serializeCacheState(saved))).not.toContain(
+			"Some body text",
+		);
+});
+
+it.each([
+	"save",
+	"reanalyze",
+] as const)("worker cancellation of %s completes the final write before releasing its lock", async (kind) => {
+	const seed = makeHarness({
+		outcome: { status: "unavailable", reason: "not ready" },
+	});
+	const saved = await seed.app.saveCurrentTab();
+	if (!saved.ok) throw new Error("bad fixture");
+	let h!: Harness;
+	const deferred = new DeferredAnalyzer();
+	let releasePush!: () => void;
+	const pushGate = new Promise<void>((resolve) => {
+		releasePush = resolve;
+	});
+	const jobs = createBookmarkJobs({
+		newId: () => "job-1",
+		keepAlive: async () => {},
+		createApp: (_tab, signal) => {
+			h = makeHarness({
+				remote: seed.repo.remote,
+				cache: seed.cache.state,
+				analysisSignal: signal,
+			});
+			const analyzer = createBackgroundAnalyzer(() => deferred, signal);
+			h.analyzer.analyze = analyzer.analyze.bind(analyzer);
+			const save = h.repo.save.bind(h.repo);
+			vi.spyOn(h.repo, "save").mockImplementation(async (bookmarks) => {
+				if (bookmarks.toArray()[0]?.aiStatus === "failed") await pushGate;
+				return save(bookmarks);
+			});
+			return h.app;
+		},
+	});
+	const tab = {
+		id: 7,
+		url: "https://example.test/page",
+		title: "Example Page",
+	};
+	jobs.handle(
+		kind === "save"
+			? { kind, tab }
+			: { kind, tab, canonicalUrl: saved.value.record.canonicalUrl },
+	);
+	await vi.waitFor(() => expect(deferred.calls).toHaveLength(1));
+	expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(true);
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status" })).toMatchObject({
+			job: { state: "running", stage: "syncing" },
+		}),
+	);
+	expect(jobs.handle({ kind: "sync" })).toMatchObject({
+		ok: false,
+		error: { kind: "busy" },
+	});
+	expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(false);
+	releasePush();
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status", id: "job-1" })).toMatchObject({
+			job: {
+				state: "finished",
+				result: {
+					ok: true,
+					value: { cancelled: true, aiStatus: "failed", driveSynced: true },
+				},
+			},
+		}),
+	);
+	deferred.release(READY);
+	await flushMicrotasks();
+	expect(h.repo.remote.toArray()[0]?.aiStatus).toBe("failed");
+	expect(h.repo.remote.toArray()[0]?.analysisMarkdown).toBeUndefined();
+	expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null });
+});
 
 describe("createBookmarkApp", () => {
 	describe("saveCurrentTab", () => {

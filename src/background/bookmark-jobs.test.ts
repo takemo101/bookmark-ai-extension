@@ -3,12 +3,19 @@ import {
 	createBookmarkJobs,
 	parseBookmarkCommand,
 	isBookmarkUiSender,
+	type BookmarkJob,
 } from "./bookmark-jobs";
-import { type BookmarkApp, ok, err, appError } from "../lib/app/index";
+import {
+	type ActiveTab,
+	type BookmarkApp,
+	ok,
+	err,
+	appError,
+} from "../lib/app/index";
 import { emptyCacheState } from "../lib/storage/index";
 
 const tab = { id: 42, url: "https://example.test/page", title: "Selected" };
-function setup() {
+function setup(onChange?: (job: BookmarkJob) => void) {
 	let release!: () => void;
 	const pending = new Promise<void>((resolve) => {
 		release = resolve;
@@ -24,17 +31,194 @@ function setup() {
 		deleteBookmark: vi.fn(async () => ok(emptyCacheState())),
 		syncFromDrive: vi.fn(async () => ok(emptyCacheState())),
 	};
-	const factory = vi.fn(() => app);
+	const factory = vi.fn((_tab?: ActiveTab, _signal?: AbortSignal) => app);
 	const ping = vi.fn(async () => {});
 	let id = 0;
 	const jobs = createBookmarkJobs({
 		createApp: factory,
 		newId: () => `job-${++id}`,
 		keepAlive: ping,
+		onChange,
 	});
 	return { jobs, app, factory, ping, release };
 }
 afterEach(() => vi.useRealTimers());
+
+it("parses only a bounded nonempty cancel job ID", () => {
+	const command = { action: "bookmark-job", kind: "cancel", id: "job-1" };
+	expect(parseBookmarkCommand(command)).toEqual({
+		kind: "cancel",
+		id: "job-1",
+	});
+	for (const id of [undefined, null, 1, "", "x".repeat(101)])
+		expect(parseBookmarkCommand({ ...command, id })).toBeNull();
+});
+
+it("cancels only the selected analysis, idempotently, while retaining the mutation lock", async () => {
+	const onChange = vi.fn();
+	const { jobs, factory, release } = setup(onChange);
+	jobs.handle({ kind: "save", tab });
+	const signal = factory.mock.calls[0]?.[1];
+	expect(signal?.aborted).toBe(false);
+	expect(jobs.handle({ kind: "cancel", id: "old-job" }).ok).toBe(false);
+	expect(signal?.aborted).toBe(false);
+	expect(jobs.handle({ kind: "cancel", id: "job-1" })).toMatchObject({
+		ok: true,
+		job: { state: "running", cancelRequested: true },
+	});
+	expect(signal?.aborted).toBe(true);
+	const reports = onChange.mock.calls.length;
+	expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(true);
+	expect(onChange).toHaveBeenCalledTimes(reports);
+	expect(jobs.handle({ kind: "sync" })).toMatchObject({
+		ok: false,
+		error: { kind: "busy" },
+	});
+	release();
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null }),
+	);
+	expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(false);
+	expect(jobs.handle({ kind: "sync" }).ok).toBe(true);
+});
+
+it.each([
+	"saving",
+	"extracting",
+	"syncing",
+] as const)("cannot cancel during %s", async (stage) => {
+	const { jobs, factory, app, release } = setup();
+	vi.mocked(app.saveCurrentTab).mockImplementationOnce(async (progress) => {
+		progress?.(stage);
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		return err(appError("cache", "test outcome"));
+	});
+	jobs.handle({ kind: "save", tab });
+	expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(false);
+	expect(factory.mock.calls[0]?.[1]?.aborted).toBe(false);
+	release();
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null }),
+	);
+});
+
+it("reports save stages and completion without polling; busy/status do not overwrite the badge", async () => {
+	const onChange = vi.fn();
+	const { jobs, release } = setup(onChange);
+	jobs.handle({ kind: "save", tab });
+	expect(onChange.mock.calls.map(([job]) => [job.stage, job.state])).toEqual([
+		["saving", "running"],
+		["analyzing", "running"],
+	]);
+	jobs.handle({ kind: "status" });
+	jobs.handle({ kind: "save", tab });
+	expect(onChange).toHaveBeenCalledTimes(2);
+	release();
+	await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
+	expect(onChange.mock.lastCall?.[0]).toMatchObject({
+		state: "finished",
+		result: { ok: false },
+	});
+});
+
+it("reports re-analysis stages and does not replace the latest save badge for Options changes", async () => {
+	const onChange = vi.fn();
+	const { jobs, app } = setup(onChange);
+	vi.mocked(app.reAnalyzeBookmark).mockImplementationOnce(
+		async (_url, progress) => {
+			progress?.("extracting");
+			progress?.("analyzing");
+			progress?.("syncing");
+			return err(appError("not-found", "missing"));
+		},
+	);
+	const command = parseBookmarkCommand({
+		action: "bookmark-job",
+		kind: "reanalyze",
+		tab,
+		canonicalUrl: tab.url,
+	});
+	if (!command) throw new Error("bad fixture");
+	jobs.handle(command);
+	await vi.waitFor(() =>
+		expect(onChange.mock.lastCall?.[0].state).toBe("finished"),
+	);
+	expect(onChange.mock.calls.map(([job]) => [job.stage, job.state])).toEqual([
+		["saving", "running"],
+		["extracting", "running"],
+		["analyzing", "running"],
+		["syncing", "running"],
+		["syncing", "finished"],
+	]);
+	onChange.mockClear();
+	jobs.handle({ kind: "sync" });
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null }),
+	);
+	expect(onChange).not.toHaveBeenCalled();
+});
+
+it("ignores a finished job's late progress instead of overwriting a newer job's badge", async () => {
+	const onChange = vi.fn();
+	const { jobs, app, release } = setup(onChange);
+	let lateProgress: Parameters<BookmarkApp["saveCurrentTab"]>[0];
+	vi.mocked(app.saveCurrentTab).mockImplementationOnce(async (progress) => {
+		lateProgress = progress;
+		return err(appError("interrupted", "first job ended"));
+	});
+	jobs.handle({ kind: "save", tab });
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null }),
+	);
+	jobs.handle({ kind: "save", tab });
+	onChange.mockClear();
+	lateProgress?.("analyzing");
+	expect(onChange).not.toHaveBeenCalled();
+	release();
+});
+
+it("ignores cancelled AI's late progress while final Drive persistence is still running", async () => {
+	const { jobs, app } = setup();
+	let lateProgress: Parameters<BookmarkApp["saveCurrentTab"]>[0];
+	let finish!: () => void;
+	vi.mocked(app.saveCurrentTab).mockImplementationOnce(async (progress) => {
+		lateProgress = progress;
+		progress?.("analyzing");
+		await new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		return err(appError("interrupted", "test outcome"));
+	});
+	jobs.handle({ kind: "save", tab });
+	try {
+		jobs.handle({ kind: "cancel", id: "job-1" });
+		lateProgress?.("syncing");
+		lateProgress?.("analyzing");
+		expect(jobs.handle({ kind: "status" })).toMatchObject({
+			job: { stage: "syncing", state: "running" },
+		});
+		expect(jobs.handle({ kind: "cancel", id: "job-1" }).ok).toBe(false);
+	} finally {
+		finish();
+		await vi.waitFor(() =>
+			expect(jobs.handle({ kind: "status" })).toEqual({ ok: true, job: null }),
+		);
+	}
+});
+
+it("a throwing progress observer cannot interrupt work or leave the mutation lock held", async () => {
+	const { jobs, release } = setup(() => {
+		throw new Error("Badge API failed");
+	});
+	expect(jobs.handle({ kind: "save", tab }).ok).toBe(true);
+	release();
+	await vi.waitFor(() =>
+		expect(jobs.handle({ kind: "status", id: "job-1" })).toMatchObject({
+			job: { state: "finished" },
+		}),
+	);
+	expect(jobs.handle({ kind: "sync" }).ok).toBe(true);
+});
 
 it("accepts commands only from this extension's popup/options, never content scripts", () => {
 	const base = "chrome-extension://extension-id/";
@@ -91,7 +275,7 @@ it("owns work after acknowledgment without any further UI messages, exposing res
 	const { jobs, factory, release } = setup();
 	const accepted = jobs.handle({ kind: "save", tab });
 	expect(accepted.ok).toBe(true);
-	expect(factory).toHaveBeenCalledWith(tab);
+	expect(factory).toHaveBeenCalledWith(tab, expect.any(AbortSignal));
 	expect(jobs.handle({ kind: "status" })).toMatchObject({
 		ok: true,
 		job: { id: "job-1", state: "running", stage: "analyzing" },

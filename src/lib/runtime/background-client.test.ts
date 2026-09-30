@@ -63,6 +63,67 @@ it("reconnects without a second save or tab query and relays progress", async ()
 	expect(tabs.activeTab).not.toHaveBeenCalled();
 	expect(send).toHaveBeenCalledWith({ kind: "status", id: "j" });
 });
+it.each([
+	"save",
+	"reconnect",
+])("stops the observed %s by ID without ending observation or retargeting a later job", async (mode) => {
+	let finished = false;
+	let release!: () => void;
+	const waiting = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const tabs = { activeTab: vi.fn(async () => ok(tab)) };
+	const progress = vi.fn();
+	const send = vi.fn(
+		async (_command): Promise<BookmarkReply> => ({
+			ok: true,
+			job: {
+				id: "original-job",
+				kind: "save",
+				startedAt: Date.now(),
+				state: finished ? "finished" : "running",
+				stage: finished ? "syncing" : "analyzing",
+				...(finished
+					? {
+							result: {
+								ok: false as const,
+								error: { kind: "drive" as const, message: "offline" },
+							},
+						}
+					: {}),
+			},
+		}),
+	);
+	const client = createBackgroundBookmarkClient({
+		tabs,
+		cache,
+		send,
+		wait: () => waiting,
+	});
+	const run =
+		mode === "save"
+			? client.saveCurrentTab(progress)
+			: client.waitForSave("original-job", progress);
+	let settled = false;
+	void run.then(() => {
+		settled = true;
+	});
+	await vi.waitFor(() => expect(progress).toHaveBeenCalledWith("analyzing"));
+	expect(await client.stopAnalysis()).toEqual({ ok: true, value: undefined });
+	expect(send).toHaveBeenCalledWith({ kind: "cancel", id: "original-job" });
+	expect(settled).toBe(false);
+	if (mode === "reconnect") expect(tabs.activeTab).not.toHaveBeenCalled();
+	finished = true;
+	release();
+	await run;
+	const messages = send.mock.calls.length;
+	expect(await client.stopAnalysis()).toMatchObject({
+		ok: false,
+		error: { kind: "not-found" },
+	});
+	expect(send).toHaveBeenCalledTimes(messages);
+});
+
 it("handles a missing response after an extension reload", async () => {
 	const client = createBackgroundBookmarkClient({
 		tabs: { activeTab: async () => ok(tab) },
