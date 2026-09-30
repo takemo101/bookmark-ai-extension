@@ -52,22 +52,15 @@ worth revisiting.
 - Store only `analysisProfileId` on each bookmark record.
 - If skill settings change, existing bookmarks are not automatically reanalyzed;
   the user re-runs analysis manually.
-- On save, persist a pending bookmark durably first, then run extraction and
-  Prompt API analysis in the same foreground UI flow; the save/re-analyze
-  operation reports completion only after the record reaches a terminal AI
-  status (`ready`/`unavailable`/`failed`) and the final result is synced
-  (MIK-021).
-- Use existing `aiStatus: "pending"` for the persisted-but-not-yet-analyzed
-  state.
-- Raw page excerpts are only held temporarily in memory during the foreground
-  operation. They are not saved to Drive or persistent local storage.
-- Analysis runs while the popup/options page stays open. If the UI closes
-  mid-operation, the in-memory excerpt is dropped; the durable pending bookmark
-  remains and the user can re-run analysis later from a valid active tab (e.g.
-  by saving the page again from the popup — the Options detail sheet does not
-  offer Re-analyze, MIK-024).
-- Service-worker/background/offscreen Prompt API processing is not pursued for
-  the MVP (MIK-020 conclusion, adopted by MIK-021).
+- Save captures the selected tab, then submits one worker-owned operation:
+  persist a pending bookmark, extract that exact tab, analyze, and sync the
+  final outcome. Popup closure does not cancel an accepted operation.
+- Use existing `aiStatus: "pending"` for the persisted-but-not-yet-analyzed state.
+- Raw excerpts live only in the worker operation's memory, never persistent storage.
+- Worker termination loses that excerpt; the last durable bookmark remains.
+  Recovery is explicit re-saving from the page, not an automatic durable queue.
+- The 2026-09-30 worker integration supersedes MIK-021's UI-lifetime restriction.
+  Offscreen analysis remains out of scope; see the lifecycle contract below.
 
 ## Non-goals
 
@@ -77,8 +70,7 @@ worth revisiting.
 - Do not broaden host permissions, add always-on content scripts, or add a
   crawler.
 - Do not make the extension a general bookmark manager replacement.
-- Do not implement service-worker/background/offscreen analysis; the MVP uses
-  UI-open foreground analysis only (MIK-021).
+- Do not add Offscreen analysis, persistent excerpts, or an automatic replay queue.
 
 ## Data model
 
@@ -291,16 +283,33 @@ Focus:
 - why it may be worth revisiting;
 - useful keywords.
 
-## Foreground analysis behavior
+## Popup-independent analysis behavior
 
-### Current implementation (MIK-021)
+### Current implementation (2026-09-30)
 
 - Save creates/updates a `pending` bookmark and persists it durably first, so
   nothing is lost if the flow is interrupted.
-- Extraction and Prompt API analysis then run in the initiating popup/options
-  foreground flow while the screen stays open; the operation resolves only
-  after analysis and the final sync settle. There is no analysis queue (the
-  MIK-019 in-memory queue was removed by MIK-021).
+- The popup sends a captured tab ID/URL/title; the worker never queries a later
+  active tab. Extraction verifies that the tab has not navigated. Keep the page
+  open until extraction finishes, but the popup may close after acceptance.
+- The worker owns the existing application flow through final Drive/cache
+  persistence. Acknowledgment means accepted, not yet durably saved.
+- All bookmark mutations (including Options sync/delete) share one worker lock.
+  Concurrent requests return `busy` and require retry; they are not queued.
+  Cache reads remain immediate. This prevents stale collection writes or a
+  late analysis resurrecting a deleted record.
+- No job/excerpt is persisted. Short status messages expose in-memory progress;
+  reopening the popup attaches to a running save without submitting it again.
+- Worker Prompt runs only when already available. The explicit **Prepare AI
+  model** button downloads/prepares Prompt in the foreground without page input;
+  keep that popup open during preparation. Summarizer fallback never downloads.
+- Analysis has a three-minute deadline, aborts native sessions on expiry, and
+  ignores late outcomes. During accepted work only, a trivial extension API call
+  every 25 seconds follows Chrome's exceptional long-operation guidance. It stops
+  at completion or four minutes, even if an API hangs. There is no idle/startup
+  heartbeat. UI polling also stops at four minutes, and does not release a still
+  running mutation lock. Chrome can still terminate the worker unexpectedly.
+  Source: https://developer.chrome.com/docs/extensions/develop/migrate/to-service-workers
 - The current page excerpt is held only in the in-memory scope of that
   operation.
 - On success, the bookmark is updated to `ready` with description, genre, tags,
@@ -310,29 +319,43 @@ Focus:
   [`summarizer-fallback.md`](summarizer-fallback.md). A successful fallback is
   `ready` but visibly marked as a concise summary; if it cannot run, the
   original `unavailable` or `failed` result is retained.
-- If the UI closes before analysis finishes, the in-memory excerpt is dropped
-  and the bookmark remains `pending` (or the last durably written status); the
-  user can re-run analysis later from a valid active tab.
+- If Chrome terminates/restarts the worker, the in-memory job and excerpt are
+  lost, not replayed. The bookmark remains at its last durable status (usually
+  `pending`). Re-save from the original page to retry. Failed Drive writes keep
+  the existing unsynced-cache flag and can be retried via normal sync.
 
 ### Service worker experiment (concluded)
 
 MIK-020 prepared an experiment harness to verify whether real Chrome supports
 the needed Prompt API operations from an MV3 service worker (see
 [`prompt-api-service-worker-experiment.md`](./prompt-api-service-worker-experiment.md)).
-Per MIK-021, service-worker/background/offscreen Prompt API processing is not
-being pursued now: the MVP uses UI-open foreground analysis. The experiment doc
-is kept for historical reference only.
+MIK-021 originally selected UI-open foreground analysis. That historical
+conclusion has been superseded by the 2026-09-30 recheck below.
+
+### Popup-independent feasibility recheck (2026-09-30)
+
+The user requested revisiting popup-independent analysis. A separate,
+synthetic-only extension tested service-worker and offscreen execution.
+The harness was removed at the user's request after integration; its record remains:
+[`popup-independent-ai-experiment.md`](./popup-independent-ai-experiment.md).
+The user's v0.0.2 report confirms Japanese Prompt and Summarizer generation in
+an extension service worker on Chrome 153.0.0.0, with the initiating UI absent
+at the observed start/end boundaries and the result stored independently.
+The worker is now the implemented integration candidate; Offscreen testing
+remains deferred. This short run used diagnostic writes that reset idle timing.
+Long inference, forced worker interruption, initial setup, and final Drive
+persistence still require manual production-extension validation. Unit tests
+and this feasibility run do not satisfy those gates. Permissions are unchanged.
 
 ## UI behavior
 
 ### Popup
 
-- Save keeps the popup open and walks the visible progress trail
-  (saving → extracting → analyzing → syncing) until the flow finishes.
-- While the flow runs, show strong foreground guidance: analysis runs in the
-  foreground and may take a while — keep the popup open and stay on the saved
-  page until it finishes. The receipt shows the terminal AI status, never a
-  "running in the background" state.
+- While open, Save walks the progress trail (saving → extracting → analyzing
+  → syncing). It may close while the worker completes the accepted operation.
+- Reopening attaches to an active save and shows progress; completed bookmarks
+  are read from cache even after the worker exits. Interrupted pending records
+  explain explicit re-saving. First model preparation remains foreground-only.
 - Keep recent bookmark display compact: one line per bookmark (title + AI
   status + inline re-analyze), with `description` available as a tooltip.
 - If the current page is already bookmarked, show that state on the current

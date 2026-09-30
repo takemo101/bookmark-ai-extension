@@ -80,6 +80,7 @@ function controllerOf(view: PopupView): PopupController {
 		subscribe: () => () => {},
 		init: async () => {},
 		save: async () => {},
+		prepareAi: async () => {},
 		reAnalyze: async () => {},
 		selectRecent: () => {},
 		clearRecentSelection: () => {},
@@ -155,7 +156,12 @@ describe("Popup", () => {
 	});
 
 	describe("running flow copy", () => {
-		it("tells the user to keep the popup and page open during analysis", () => {
+		it("offers explicit model preparation separately from saving", () => {
+			const html = render(viewOf({ promptApi: "downloadable" }));
+			expect(html).toContain("Prepare AI model");
+			expect(html).toContain("Keep this popup open during preparation");
+		});
+		it("explains popup-independent processing and extraction constraints", () => {
 			const html = render(
 				viewOf({
 					flow: { kind: "running", trail: runningTrail() },
@@ -163,9 +169,9 @@ describe("Popup", () => {
 				}),
 			);
 
-			expect(html).toContain("AI analysis is running in the foreground");
-			expect(html).toContain("Keep this popup open");
-			expect(html).toContain("stay on the saved page until it finishes");
+			expect(html).toContain("You can close this popup");
+			expect(html).toContain("until page extraction finishes");
+			expect(html).not.toContain("running in the foreground");
 		});
 
 		it("shows model setup as the active trail item after page extraction", () => {
@@ -355,7 +361,7 @@ describe("Popup", () => {
 			expect(html).not.toContain("Recent bookmarks");
 		});
 
-		it("localizes the running foreground notice and trail stages", () => {
+		it("localizes the worker notice and trail stages", () => {
 			const html = render(
 				viewOf({
 					flow: { kind: "running", trail: runningTrail() },
@@ -365,7 +371,7 @@ describe("Popup", () => {
 			);
 
 			expect(html).toContain("保存＆分析中…");
-			expect(html).toContain("AI分析をフォアグラウンドで実行中です。");
+			expect(html).toContain("ポップアップを閉じても処理は続きます。");
 			expect(html).toContain("AIが分析中");
 			expect(html).toContain("Driveへ同期");
 			expect(html).not.toContain("AI analysis is running in the foreground");

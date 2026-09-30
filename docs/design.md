@@ -239,16 +239,26 @@ Notes:
 7. Extension builds a structured excerpt with a character cap of roughly
    8k-12k characters.
 8. Extension writes or updates a pending bookmark record in Drive/local cache.
-9. Popup/options runs Prompt API analysis in the foreground while the screen
-   stays open. A ready result updates the bookmark with target-language
-   `description`, `genre`, `tags`, `analysisMarkdown`, and profile metadata. A
-   terminal Prompt failure can use an already-available on-device Summarizer
-   API to save a visibly labelled concise fallback; its full contract is in
-   [`summarizer-fallback.md`](summarizer-fallback.md). Analysis is never handed
-   off to a service worker, offscreen document, or background queue.
-10. If the UI closes mid-flow, the in-memory excerpt is dropped (it is never
-    persisted) and the durable record remains `pending`, recoverable for later
-    re-analysis from a valid active tab.
+9. The Service Worker owns the accepted save through final Drive/cache writes;
+   the popup can close and later reconnect to progress. Only already-prepared
+   models run in the worker. **Prepare AI model** is a separate, explicit
+   foreground action without page input. A ready result updates target-language
+   `description`, `genre`, `tags`, `analysisMarkdown`, and profile metadata.
+   Terminal Prompt failure can use an already-available on-device Summarizer
+   as specified in [`summarizer-fallback.md`](summarizer-fallback.md).
+10. Worker termination drops the in-memory excerpt/job, not the durable pending
+    bookmark. Recovery requires explicitly saving the original page again.
+    There is no persistent queue or raw excerpt storage.
+
+The popup captures tab ID/URL/title before dispatch; the worker uses that exact
+ID and rejects content if it has navigated. In the implementation the pending
+bookmark is persisted **before** extraction. Keep the page open until extraction
+finishes; acceptance is not a durable-save receipt. All bookmark mutations,
+including Options sync/delete, share a single worker lock and return `busy`
+instead of racing. Analysis is bounded to three minutes; task-only keepalive and
+UI observation stop after four minutes. See
+[`ai-analysis-v2.md`](ai-analysis-v2.md#popup-independent-analysis-behavior)
+for the lifecycle/recovery contract and remaining manual Chrome validation gates.
 
 If Prompt API is unavailable or fails:
 
@@ -315,7 +325,7 @@ Example desired output:
 For the next AI analysis iteration, see
 [`ai-analysis-v2.md`](ai-analysis-v2.md). It extends the MVP design with
 long-form generated Markdown analysis, built-in and custom analysis skills,
-Drive-synced skill settings, and UI-open foreground analysis behavior while
+Drive-synced skill settings, and popup-independent worker analysis while
 preserving the same privacy constraints: no external AI fallback and no
 persisted raw page excerpts. A custom skill's instruction may control the
 `analysisMarkdown` output shape (headings, sections, length) with priority

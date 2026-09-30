@@ -13,6 +13,9 @@ import type { SaveStage } from "./use-cases";
 
 export type PopupMessages = {
 	readonly tagline: string;
+	readonly prepareAi: string;
+	readonly preparationHint: string;
+	readonly pendingHint: string;
 	readonly currentTab: string;
 	readonly readingTab: string;
 	readonly noActiveTab: string;
@@ -58,6 +61,11 @@ export type PopupMessages = {
 };
 
 const EN: PopupMessages = {
+	prepareAi: "Prepare AI model",
+	preparationHint:
+		"Keep this popup open during preparation, then Save & Analyze. Saving itself never downloads a model.",
+	pendingHint:
+		"Analysis is pending. If processing was interrupted, open this page and Save & Analyze again.",
 	tagline: "Save the current tab as an AI-enriched bookmark.",
 	currentTab: "Current tab",
 	readingTab: "Reading current tab…",
@@ -81,8 +89,7 @@ const EN: PopupMessages = {
 	save: "Save & Analyze",
 	saving: "Saving & Analyzing…",
 	runningNotice:
-		"AI analysis is running in the foreground and may take a while. Keep " +
-		"this popup open and stay on the saved page until it finishes.",
+		"You can close this popup; processing continues in the background. Keep the saved page open until page extraction finishes. Reopen to check progress. If Chrome stops processing, save the page again.",
 	trail: {
 		saving: "Pending bookmark saved",
 		extracting: "Page excerpt extracted",
@@ -98,10 +105,11 @@ const EN: PopupMessages = {
 		"Chrome is preparing the model. Keep this popup open while it finishes.",
 	savedLocally: "saved locally",
 	unavailableReceipt:
-		"Saved without AI — the Prompt API was unavailable. Re-analyze later from Options.",
+		"Saved without AI. Prepare the model if needed, then Save & Analyze again from this page.",
 	failedReceipt: (message) =>
-		`Saved, but analysis failed: ${message}. Re-analyze later from Options.`,
-	savedReceipt: "Saved. Re-analyze later from Options.",
+		`Saved, but analysis failed: ${message}. Save & Analyze again from this page to retry.`,
+	savedReceipt:
+		"Saved. Save & Analyze again from this page to refresh the analysis.",
 	conciseFallbackNotice: "Concise summary — detailed analysis was unavailable",
 	drivePending: (message) => `Drive sync pending: ${message}`,
 	recentBookmarks: "Recent bookmarks",
@@ -113,6 +121,11 @@ const EN: PopupMessages = {
 };
 
 const JA: PopupMessages = {
+	prepareAi: "AIモデルを準備",
+	preparationHint:
+		"準備中はポップアップを開いたままお待ちください。準備後に保存＆分析を実行できます。保存時にはモデルをダウンロードしません。",
+	pendingHint:
+		"分析が保留中です。処理が中断された場合は、このページを開いて保存＆分析を再実行してください。",
 	tagline: "現在のタブをAI付きブックマークとして保存します。",
 	currentTab: "現在のタブ",
 	readingTab: "現在のタブを読み込み中…",
@@ -136,8 +149,7 @@ const JA: PopupMessages = {
 	save: "保存＆分析",
 	saving: "保存＆分析中…",
 	runningNotice:
-		"AI分析をフォアグラウンドで実行中です。完了するまでこのポップアップを開いたまま、" +
-		"保存したページに留まってください。",
+		"ポップアップを閉じても処理は続きます。ページ抽出が終わるまでは保存対象のページを閉じずにお待ちください。再表示すると進捗を確認できます。Chromeが処理を中断した場合は保存を再実行してください。",
 	trail: {
 		saving: "保留中のブックマークを保存",
 		extracting: "ページ抜粋を抽出",
@@ -153,10 +165,11 @@ const JA: PopupMessages = {
 		"Chromeのモデルを準備しています。ポップアップを開いたままお待ちください。",
 	savedLocally: "ローカル保存のみ",
 	unavailableReceipt:
-		"AIなしで保存しました（Prompt APIが利用できません）。後で設定ページから再分析できます。",
+		"AIなしで保存しました。必要に応じてモデルを準備し、このページから保存＆分析を再実行してください。",
 	failedReceipt: (message) =>
-		`保存しましたが、分析に失敗しました: ${message}。後で設定ページから再分析できます。`,
-	savedReceipt: "保存しました。後で設定ページから再分析できます。",
+		`保存しましたが、分析に失敗しました: ${message}。このページから保存＆分析を再実行してください。`,
+	savedReceipt:
+		"保存しました。このページから保存＆分析を再実行すると分析を更新できます。",
 	conciseFallbackNotice: "簡易要約 — 詳細分析を取得できなかったため",
 	drivePending: (message) => `Drive同期が保留中: ${message}`,
 	recentBookmarks: "最近のブックマーク",

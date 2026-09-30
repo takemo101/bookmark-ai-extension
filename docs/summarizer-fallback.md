@@ -8,12 +8,13 @@ terminal failure, so a saved page can still receive a useful, clearly degraded
 summary.
 
 This is a resilience feature, not a speed optimization. It does not replace
-Prompt API, preprocess Prompt input, use an external provider, or start a
-background/offscreen flow.
+Prompt API, preprocess Prompt input, or use an external provider. It runs in
+the same worker-owned operation as Prompt; it does not start a separate job
+or Offscreen document (see `ai-analysis-v2.md`).
 
 ## Trigger and availability
 
-1. Extract the existing bounded page excerpt in the initiating foreground UI.
+1. Extract the existing bounded page excerpt in the worker for the explicitly selected tab.
 2. Run the Prompt API analysis as today.
 3. If Prompt returns `unavailable` or any `failed` outcome—including session
    creation, inference, or JSON parsing failure—probe Summarizer.
@@ -86,8 +87,8 @@ The fallback preserves the current privacy posture:
 
 - Chrome-managed on-device APIs only; no Gemini API, Vertex AI, API key, or
   backend.
-- No new permission, OAuth scope, host permission, service worker, or offscreen
-  document.
+- No new permission, OAuth scope, host permission, or offscreen document.
+  Reuse the existing Service Worker save operation.
 - No raw excerpt, prompt, summary input, raw output, URL, token, or browser
   error text in logs.
 - Google Drive remains the source of truth and `chrome.storage.local` remains a

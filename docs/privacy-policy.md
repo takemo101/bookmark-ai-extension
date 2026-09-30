@@ -74,6 +74,9 @@ MVP privacy rule:
 
 - Raw page text excerpts are not stored in `bookmarks.jsonl`.
 - Raw page text excerpts are not intentionally persisted by the extension.
+- An explicitly started save may continue in the extension's background worker
+  after the popup closes. Its excerpt remains in memory only and is discarded
+  when the operation or worker ends; it is not stored for automatic replay.
 - If re-analysis is needed, the extension re-extracts content from the live page.
 
 ## Site Favicons

@@ -39,6 +39,7 @@ function controllerOf(view: PopupView): PopupController {
 		init: async () => {},
 		refresh: async () => {},
 		save: async () => {},
+		prepareAi: async () => {},
 		reAnalyze: async () => {},
 		deleteCurrentBookmark: async () => {},
 		selectRecent: () => {},

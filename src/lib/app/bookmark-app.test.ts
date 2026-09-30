@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createBookmarkJobs } from "../../background/bookmark-jobs";
+import { serializeCacheState } from "../storage/index";
 
 import {
 	Bookmarks,
@@ -247,6 +249,52 @@ const CONCISE_FALLBACK: AnalysisOutcome = {
 		analysisMarkdown: "- 要点1\n- 要点2\n- 要点3",
 	},
 };
+
+it.each([
+	false,
+	true,
+])("worker owns persistence after UI acknowledgment (Drive failure: %s)", async (driveFails) => {
+	const h = makeHarness();
+	if (driveFails) h.repo.failKind = "network";
+	const deferred = new DeferredAnalyzer();
+	h.analyzer.analyze = deferred.analyze.bind(deferred);
+	let id = 0;
+	const jobs = createBookmarkJobs({
+		createApp: () => h.app,
+		newId: () => `job-${++id}`,
+		keepAlive: async () => {},
+	});
+	const tab = {
+		id: 7,
+		url: "https://example.test/page",
+		title: "Example Page",
+	};
+	jobs.handle({ kind: "save", tab });
+	// No live UI or polling is needed to reach pending, analysis or final writes.
+	await vi.waitFor(() => expect(deferred.calls).toHaveLength(1));
+	expect(h.cache.state.bookmarks.toArray()[0]?.aiStatus).toBe("pending");
+	if (!driveFails) expect(h.repo.remote.toArray()[0]?.aiStatus).toBe("pending");
+	deferred.release(READY);
+	await vi.waitFor(() =>
+		expect(h.cache.state.bookmarks.toArray()[0]?.aiStatus).toBe("ready"),
+	);
+	expect(jobs.handle({ kind: "status", id: "job-1" })).toMatchObject({
+		job: {
+			state: "finished",
+			result: { ok: true, value: { driveSynced: !driveFails } },
+		},
+	});
+	expect(Boolean(h.cache.state.sync.pending)).toBe(driveFails);
+	for (const saved of h.cache.saves)
+		expect(JSON.stringify(serializeCacheState(saved))).not.toContain(
+			"Some body text",
+		);
+	h.repo.failKind = null;
+	jobs.handle({ kind: "sync" });
+	await vi.waitFor(() =>
+		expect(h.repo.remote.toArray()[0]?.aiStatus).toBe("ready"),
+	);
+});
 
 type Harness = {
 	app: ReturnType<typeof createBookmarkApp>;

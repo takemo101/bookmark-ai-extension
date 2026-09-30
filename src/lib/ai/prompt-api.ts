@@ -120,7 +120,7 @@ type RawAvailability =
 	| "available";
 
 export interface PromptSession {
-	prompt(input: string): Promise<string>;
+	prompt(input: string, options?: { signal?: AbortSignal }): Promise<string>;
 	destroy?(): void;
 }
 
@@ -281,6 +281,7 @@ function normalizeAvailability(value: unknown): PromptApiAvailability {
  */
 export function createChromePromptClient(
 	namespace: PromptModelNamespace | null = resolveNamespace(),
+	options: { allowDownload?: boolean; signal?: AbortSignal } = {},
 ): PromptClient {
 	return {
 		async availability(
@@ -290,11 +291,14 @@ export function createChromePromptClient(
 				return "unavailable";
 			}
 			try {
-				return normalizeAvailability(
+				const availability = normalizeAvailability(
 					await namespace.availability({
 						expectedOutputs: expectedTextOutputs(language),
 					}),
 				);
+				return options.allowDownload === false && availability !== "available"
+					? "unavailable"
+					: availability;
 			} catch {
 				return "unavailable";
 			}
@@ -307,6 +311,17 @@ export function createChromePromptClient(
 			if (!namespace) {
 				throw new PromptApiUnavailableError();
 			}
+			options.signal?.throwIfAborted();
+			if (
+				options.allowDownload === false &&
+				normalizeAvailability(
+					await namespace.availability({
+						expectedOutputs: expectedTextOutputs(language),
+					}),
+				) !== "available"
+			) {
+				throw new PromptApiUnavailableError();
+			}
 			// `create({ monitor })` starts (or joins) the built-in model download
 			// when availability is downloadable/downloading; the monitor relays
 			// safe progress numbers to the observer.
@@ -317,16 +332,44 @@ export function createChromePromptClient(
 						{ role: "system", content: analysisSystemPrompt(language) },
 					],
 					expectedOutputs: expectedTextOutputs(language),
+					...(options.signal ? { signal: options.signal } : {}),
 				},
 				observer,
 			);
+			const destroy = () => {
+				try {
+					session.destroy?.();
+				} catch {
+					/* Best-effort cleanup. */
+				}
+			};
+			options.signal?.addEventListener("abort", destroy, { once: true });
 			try {
-				return await session.prompt(input);
+				options.signal?.throwIfAborted();
+				return await (options.signal
+					? session.prompt(input, { signal: options.signal })
+					: session.prompt(input));
 			} finally {
-				session.destroy?.();
+				options.signal?.removeEventListener("abort", destroy);
+				destroy();
 			}
 		},
 	};
+}
+
+/** Explicit foreground user action only; no page input or inference. */
+export async function prepareChromePromptModel(
+	language: SupportedLanguage,
+	observer?: PromptLifecycleObserver,
+	namespace: PromptModelNamespace | null = resolveNamespace(),
+): Promise<void> {
+	if (!namespace) throw new PromptApiUnavailableError();
+	const session = await createSession(
+		namespace,
+		{ expectedOutputs: expectedTextOutputs(language) },
+		observer,
+	);
+	session.destroy?.();
 }
 
 /**

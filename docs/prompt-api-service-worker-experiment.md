@@ -2,6 +2,12 @@
 
 Date: 2026-07-03
 
+> Archived historical record. The MIK-020 harness, its tests, and its runtime
+> message entry point were removed after the 2026-09-30 worker integration.
+> Commands below no longer run. The historical MIK-021 recommendation is
+> superseded by `ai-analysis-v2.md` and the later
+> [`popup-independent experiment`](popup-independent-ai-experiment.md).
+
 ## Purpose
 
 This experiment checks whether Chrome Built-in AI / Prompt API works from an

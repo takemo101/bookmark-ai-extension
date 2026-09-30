@@ -192,6 +192,8 @@ export type SyncView = {
 
 /** The complete immutable snapshot the React component renders. */
 export type PopupView = {
+	readonly preparingAi?: boolean;
+	readonly preparationError?: string;
 	readonly loading: boolean;
 	readonly tab?: TabInfoView;
 	readonly connection: PopupEnvironment["connection"];
@@ -213,6 +215,7 @@ export type PopupView = {
 export type TabInfoView = { readonly title: string; readonly url: string };
 
 export interface PopupController {
+	prepareAi(): Promise<void>;
 	getView(): PopupView;
 	subscribe(listener: () => void): () => void;
 	/** Load environment, current tab, and cached recents. Safe to call once on mount. */
@@ -466,17 +469,47 @@ export function createPopupController(
 				connection: environment.connection,
 				promptApi: environment.promptApi,
 				...mapState(state),
-				canSave: view.flow.kind !== "running",
+				canSave: view.flow.kind !== "running" && !view.preparingAi,
 			});
+			const active = await useCases.activeSave?.();
+			const wait = useCases.waitForSave;
+			if (active && wait && view.flow.kind !== "running" && !view.preparingAi) {
+				void runFlow((progress) => wait(active, progress));
+			}
+		},
+		async prepareAi() {
+			if (
+				view.preparingAi ||
+				view.flow.kind === "running" ||
+				!useCases.prepareAi
+			)
+				return;
+			setView({
+				preparingAi: true,
+				preparationError: undefined,
+				canSave: false,
+			});
+			try {
+				const result = await useCases.prepareAi();
+				const environment = await useCases.environment();
+				setView({
+					promptApi: environment.promptApi,
+					preparationError: result.ok
+						? undefined
+						: safeMessage(result.error.message),
+				});
+			} finally {
+				setView({ preparingAi: false, canSave: true });
+			}
 		},
 		async save() {
-			if (view.flow.kind === "running") {
+			if (view.flow.kind === "running" || view.preparingAi) {
 				return;
 			}
 			await runFlow((onProgress) => useCases.saveCurrentTab(onProgress));
 		},
 		async reAnalyze(canonicalUrl) {
-			if (view.flow.kind === "running") {
+			if (view.flow.kind === "running" || view.preparingAi) {
 				return;
 			}
 			const branded = canonicalByDisplay.get(canonicalUrl);
