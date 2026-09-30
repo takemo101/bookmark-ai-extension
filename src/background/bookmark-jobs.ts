@@ -16,6 +16,7 @@ export type BookmarkCommand =
 	| { kind: "reanalyze"; tab: ActiveTab; canonicalUrl: CanonicalUrl }
 	| { kind: "delete"; canonicalUrl: CanonicalUrl }
 	| { kind: "sync" }
+	| { kind: "cancel"; id: string }
 	| { kind: "status"; id?: string };
 export type BookmarkJob = {
 	id: string;
@@ -23,6 +24,7 @@ export type BookmarkJob = {
 	kind: "save" | "change";
 	state: "running" | "finished";
 	stage: SaveStage;
+	cancelRequested?: boolean;
 	result?: Result<SaveOutcome | null, AppError>;
 };
 export type BookmarkReply =
@@ -51,6 +53,12 @@ export function parseBookmarkCommand(raw: unknown): BookmarkCommand | null {
 	if (!raw || typeof raw !== "object") return null;
 	const value = raw as Record<string, unknown>;
 	if (value.action !== "bookmark-job") return null;
+	if (value.kind === "cancel")
+		return typeof value.id === "string" &&
+			value.id.length > 0 &&
+			value.id.length <= 100
+			? { kind: "cancel", id: value.id }
+			: null;
 	if (value.kind === "status") {
 		if (
 			value.id !== undefined &&
@@ -91,18 +99,31 @@ export function parseBookmarkCommand(raw: unknown): BookmarkCommand | null {
 
 /** One worker owns every bookmark mutation. No durable job queue or excerpts. */
 export function createBookmarkJobs(deps: {
-	createApp(tab?: ActiveTab): BookmarkApp;
+	createApp(tab?: ActiveTab, analysisSignal?: AbortSignal): BookmarkApp;
 	newId(): string;
 	keepAlive(): Promise<unknown>;
+	/** Best-effort UI effects only; never a dependency of saving. */
+	onChange?: (job: BookmarkJob) => void;
 }) {
 	// ponytail: one global mutation lock; per-record concurrency requires a
 	// transactional collection writer, not just parallel AI promises.
 	let active: BookmarkJob | undefined;
+	let analysisAbort: AbortController | undefined;
 	const recent = new Map<string, BookmarkJob>();
+
+	function report(job: BookmarkJob) {
+		if (job.kind !== "save") return;
+		try {
+			deps.onChange?.({ ...job });
+		} catch {
+			// A badge/display failure must not interrupt the bookmark operation.
+		}
+	}
 
 	async function run(
 		job: BookmarkJob,
-		command: Exclude<BookmarkCommand, { kind: "status" }>,
+		command: Exclude<BookmarkCommand, { kind: "status" | "cancel" }>,
+		signal: AbortSignal,
 	) {
 		// Chrome's documented exceptional long-operation pattern, bounded even
 		// when a dependency hangs. Never run this on startup or while idle.
@@ -110,20 +131,28 @@ export function createBookmarkJobs(deps: {
 			void deps.keepAlive().catch(() => {});
 		}, 25_000);
 		const deadline = setTimeout(() => clearInterval(interval), 240_000);
+		const onProgress = (stage: SaveStage) => {
+			if (
+				job.state !== "running" ||
+				(job.cancelRequested && stage !== "syncing")
+			)
+				return;
+			job.stage = stage;
+			report(job);
+		};
 		try {
-			const app = deps.createApp("tab" in command ? command.tab : undefined);
+			const app = deps.createApp(
+				"tab" in command ? command.tab : undefined,
+				signal,
+			);
 			switch (command.kind) {
 				case "save":
-					job.result = await app.saveCurrentTab((stage) => {
-						job.stage = stage;
-					});
+					job.result = await app.saveCurrentTab(onProgress);
 					break;
 				case "reanalyze":
 					job.result = await app.reAnalyzeBookmark(
 						command.canonicalUrl,
-						(stage) => {
-							job.stage = stage;
-						},
+						onProgress,
 					);
 					break;
 				case "delete": {
@@ -153,6 +182,8 @@ export function createBookmarkJobs(deps: {
 			clearTimeout(deadline);
 			job.state = "finished";
 			active = undefined;
+			analysisAbort = undefined;
+			report(job);
 		}
 	}
 
@@ -163,6 +194,26 @@ export function createBookmarkJobs(deps: {
 					ok: true,
 					job: command.id ? (recent.get(command.id) ?? null) : (active ?? null),
 				};
+			if (command.kind === "cancel") {
+				if (
+					active?.id !== command.id ||
+					active.kind !== "save" ||
+					active.stage !== "analyzing"
+				)
+					return {
+						ok: false,
+						error: appError(
+							"not-found",
+							"This analysis is no longer running. Check progress before retrying.",
+						),
+					};
+				if (!active.cancelRequested) {
+					active.cancelRequested = true;
+					analysisAbort?.abort();
+					report(active);
+				}
+				return { ok: true, job: active };
+			}
 			if (active)
 				return {
 					ok: false,
@@ -182,13 +233,15 @@ export function createBookmarkJobs(deps: {
 				stage: "saving",
 			};
 			active = job;
+			analysisAbort = new AbortController();
 			recent.set(job.id, job);
 			// Bounded receipts only; never retain extracted pages in job metadata.
 			if (recent.size > 20) {
 				const first = recent.keys().next().value;
 				if (first) recent.delete(first);
 			}
-			void run(job, command);
+			report(job);
+			void run(job, command, analysisAbort.signal);
 			return { ok: true, job };
 		},
 	};

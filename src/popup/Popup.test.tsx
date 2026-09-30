@@ -81,6 +81,7 @@ function controllerOf(view: PopupView): PopupController {
 		init: async () => {},
 		save: async () => {},
 		prepareAi: async () => {},
+		stopAnalysis: async () => {},
 		reAnalyze: async () => {},
 		selectRecent: () => {},
 		clearRecentSelection: () => {},
@@ -116,6 +117,73 @@ function render(view: PopupView, language: "en" | "ja" = "en"): string {
 }
 
 describe("Popup", () => {
+	it.each([
+		"en",
+		"ja",
+	] as const)("renders the %s analysis stop control, disabled while awaiting safe save completion", (language) => {
+		const flow = { kind: "running" as const, trail: runningTrail() };
+		const html = render(
+			viewOf({ flow, canStopAnalysis: true, canSave: false }),
+			language,
+		);
+		expect(html).toContain(language === "ja" ? "分析を停止" : "Stop analysis");
+		expect(html).toContain(
+			language === "ja"
+				? "Driveへの保存は最後まで"
+				: "Drive write finishes safely",
+		);
+		const stopping = render(
+			viewOf({
+				flow,
+				stoppingAnalysis: true,
+				canStopAnalysis: false,
+				canSave: false,
+			}),
+			language,
+		);
+		expect(stopping).toMatch(
+			/<button[^>]+disabled=""[^>]*>[^<]*(Stopping|停止・保存処理中)/,
+		);
+		expect(render(viewOf(), language)).not.toContain(
+			language === "ja" ? "分析を停止" : "Stop analysis",
+		);
+	});
+	it.each([
+		"en",
+		"ja",
+	] as const)("shows a localized stopped receipt without hiding a Drive warning (%s)", (language) => {
+		const html = render(
+			viewOf({
+				flow: {
+					kind: "done",
+					trail: runningTrail(),
+					receipt: {
+						title: "Example",
+						url: URL,
+						canonicalUrl: URL,
+						aiStatus: "failed",
+						cancelled: true,
+						preview: { tags: [] },
+						driveSynced: false,
+						driveWarning: "offline",
+						conciseFallback: false,
+						aiError: "Analysis stopped by user. Save this page again to retry.",
+					},
+				},
+			}),
+			language,
+		);
+		expect(html).toContain(
+			language === "ja" ? "分析を停止しました" : "Analysis stopped.",
+		);
+		expect(html).toContain(
+			language === "ja" ? "Drive同期が保留中" : "Drive sync pending",
+		);
+		expect(html).not.toContain(
+			language === "ja" ? "分析に失敗しました" : "analysis failed",
+		);
+	});
+
 	describe("current page bookmark state", () => {
 		it("shows the already-bookmarked state with a Remove affordance", () => {
 			const html = render(viewOf({ currentBookmark: currentBookmarkOf() }));

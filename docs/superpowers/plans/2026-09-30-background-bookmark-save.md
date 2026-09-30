@@ -25,6 +25,7 @@ Reference: https://developer.chrome.com/docs/extensions/develop/migrate/to-servi
 
 ## Implementation evidence
 
+- Progress-badge and user-stop follow-up: `just validate` PASS — formatting, TypeScript, 62 files / 974 tests, and build. Fake tests cover ID-scoped stop, reopen, native signal/destroy hooks, ignored late outcomes/progress, final-write lock retention, Drive-failure recovery, and stopped UI/badges. Configured `dist/` rebuilt; DOM-free startup/idle-stop smoke and unchanged manifest checks pass. This is not real Chrome cancellation/Drive evidence; manual case 7 remains pending.
 - Final `just validate` after experiment cleanup: PASS — format check, TypeScript, 60 files / 926 tests, and build. The previous 935-test run included nine tests for the now-removed MIK-020 harness. Existing CRX `rollupOptions`/`rolldownOptions` warning only.
 - Before removal, all 17 isolated-experiment native tests passed. At the user's request, the standalone `experiments/` harness and the obsolete `src/background/experiments/` harness/tests/message entry point were removed. Production regression tests remain; experiment records are explicitly archived.
 - Built-worker Node smoke: imports without DOM globals, registers message handlers, returns idle status, starts no startup keepalive. This is a packaging check, not Chrome AI evidence.
@@ -42,3 +43,4 @@ Use the normal extension's rebuilt `dist/`, not the isolated experiment folder. 
 4. Test interruption separately from no-DevTools lifetime testing: stop the worker/reload the extension after the pending record is durable. Reopen: no automatic replay, pending/last durable bookmark remains, explicit re-save recovers.
 5. Simulate Drive failure, confirm the generated result remains locally with pending sync, restore connectivity and explicitly sync.
 6. Navigate the captured tab before extraction; confirm no analysis of the replacement page is attached to the original bookmark. Switching active tabs alone must never retarget the job.
+7. During Prompt and Summarizer inference, use **Stop analysis**, including after closing/reopening the popup. Confirm native work stops, no fallback/new result appears afterward, the bookmark remains, and final Drive/cache persistence settles before another mutation is accepted. Check the amber `STOP` → blue `SYNC` → amber `STOP` badge, or stopped/local-only `!` on Drive failure. The stop control must not interrupt pending writes, extraction, final sync, or foreground model preparation. Retry AI explicitly from the page.

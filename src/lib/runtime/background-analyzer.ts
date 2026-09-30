@@ -16,6 +16,7 @@ export function createBackgroundAnalyzer(
 				logger: createConsoleLogger(),
 			},
 		),
+	stopSignal?: AbortSignal,
 ): AnalyzerPort {
 	return {
 		async analyze(input, profiles, options) {
@@ -28,8 +29,17 @@ export function createBackgroundAnalyzer(
 						"AI analysis could not complete. Save this page again to retry.",
 				},
 			};
+			if (stopSignal?.aborted) return failed;
 			let timer: ReturnType<typeof setTimeout> | undefined;
+			let onStop: (() => void) | undefined;
 			try {
+				const stopped = new Promise<AnalysisOutcome>((resolve) => {
+					onStop = () => {
+						resolve(failed);
+						abort.abort();
+					};
+					stopSignal?.addEventListener("abort", onStop, { once: true });
+				});
 				const deadline = new Promise<AnalysisOutcome>((resolve) => {
 					timer = setTimeout(() => {
 						resolve(failed);
@@ -39,13 +49,17 @@ export function createBackgroundAnalyzer(
 				const result = await Promise.race([
 					create(abort.signal).analyze(input, profiles, options),
 					deadline,
+					stopped,
 				]);
 				// Browser-generated errors may contain page content. Never persist them.
-				return result.status === "failed" ? failed : result;
+				return abort.signal.aborted || result.status === "failed"
+					? failed
+					: result;
 			} catch {
 				return failed;
 			} finally {
 				clearTimeout(timer);
+				if (onStop) stopSignal?.removeEventListener("abort", onStop);
 				abort.abort();
 			}
 		},

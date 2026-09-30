@@ -93,6 +93,8 @@ export type ProgressObserver = (progress: SaveProgress) => void;
  * all a controller test needs.
  */
 export interface PopupUseCases {
+	/** Stop only the observed worker AI analysis, without interrupting its save. */
+	stopAnalysis?(): Promise<Result<void, AppError>>;
 	/** Observe an accepted worker save after reopening, without submitting it again. */
 	activeSave?(): Promise<string | null>;
 	waitForSave?(

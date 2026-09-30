@@ -324,6 +324,25 @@ Focus:
   `pending`). Re-save from the original page to retry. Failed Drive writes keep
   the existing unsynced-cache flag and can be retried via normal sync.
 
+### User-requested analysis stop
+
+- **Stop analysis** is available only during AI analysis, including an active
+  Summarizer fallback, and also after reopening the popup onto that save.
+- The command targets the observed job ID. Missing/stale IDs and saving,
+  extraction, or final-sync stages reject stop without affecting another job.
+- Worker stop aborts Prompt/Summarizer creation and inference and destroys
+  sessions. Late results and AI progress are ignored; stop does not start a
+  fallback session or move final-sync progress back to analysis.
+- This stops AI, not saving: the bookmark remains, and the normal final
+  cache/Drive write records `failed` with a fixed, content-free stopped reason.
+  No new durable status, job flag, queue, permission, or excerpt storage is added.
+- A stop acknowledgment is not a finished save. The popup keeps observing and
+  the mutation lock remains held through final persistence. A failed Drive write
+  retains the existing pending-sync recovery. Re-save from the page to retry AI.
+- A live receipt labels the result as stopped rather than an AI failure. A worker
+  restart still loses volatile receipts; cache retains the saved bookmark/reason.
+  Real Chrome native-abort and Drive checks remain manual.
+
 ### Service worker experiment (concluded)
 
 MIK-020 prepared an experiment harness to verify whether real Chrome supports
@@ -349,6 +368,32 @@ and this feasibility run do not satisfy those gates. Permissions are unchanged.
 
 ## UI behavior
 
+### Toolbar badge
+
+The global extension icon reports the latest accepted Save/Re-analyze operation,
+independently of whether the popup is open:
+
+- Blue `SAVE` → saving the pending bookmark; `READ` → extracting the page;
+  `AI` → analysis (including Summarizer fallback); `SYNC` → final Drive sync.
+- Amber `STOP` → stopping analysis or a stopped result synced to Drive; final
+  persistence still shows blue `SYNC`. A stopped but unsynced result shows amber
+  `!` with a stopped/local-only tooltip, never a green success.
+- Green `✓` → AI result is ready (full analysis or concise fallback) and its
+  final write reached Drive. Merely accepting or finishing a job is not success.
+- Amber `!` → AI unavailable/pending, or saved locally without confirmed Drive
+  sync; red `!` → save/analysis failure. Open the popup to inspect the bookmark.
+- The icon's tooltip explains the state in the browser UI language (ja/en),
+  using fixed text only: no page title, URL, excerpt, or raw browser error.
+
+The result badge remains until another save starts or the worker restarts.
+A fresh worker clears the badge and restores the default tooltip because it has
+no surviving in-memory job; it does not infer success from cache. Options-only
+sync/delete, status polling, and rejected busy requests do not replace this
+latest-save indicator. Display writes are ordered and best-effort: Chrome action
+API failure cannot cancel saving, and a finished job's late progress cannot
+replace a newer job's badge. No extra permission, storage, heartbeat, or timer
+is added for badge display. Real Chrome icon/lifetime checks remain manual.
+
 ### Popup
 
 - While open, Save walks the progress trail (saving → extracting → analyzing
@@ -356,6 +401,9 @@ and this feasibility run do not satisfy those gates. Permissions are unchanged.
 - Reopening attaches to an active save and shows progress; completed bookmarks
   are read from cache even after the worker exits. Interrupted pending records
   explain explicit re-saving. First model preparation remains foreground-only.
+- **Stop analysis** is a secondary action during analysis only. After clicking,
+  it is disabled while AI stops and bookmark persistence finishes; the receipt
+  explains that the bookmark remains and can be analyzed again.
 - Keep recent bookmark display compact: one line per bookmark (title + AI
   status + inline re-analyze), with `description` available as a tooltip.
 - If the current page is already bookmarked, show that state on the current

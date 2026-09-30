@@ -23,11 +23,13 @@ export function createBackgroundBookmarkClient(deps: {
 	wait?: () => Promise<void>;
 }): BookmarkApp & {
 	activeSave(): Promise<string | null>;
+	stopAnalysis(): Promise<Result<void, AppError>>;
 	waitForSave(
 		id: string,
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>>;
 } {
+	let observedSaveId: string | undefined;
 	const interrupted = () =>
 		err(
 			appError(
@@ -64,9 +66,16 @@ export function createBackgroundBookmarkClient(deps: {
 		reply: BookmarkReply,
 		progress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>> {
-		const result = await observe(reply, progress);
-		if (!result.ok) return result;
-		return result.value ? ok(result.value) : interrupted();
+		const id =
+			reply.ok && reply.job?.kind === "save" ? reply.job.id : undefined;
+		if (id) observedSaveId = id;
+		try {
+			const result = await observe(reply, progress);
+			if (!result.ok) return result;
+			return result.value ? ok(result.value) : interrupted();
+		} finally {
+			if (observedSaveId === id) observedSaveId = undefined;
+		}
 	}
 	async function change(command: BookmarkCommand) {
 		const result = await observe(await send(command));
@@ -88,6 +97,17 @@ export function createBackgroundBookmarkClient(deps: {
 				await send({ kind: "reanalyze", canonicalUrl, tab: tab.value }),
 				progress,
 			);
+		},
+		async stopAnalysis() {
+			// Never ask the worker to stop whatever happens to be active now.
+			if (!observedSaveId)
+				return err(appError("not-found", "No observed analysis is running."));
+			const reply = await send({ kind: "cancel", id: observedSaveId });
+			return reply.ok && reply.job
+				? ok(undefined)
+				: reply.ok
+					? interrupted()
+					: reply;
 		},
 		async activeSave() {
 			const reply = await send({ kind: "status" });

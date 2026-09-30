@@ -70,6 +70,8 @@ import { type Result, err, ok } from "./result";
 
 /** The result of a save / re-analyze flow, shaped for popup status display. */
 export type SaveOutcome = {
+	/** AI was stopped by the user; bookmark persistence still completed. Not a stored job flag. */
+	readonly cancelled?: true;
 	/** The record as it now stands after the flow (pending/ready/unavailable/failed). */
 	readonly record: BookmarkRecord;
 	readonly aiStatus: AiStatus;
@@ -262,6 +264,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 	function outcomeFromPush(
 		push: DrivePush,
 		canonicalUrl: CanonicalUrl,
+		cancelled = false,
 	): Result<SaveOutcome, AppError> {
 		const record = push.state.bookmarks.get(canonicalUrl);
 		if (!record) {
@@ -271,6 +274,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			);
 		}
 		return ok({
+			...(cancelled ? { cancelled: true as const } : {}),
 			record,
 			aiStatus: record.aiStatus,
 			driveSynced: push.driveSynced,
@@ -316,7 +320,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		onProgress?: SaveProgress,
 	): Promise<Result<SaveOutcome, AppError>> {
 		const now = deps.clock.now();
-		const updated = await analyzeExtractedPage(
+		const analyzed = await analyzeExtractedPage(
 			base.bookmarks,
 			canonicalUrl,
 			target,
@@ -324,6 +328,15 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 			now,
 			onProgress,
 		);
+		const cancelled = deps.analysisSignal?.aborted ?? false;
+		// Do not apply a late result even if a native adapter ignored its signal.
+		const updated = cancelled
+			? base.bookmarks.markAiFailed(
+					canonicalUrl,
+					"Analysis stopped by user. Save this page again to retry.",
+					now,
+				)
+			: analyzed;
 		if (!updated.ok) {
 			return err(fromCollectionError(updated.error));
 		}
@@ -331,7 +344,7 @@ export function createBookmarkApp(deps: AppDeps): BookmarkApp {
 		const push = await pushToDrive(updated.value, {
 			prevLocation: base.location,
 		});
-		return outcomeFromPush(push, canonicalUrl);
+		return outcomeFromPush(push, canonicalUrl, cancelled);
 	}
 
 	return {

@@ -35,6 +35,7 @@ export function createRuntimeUseCases(): PopupUseCases {
 				return { connection, promptApi };
 			},
 		}),
+		stopAnalysis: () => app.stopAnalysis(),
 		activeSave: () => app.activeSave(),
 		waitForSave: (id, progress) =>
 			app.waitForSave(id, (stage) => progress?.({ stage })),

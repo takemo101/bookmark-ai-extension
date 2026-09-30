@@ -170,16 +170,17 @@ export function createChromeSummarizerClient(
 		async availability(
 			language: SupportedLanguage = "ja",
 		): Promise<SummarizerAvailability> {
-			if (!namespace) {
+			if (!namespace || options.signal?.aborted) {
 				return "unavailable";
 			}
 			try {
-				return normalizeAvailability(
+				const availability = normalizeAvailability(
 					await namespace.availability({
 						...CONCISE_SUMMARY_OPTIONS,
 						outputLanguage: language,
 					}),
 				);
+				return options.signal?.aborted ? "unavailable" : availability;
 			} catch {
 				return "unavailable";
 			}
